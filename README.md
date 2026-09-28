@@ -2,6 +2,8 @@
 
 SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前为 **Stage 0 Foundation / 0.1.0-dev**，重点是可追溯的基础数据、可用的工作台和后续实验执行功能的数据基础。
 
+幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株实际发芽时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 0 尚不生成测定任务。
+
 ## 技术栈
 
 - 后端：Python 3.12+、FastAPI、SQLAlchemy 2、Alembic、Pydantic 2、SQLite WAL、Argon2、pytest、openpyxl。

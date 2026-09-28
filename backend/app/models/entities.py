@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -88,9 +88,12 @@ class ExperimentMaterial(Identity, Base):
 class MeasurementTimepoint(Identity, Base):
     __tablename__ = "measurement_timepoints"
     experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.id", ondelete="RESTRICT"), index=True)
-    day_after_sowing: Mapped[int] = mapped_column(Integer, nullable=False)
+    day_after_germination: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str | None] = mapped_column(String(80))
-    __table_args__ = (CheckConstraint("day_after_sowing >= 0", name="ck_timepoint_day"), UniqueConstraint("experiment_id", "day_after_sowing", name="uq_timepoint_day"))
+    __table_args__ = (
+        CheckConstraint("day_after_germination >= 0", name="ck_timepoint_dag_nonnegative"),
+        Index("uq_timepoint_experiment_dag", "experiment_id", "day_after_germination", unique=True),
+    )
 
 
 class GerminationDish(Identity, Base):
@@ -115,6 +118,7 @@ class SeedlingSample(Identity, Base):
     __tablename__ = "seedling_samples"
     dish_id: Mapped[str] = mapped_column(ForeignKey("germination_dishes.id", ondelete="RESTRICT"), index=True)
     sample_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    germinated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (CheckConstraint("sample_number > 0", name="ck_sample_number"), UniqueConstraint("dish_id", "sample_number", name="uq_sample_number"))
 
 

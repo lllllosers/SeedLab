@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from sqlalchemy import text
@@ -23,7 +25,12 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "3179cf93a5f4"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "9456099da4fd"
+        timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
+        sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
+        assert "day_after_germination" in timepoint_columns
+        assert "day_after_sowing" not in timepoint_columns
+        assert "germinated_at" in sample_columns
     engine.dispose()
 
 
@@ -121,13 +128,14 @@ def test_zero_is_fact_and_null_is_missing(client: TestClient, tmp_path):
         db.add_all([lot, experiment])
         db.flush()
         material = ExperimentMaterial(experiment_id=experiment.id, seed_lot_id=lot.id)
-        timepoint = MeasurementTimepoint(experiment_id=experiment.id, day_after_sowing=0)
+        timepoint = MeasurementTimepoint(experiment_id=experiment.id, day_after_germination=0)
         db.add_all([material, timepoint])
         db.flush()
         dish = GerminationDish(material_id=material.id, label="A1", seed_count=10)
         db.add(dish)
         db.flush()
-        sample = SeedlingSample(dish_id=dish.id, sample_number=1)
+        germinated_at = datetime(2026, 9, 28, 8, tzinfo=timezone.utc)
+        sample = SeedlingSample(dish_id=dish.id, sample_number=1, germinated_at=germinated_at)
         observation = GerminationObservation(dish_id=dish.id, observed_at=datetime(2026, 9, 28, 9, tzinfo=timezone.utc), new_germinated_count=0)
         db.add_all([sample, observation])
         db.flush()
@@ -139,10 +147,71 @@ def test_zero_is_fact_and_null_is_missing(client: TestClient, tmp_path):
         assert measurement.shoot_length_mm is None
         assert lot.quantity == 0
         experiment_id = experiment.id
+        sample_id = sample.id
     with Session(engine) as db:
-        db.add(MeasurementTimepoint(experiment_id=experiment_id, day_after_sowing=-1))
+        stored = db.get(SeedlingSample, sample_id)
+        assert stored is not None and stored.germinated_at is not None
+        assert stored.germinated_at.replace(tzinfo=timezone.utc) == germinated_at
+        db.add(MeasurementTimepoint(experiment_id=experiment_id, day_after_germination=-1))
         with pytest.raises(IntegrityError):
             db.flush()
+    with Session(engine) as db:
+        db.add(MeasurementTimepoint(experiment_id=experiment_id, day_after_germination=0))
+        with pytest.raises(IntegrityError):
+            db.flush()
+    engine.dispose()
+
+
+def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, tmp_path):
+    url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    engine = make_engine(url)
+    with Session(engine, expire_on_commit=False) as db:
+        taxon = Taxon(code="SP-0001", scientific_name="Setaria italica")
+        experiment = Experiment(code="EXP-2026-001", name="DAG 迁移")
+        db.add_all([taxon, experiment])
+        db.flush()
+        lot = SeedLot(code="LOT-2026-001", taxon_id=taxon.id)
+        timepoint = MeasurementTimepoint(experiment_id=experiment.id, day_after_germination=2)
+        db.add_all([lot, timepoint])
+        db.flush()
+        material = ExperimentMaterial(experiment_id=experiment.id, seed_lot_id=lot.id)
+        db.add(material)
+        db.flush()
+        dish = GerminationDish(material_id=material.id, label="A1", seed_count=10)
+        db.add(dish)
+        db.flush()
+        sample = SeedlingSample(dish_id=dish.id, sample_number=1, germinated_at=datetime(2026, 9, 28, tzinfo=timezone.utc))
+        db.add(sample)
+        db.flush()
+        db.add(SeedlingMeasurement(sample_id=sample.id, timepoint_id=timepoint.id, root_length_mm=0))
+        db.commit()
+        timepoint_id = timepoint.id
+    engine.dispose()
+
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    config.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
+    command.downgrade(config, "3179cf93a5f4")
+    engine = make_engine(url)
+    with engine.connect() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
+        assert "day_after_sowing" in columns and "day_after_germination" not in columns
+        assert "germinated_at" not in {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
+        old_schema = connection.execute(text("SELECT sql FROM sqlite_master WHERE name='measurement_timepoints'")).scalar()
+        assert "ck_timepoint_day" in old_schema and "uq_timepoint_day" in old_schema
+        assert connection.execute(text("SELECT day_after_sowing FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = make_engine(url)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "9456099da4fd"
+        assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
+        index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
+        assert "uq_timepoint_experiment_dag" in index_names
+        assert connection.execute(text("SELECT COUNT(*) FROM seedling_measurements")).scalar() == 1
+        assert connection.execute(text("SELECT germinated_at FROM seedling_samples")).scalar() is None
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     engine.dispose()
 
 
