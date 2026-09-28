@@ -1,13 +1,13 @@
 # Changelog
 
-SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0` 和 `v0.3.0`。
+SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0` 和 `v0.3.1`。
 
-## 未发布 — Stage 2.5 Bootstrap & Account Management
+## 0.3.1 — Account Bootstrap and Management（Stage 2.5）
 
 - 首次部署可在浏览器使用服务器本机一次性初始化码创建管理员并建立会话；成功后初始化入口关闭，CLI 仍可用于应急维护。
 - 管理员可以创建成员、编辑姓名、调整角色、启停账号、重置临时密码；用户可以修改自己的密码，首次登录必须修改管理员设置的临时密码。
 - 统一 8 至 128 位密码规则；改密、重置和停用清除相关会话；保护本人账号和最后一个启用的管理员，审计不保存密码或初始化码。
-- 新增 `must_change_password` 迁移与账号页面。开发期间应用版本仍为 `0.3.0`，验收后再发布 `v0.3.1`。
+- 新增 `must_change_password` 迁移与账号页面。Stage 3 的 DAG 测定任务、根苗长录入及统计分析尚未实现。
 
 ## 0.3.0 — Germination Execution（Stage 2）
 

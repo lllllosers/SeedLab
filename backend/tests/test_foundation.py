@@ -18,7 +18,7 @@ from app.models import Experiment, ExperimentMaterial, GerminationDish, Germinat
 
 
 def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
-    assert client.get("/api/health").json()["version"] == "0.3.0"
+    assert client.get("/api/health").json()["version"] == "0.3.1"
     engine = make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     with engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
