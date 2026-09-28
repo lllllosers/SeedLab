@@ -1,13 +1,14 @@
 # Changelog
 
-SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0` 和 `v0.2.0`。
+SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0` 和 `v0.3.0`。
 
-## 未发布 — Stage 2 发芽实验执行
+## 0.3.0 — Germination Execution（Stage 2）
 
-- 新增正式开始实验事务：从 effective 配置生成稳定编号的培养皿并记录实际置床时间；普通 PATCH 不能直接进入 `active`。
-- 支持一天多次批量发芽巡检，空白与明确的 0 分开处理；累计、发芽率和观察期进度动态派生。
-- 根据 `first_germinated` 和 `per_dish` / `per_material` 自动选择前 N 株，记录巡检来源与判定发芽时间；同时间按重复号确定稳定顺序。
-- 提供巡检纠错与审计、独立执行页及第四个 Alembic 迁移；尚未开发根苗长测定。
+- 在既有实验配置基础上，新增正式开始实验事务：从 effective 配置生成稳定编号的培养皿并记录实际置床时间；普通 PATCH 不能直接进入 `active`。
+- 支持一天多次批量发芽巡检，空白与明确的 0 分开处理；累计发芽数、发芽率和观察期进度动态派生。
+- 根据 `first_germinated` 和 `per_dish` / `per_material` 自动选择前 N 株，记录 SeedlingSample 来源巡检与判定发芽时间；同时间按重复号确定稳定顺序。
+- 提供巡检纠错与审计、独立执行页及第四个 Alembic 迁移。
+- Stage 3 尚未实现 DAG 今日测定任务、根长苗长录入、`SeedlingMeasurement` 正式操作接口、测定历史与快速纠错，以及数据统计分析。
 
 ## 0.2.0 — Stage 1 实验配置
 

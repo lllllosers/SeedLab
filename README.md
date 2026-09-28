@@ -1,8 +1,8 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.2.0**；Stage 2 发芽实验执行正在开发分支中，可将已就绪实验原子启动、生成培养皿、批量巡检并按前 N 株规则选样。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.3.0 / Germination Execution**：已具备实验配置、正式开始实验与培养皿生成、发芽巡检、累计发芽动态计算、`per_dish` / `per_material` 前 N 株选样、幼苗来源追踪，以及巡检纠错和审计。
 
-幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株首次在巡检中判定发芽的时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 2 不开发根苗长测定任务。
+幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株首次在巡检中判定发芽的时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 3 的 DAG 今日测定任务、根长苗长录入、`SeedlingMeasurement` 正式操作接口、测定历史与快速纠错，以及数据统计分析尚未实现。
 
 ## 技术栈
 
@@ -30,6 +30,8 @@ cd ..
 .\run_dev.bat
 ```
 
+系统没有预设账号或密码。首次运行上述 `create-admin` 命令时，终端会交互式要求输入并确认至少 10 位密码；随后用用户名 `admin` 和自己设置的密码登录。
+
 浏览器访问 <http://localhost:5173>；开发 API 文档位于 <http://localhost:8000/docs>。`run_dev.bat` 会检查依赖、执行迁移并同时启动两个开发服务。可在同一局域网内通过主机 IP 和 5173 端口访问；对外访问前请参照[运行说明](docs/04_开发与运行说明.md)配置 HTTPS 和 Cookie。
 
 运行测试：`run_tests.bat`。前端构建：在 `frontend` 目录执行 `npm run build`。
@@ -47,7 +49,7 @@ scripts/   开发启动与测试入口
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为当前发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置。Stage 2 在 `feat/stage-2-germination-execution` 开发，应用版本保持 `0.2.0`，验收前不合并或打新标签。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为当前发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution。
 
 ## 开发者与许可
 
