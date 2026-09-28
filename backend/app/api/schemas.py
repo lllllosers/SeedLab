@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -82,12 +82,14 @@ class SeedLotOut(ORMModel):
 class ExperimentIn(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     description: str | None = None
+    planned_start_date: date | None = None
 
 
 class ExperimentPatch(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = None
-    status: Literal["draft", "active", "completed", "cancelled"] | None = None
+    planned_start_date: date | None = None
+    status: Literal["draft", "ready", "active", "completed", "cancelled"] | None = None
 
 
 class ExperimentOut(ORMModel):
@@ -96,9 +98,51 @@ class ExperimentOut(ORMModel):
     name: str
     description: str | None
     status: str
+    planned_start_date: date | None
+    owner_id: str | None
     started_at: datetime | None
     ended_at: datetime | None
     created_at: datetime
+
+
+class ProtocolInput(BaseModel):
+    seeds_per_dish: int = Field(gt=0)
+    replicate_count: int = Field(gt=0)
+    observation_period_days: int = Field(gt=0)
+    sampling_rule: str = Field(default="first_germinated", min_length=1, max_length=40)
+    sample_count: int = Field(gt=0)
+    sample_scope: Literal["per_dish", "per_material"] = "per_dish"
+    germination_criterion: str = Field(min_length=1)
+    summary: str | None = None
+
+
+class MaterialInput(BaseModel):
+    seed_lot_id: str
+    label: str | None = Field(default=None, max_length=120)
+    seeds_per_dish_override: int | None = Field(default=None, gt=0)
+    replicate_count_override: int | None = Field(default=None, gt=0)
+    sample_count_override: int | None = Field(default=None, gt=0)
+
+
+class MaterialPatch(BaseModel):
+    label: str | None = Field(default=None, max_length=120)
+    seeds_per_dish_override: int | None = Field(default=None, gt=0)
+    replicate_count_override: int | None = Field(default=None, gt=0)
+    sample_count_override: int | None = Field(default=None, gt=0)
+
+
+class ConfiguredExperimentInput(ExperimentIn):
+    protocol: ProtocolInput
+    materials: list[MaterialInput] = Field(min_length=1)
+    dag_days: list[int] = Field(min_length=1)
+
+
+class DagInput(BaseModel):
+    days: list[int] = Field(min_length=1)
+
+
+class MaterialOrderInput(BaseModel):
+    material_ids: list[str]
 
 
 class AuditOut(ORMModel):

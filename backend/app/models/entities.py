@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -64,17 +64,31 @@ class Experiment(Identity, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="draft", nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    planned_start_date: Mapped[date | None] = mapped_column(Date)
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (CheckConstraint("status IN ('draft', 'active', 'completed', 'cancelled')", name="ck_experiment_status"),)
+    __table_args__ = (CheckConstraint("status IN ('draft', 'ready', 'active', 'completed', 'cancelled')", name="ck_experiment_status"),)
 
 
 class ExperimentProtocol(Identity, Base):
     __tablename__ = "experiment_protocols"
     experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.id", ondelete="RESTRICT"), unique=True)
     summary: Mapped[str | None] = mapped_column(Text)
-    seed_count_per_dish: Mapped[int | None] = mapped_column(Integer)
-    __table_args__ = (CheckConstraint("seed_count_per_dish IS NULL OR seed_count_per_dish > 0", name="ck_protocol_seed_count"),)
+    seeds_per_dish: Mapped[int | None] = mapped_column(Integer)
+    replicate_count: Mapped[int | None] = mapped_column(Integer)
+    observation_period_days: Mapped[int | None] = mapped_column(Integer)
+    sampling_rule: Mapped[str | None] = mapped_column(String(40))
+    sample_count: Mapped[int | None] = mapped_column(Integer)
+    sample_scope: Mapped[str | None] = mapped_column(String(30))
+    germination_criterion: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        CheckConstraint("seeds_per_dish IS NULL OR seeds_per_dish > 0", name="ck_protocol_seeds_per_dish"),
+        CheckConstraint("replicate_count IS NULL OR replicate_count > 0", name="ck_protocol_replicate_count"),
+        CheckConstraint("observation_period_days IS NULL OR observation_period_days > 0", name="ck_protocol_observation_period"),
+        CheckConstraint("sample_count IS NULL OR sample_count > 0", name="ck_protocol_sample_count"),
+        CheckConstraint("sample_scope IS NULL OR sample_scope IN ('per_dish', 'per_material')", name="ck_protocol_sample_scope"),
+    )
 
 
 class ExperimentMaterial(Identity, Base):
@@ -82,7 +96,17 @@ class ExperimentMaterial(Identity, Base):
     experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.id", ondelete="RESTRICT"), index=True)
     seed_lot_id: Mapped[str] = mapped_column(ForeignKey("seed_lots.id", ondelete="RESTRICT"), index=True)
     label: Mapped[str | None] = mapped_column(String(120))
-    __table_args__ = (UniqueConstraint("experiment_id", "seed_lot_id", name="uq_material_experiment_lot"),)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    seeds_per_dish_override: Mapped[int | None] = mapped_column(Integer)
+    replicate_count_override: Mapped[int | None] = mapped_column(Integer)
+    sample_count_override: Mapped[int | None] = mapped_column(Integer)
+    __table_args__ = (
+        UniqueConstraint("experiment_id", "seed_lot_id", name="uq_material_experiment_lot"),
+        CheckConstraint("display_order >= 0", name="ck_material_display_order"),
+        CheckConstraint("seeds_per_dish_override IS NULL OR seeds_per_dish_override > 0", name="ck_material_seeds_override"),
+        CheckConstraint("replicate_count_override IS NULL OR replicate_count_override > 0", name="ck_material_replicates_override"),
+        CheckConstraint("sample_count_override IS NULL OR sample_count_override > 0", name="ck_material_samples_override"),
+    )
 
 
 class MeasurementTimepoint(Identity, Base):

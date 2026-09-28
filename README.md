@@ -1,8 +1,8 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前为 **Stage 0 Foundation / 0.1.0-dev**，重点是可追溯的基础数据、可用的工作台和后续实验执行功能的数据基础。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前为 **Stage 1 实验配置 / 0.1.0-dev**：可以通过七步向导配置实验材料、默认方案、取样范围、DAG 时间点、材料覆盖，并在保存前查看预计工作量。
 
-幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株实际发芽时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 0 尚不生成测定任务。
+幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株实际发芽时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 1 只配置方案，不生成培养皿、样本或测定任务。
 
 ## 技术栈
 
@@ -39,15 +39,15 @@ cd ..
 ```text
 backend/   FastAPI、业务模型、Alembic 迁移与 pytest 测试
 frontend/  Vue 页面、路由、状态和样式
-docs/      总体设计、数据模型、路线图与运行说明
+docs/      总体设计、数据模型、实验配置规则、路线图与运行说明
 scripts/   开发启动与测试入口
 ```
 
-详细设计见 [docs/01_系统总体设计.md](docs/01_系统总体设计.md)、[docs/02_核心数据模型.md](docs/02_核心数据模型.md)、[docs/03_开发路线图.md](docs/03_开发路线图.md)。
+详细设计见 [docs/01_系统总体设计.md](docs/01_系统总体设计.md)、[docs/02_核心数据模型.md](docs/02_核心数据模型.md)、[docs/03_开发路线图.md](docs/03_开发路线图.md) 与 [docs/05_实验配置业务规则.md](docs/05_实验配置业务规则.md)。
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为稳定主线，短期使用 `feat/*`、`fix/*`。Stage 0 验收后再考虑 `v0.1.0` 标签。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为稳定主线，短期使用 `feat/*`、`fix/*`。本分支不合并主线或创建标签。
 
 ## 开发者与许可
 

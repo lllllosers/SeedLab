@@ -25,7 +25,7 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "9456099da4fd"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d50447b51d78"
         timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
         sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
         assert "day_after_germination" in timepoint_columns
@@ -83,9 +83,9 @@ def test_experiment_crud_and_dashboard(auth_client):
     item = created.json()
     assert item["code"].startswith("EXP-")
     assert item["status"] == "draft"
-    updated = client.patch(f"/api/experiments/{item['id']}", json={"status": "active"}, headers=headers)
-    assert updated.status_code == 200 and updated.json()["started_at"]
-    assert client.get("/api/dashboard").json()["active_experiments"] == 1
+    updated = client.patch(f"/api/experiments/{item['id']}", json={"description": "设计草稿"}, headers=headers)
+    assert updated.status_code == 200 and updated.json()["description"] == "设计草稿"
+    assert client.get("/api/dashboard").json()["active_experiments"] == 0
     assert len(client.get("/api/experiments", params={"q": "萌发"}).json()) == 1
     assert client.delete(f"/api/experiments/{item['id']}", headers=headers).status_code == 204
     assert client.get("/api/dashboard").json()["experiments"] == 0
@@ -205,7 +205,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "9456099da4fd"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d50447b51d78"
         assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
         index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
         assert "uq_timepoint_experiment_dag" in index_names

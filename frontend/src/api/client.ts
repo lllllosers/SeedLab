@@ -14,6 +14,21 @@ export function errorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail
     if (typeof detail === 'string') return detail
+    if (Array.isArray(detail) && detail.length) {
+      const field = String(detail[0]?.loc?.at(-1) || '')
+      const labels: Record<string, string> = {
+        seeds_per_dish: '每皿种子数',
+        replicate_count: '重复数',
+        observation_period_days: '观察周期',
+        sample_count: '取样数',
+        seeds_per_dish_override: '材料每皿种子数',
+        replicate_count_override: '材料重复数',
+        sample_count_override: '材料取样数',
+        dag_days: 'DAG 时间点',
+        germination_criterion: '发芽判定标准',
+      }
+      if (labels[field]) return `请检查${labels[field]}：需要填写符合要求的值`
+    }
     if (error.response?.status === 401) return '登录已失效，请重新登录'
     if (error.response?.status === 422) return '请检查填写内容'
   }

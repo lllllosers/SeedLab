@@ -8,6 +8,7 @@ export function dateText(value: string | null | undefined): string {
 }
 export const statusLabels: Record<string, string> = {
   draft: '草稿',
+  ready: '已就绪',
   active: '进行中',
   completed: '已完成',
   cancelled: '已取消',

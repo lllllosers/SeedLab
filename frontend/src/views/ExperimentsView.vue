@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
@@ -11,9 +11,7 @@ const router = useRouter(),
   items = ref<Experiment[]>([]),
   query = ref(''),
   status = ref(''),
-  loading = ref(false),
-  editorOpen = ref(false)
-const form = reactive({ name: '', description: '' })
+  loading = ref(false)
 async function load() {
   loading.value = true
   try {
@@ -28,25 +26,6 @@ async function load() {
     loading.value = false
   }
 }
-async function create() {
-  if (!form.name.trim()) return ElMessage.warning('请填写实验名称')
-  try {
-    const { data } = await api.post<Experiment>('/experiments', {
-      name: form.name.trim(),
-      description: form.description.trim() || null,
-    })
-    editorOpen.value = false
-    ElMessage.success('实验已创建')
-    router.push(`/experiments/${data.id}`)
-  } catch (error) {
-    ElMessage.error(errorMessage(error))
-  }
-}
-function openEditor() {
-  form.name = ''
-  form.description = ''
-  editorOpen.value = true
-}
 onMounted(load)
 </script>
 <template>
@@ -54,12 +33,9 @@ onMounted(load)
     <div>
       <div class="eyebrow">EXPERIMENT MANAGEMENT</div>
       <h1>实验列表</h1>
-      <p>从设计和基础信息开始，为每项实验建立可追溯档案。</p>
+      <p>设计可执行的实验方案，并在开始前核对材料与预计工作量。</p>
     </div>
-    <el-button
-      type="primary"
-      :icon="Plus"
-      @click="openEditor"
+    <el-button type="primary" :icon="Plus" @click="router.push('/experiments/new')"
       >创建实验</el-button
     >
   </div>
@@ -83,10 +59,10 @@ onMounted(load)
           style="width: 145px"
           @change="load"
           ><el-option label="草稿" value="draft" /><el-option
-            label="进行中"
-            value="active" /><el-option label="已完成" value="completed" /><el-option
-            label="已取消"
-            value="cancelled"
+            label="已就绪"
+            value="ready" /><el-option label="进行中" value="active" /><el-option
+            label="已完成"
+            value="completed" /><el-option label="已取消" value="cancelled"
         /></el-select>
       </div>
     </div>
@@ -121,20 +97,4 @@ onMounted(load)
       ></el-table
     >
   </div>
-  <el-dialog v-model="editorOpen" title="创建实验" width="540px"
-    ><p class="dialog-intro">先建立实验档案，后续阶段可继续配置材料、培养皿和测定计划。</p>
-    <el-form label-position="top"
-      ><el-form-item label="实验名称 *"
-        ><el-input v-model="form.name" placeholder="例如 不同温度对种子萌发的影响" /></el-form-item
-      ><el-form-item label="实验说明"
-        ><el-input
-          v-model="form.description"
-          type="textarea"
-          :rows="4"
-          placeholder="简要记录研究目标或设计说明" /></el-form-item></el-form
-    ><template #footer
-      ><el-button @click="editorOpen = false">取消</el-button
-      ><el-button type="primary" @click="create">创建实验</el-button></template
-    ></el-dialog
-  >
 </template>

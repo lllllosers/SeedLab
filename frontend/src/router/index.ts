@@ -27,9 +27,14 @@ const router = createRouter({
           component: () => import('../views/ExperimentsView.vue'),
         },
         {
+          path: 'experiments/new',
+          name: 'experiment-new',
+          component: () => import('../views/ExperimentWizardView.vue'),
+        },
+        {
           path: 'experiments/:id',
           name: 'experiment-detail',
-          component: () => import('../views/ExperimentDetailView.vue'),
+          component: () => import('../views/ExperimentDesignDetailView.vue'),
         },
         { path: 'data', name: 'data', component: () => import('../views/DataView.vue') },
         { path: 'audit', name: 'audit', component: () => import('../views/AuditView.vue') },

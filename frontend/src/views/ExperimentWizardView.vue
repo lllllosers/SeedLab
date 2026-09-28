@@ -1,0 +1,255 @@
+<script setup lang="ts">
+import { reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { api, errorMessage } from '../api/client'
+import { useAuth } from '../stores/auth'
+import type {
+  AvailableLot,
+  ExperimentConfiguration,
+  ExperimentMaterialInput,
+  ExperimentProtocol,
+  Workload,
+} from '../types'
+import MaterialsStep from './ExperimentWizard/MaterialsStep.vue'
+import ProtocolStep from './ExperimentWizard/ProtocolStep.vue'
+import SamplingStep from './ExperimentWizard/SamplingStep.vue'
+import TimepointsStep from './ExperimentWizard/TimepointsStep.vue'
+import OverridesStep from './ExperimentWizard/OverridesStep.vue'
+
+const router = useRouter()
+const auth = useAuth()
+const step = ref(0)
+const saving = ref(false)
+const estimate = ref<Workload | null>(null)
+const steps = [
+  '基本信息',
+  '实验材料',
+  '培养皿与重复',
+  '幼苗取样',
+  'DAG 测定',
+  '特殊材料',
+  '检查与创建',
+]
+const form = reactive({ name: '', description: '', planned_start_date: '' })
+const lots = ref<AvailableLot[]>([])
+const materials = ref<ExperimentMaterialInput[]>([])
+const dagDays = ref<number[]>([3, 7, 14])
+const protocol = ref<ExperimentProtocol>({
+  seeds_per_dish: 20,
+  replicate_count: 3,
+  observation_period_days: 14,
+  sampling_rule: 'first_germinated',
+  sample_count: 5,
+  sample_scope: 'per_dish',
+  germination_criterion: '',
+  summary: null,
+})
+watch(lots, (current) => {
+  const old = new Map(materials.value.map((item) => [item.seed_lot_id, item]))
+  materials.value = current.map(
+    (lot) =>
+      old.get(lot.id) || {
+        seed_lot_id: lot.id,
+        label: null,
+        seeds_per_dish_override: null,
+        replicate_count_override: null,
+        sample_count_override: null,
+      },
+  )
+})
+function payload() {
+  return {
+    name: form.name.trim(),
+    description: form.description.trim() || null,
+    planned_start_date: form.planned_start_date || null,
+    protocol: {
+      ...protocol.value,
+      germination_criterion: protocol.value.germination_criterion.trim(),
+    },
+    materials: materials.value,
+    dag_days: dagDays.value,
+  }
+}
+function validCurrent(): boolean {
+  if (step.value === 0 && form.name.trim().length < 2) return warn('请填写至少 2 个字的实验名称')
+  if (step.value === 1 && !lots.value.length) return warn('请至少选择一个种子批次')
+  if (
+    step.value === 2 &&
+    (!protocol.value.seeds_per_dish ||
+      !protocol.value.replicate_count ||
+      !protocol.value.observation_period_days ||
+      !protocol.value.germination_criterion.trim())
+  )
+    return warn('请填写完整且大于 0 的默认方案与发芽判定标准')
+  if (step.value === 3 && (!protocol.value.sample_count || protocol.value.sample_count < 1))
+    return warn('取样数 N 必须大于 0')
+  if (step.value === 4 && !dagDays.value.length) return warn('请至少添加一个 DAG 时间点')
+  return true
+}
+function warn(message: string): false {
+  ElMessage.warning(message)
+  return false
+}
+async function next() {
+  if (!validCurrent()) return
+  if (step.value === 5) {
+    try {
+      estimate.value = (await api.post<Workload>('/experiments/estimate', payload())).data
+    } catch (error) {
+      ElMessage.error(errorMessage(error))
+      return
+    }
+  }
+  step.value++
+}
+async function create() {
+  saving.value = true
+  try {
+    const { data } = await api.post<ExperimentConfiguration>('/experiments/configured', payload())
+    ElMessage.success('完整实验方案已保存')
+    router.push(`/experiments/${data.experiment.id}`)
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<template>
+  <button class="back-link" @click="router.push('/experiments')">← 返回实验列表</button>
+  <div class="wizard-header">
+    <div>
+      <div class="eyebrow">EXPERIMENT DESIGN · {{ step + 1 }} / 7</div>
+      <h1>{{ form.name || '创建实验' }}</h1>
+      <p>
+        第 {{ step + 1 }} 步：{{ steps[step] }} · 负责人 {{ auth.user?.display_name || '当前用户' }}
+      </p>
+    </div>
+    <div class="wizard-progress">
+      <strong>{{ Math.round(((step + 1) / steps.length) * 100) }}%</strong><span>配置进度</span>
+    </div>
+  </div>
+  <el-progress
+    :percentage="Math.round(((step + 1) / steps.length) * 100)"
+    :show-text="false"
+    :stroke-width="5"
+    class="wizard-bar"
+  />
+  <div class="wizard-layout">
+    <aside class="wizard-nav surface-panel">
+      <button
+        v-for="(title, index) in steps"
+        :key="title"
+        :class="{ active: step === index, done: step > index }"
+        @click="index < step && (step = index)"
+      >
+        <span>{{ index + 1 }}</span
+        >{{ title }}
+      </button>
+    </aside>
+    <main class="surface-panel wizard-main">
+      <template v-if="step === 0"
+        ><div class="wizard-step-copy">
+          <h2>实验基本信息</h2>
+          <p>为这次具体实验命名。负责人默认是当前登录用户。</p>
+        </div>
+        <el-form label-position="top"
+          ><el-form-item label="实验名称"
+            ><el-input
+              v-model="form.name"
+              maxlength="255"
+              show-word-limit
+              placeholder="例如：温度梯度对种子萌发的影响" /></el-form-item
+          ><el-form-item label="实验说明"
+            ><el-input
+              v-model="form.description"
+              type="textarea"
+              :rows="4"
+              placeholder="研究目的、材料背景或设计依据" /></el-form-item
+          ><el-form-item label="计划开始日期"
+            ><el-date-picker
+              v-model="form.planned_start_date"
+              type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="可选，用于预计最晚完成日期" /></el-form-item></el-form
+      ></template>
+      <MaterialsStep v-else-if="step === 1" v-model="lots" />
+      <ProtocolStep v-else-if="step === 2" v-model="protocol" />
+      <SamplingStep v-else-if="step === 3" v-model="protocol" />
+      <TimepointsStep v-else-if="step === 4" v-model="dagDays" />
+      <OverridesStep v-else-if="step === 5" v-model="materials" :lots="lots" :protocol="protocol" />
+      <template v-else
+        ><div class="wizard-step-copy">
+          <h2>检查并创建实验</h2>
+          <p>确认下面的设计与预计工作量。创建后仍可在实验开始前调整配置。</p>
+        </div>
+        <div class="review-grid">
+          <div>
+            <small>实验材料</small><strong>{{ estimate?.material_count }}</strong>
+          </div>
+          <div>
+            <small>预计培养皿</small><strong>{{ estimate?.estimated_dish_count }}</strong>
+          </div>
+          <div>
+            <small>预计置床种子</small><strong>{{ estimate?.estimated_seed_count }}</strong>
+          </div>
+          <div>
+            <small>预计幼苗样本</small><strong>{{ estimate?.estimated_sample_count }}</strong>
+          </div>
+          <div>
+            <small>预计测定记录</small><strong>{{ estimate?.estimated_measurement_count }}</strong>
+          </div>
+          <div>
+            <small>预计最晚完成</small
+            ><strong class="date">{{
+              estimate?.estimated_latest_finish_date || '未设置计划日期'
+            }}</strong>
+          </div>
+        </div>
+        <div class="review-section">
+          <h3>{{ form.name }}</h3>
+          <p>{{ form.description || '暂无实验说明' }}</p>
+          <p>
+            计划开始：{{ form.planned_start_date || '未设置' }} · 负责人：{{
+              auth.user?.display_name
+            }}
+          </p>
+        </div>
+        <div class="review-section">
+          <h3>默认方案</h3>
+          <p>
+            每皿 {{ protocol.seeds_per_dish }} 粒 · 每材料 {{ protocol.replicate_count }} 次重复 ·
+            观察 {{ protocol.observation_period_days }} 天
+          </p>
+          <p>
+            按发芽顺序取前 {{ protocol.sample_count }} 株，{{
+              protocol.sample_scope === 'per_dish' ? '每个培养皿' : '每个实验材料合计'
+            }}
+            · 判定：{{ protocol.germination_criterion }}
+          </p>
+        </div>
+        <div class="review-section">
+          <h3>材料与 DAG</h3>
+          <div v-for="(entry, index) in materials" :key="entry.seed_lot_id" class="review-material">
+            <b>{{ lots[index]?.taxon_name }} · {{ lots[index]?.code }}</b
+            ><span
+              >每皿 {{ entry.seeds_per_dish_override ?? '默认' }} 粒 · 重复
+              {{ entry.replicate_count_override ?? '默认' }} 次 · 取样
+              {{ entry.sample_count_override ?? '默认' }} 株</span
+            >
+          </div>
+          <div class="dag-chips">
+            <el-tag v-for="day in dagDays" :key="day">DAG {{ day }}</el-tag>
+          </div>
+        </div>
+      </template>
+      <div class="wizard-footer">
+        <el-button :disabled="step === 0" @click="step--">上一步</el-button
+        ><el-button v-if="step < 6" type="primary" @click="next">下一步</el-button
+        ><el-button v-else type="primary" :loading="saving" @click="create">创建实验</el-button>
+      </div>
+    </main>
+  </div>
+</template>
