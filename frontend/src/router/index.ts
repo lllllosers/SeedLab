@@ -36,6 +36,11 @@ const router = createRouter({
           name: 'experiment-detail',
           component: () => import('../views/ExperimentDesignDetailView.vue'),
         },
+        {
+          path: 'experiments/:id/germination',
+          name: 'experiment-germination',
+          component: () => import('../views/GerminationExecutionView.vue'),
+        },
         { path: 'data', name: 'data', component: () => import('../views/DataView.vue') },
         { path: 'audit', name: 'audit', component: () => import('../views/AuditView.vue') },
         {

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api import auth, catalog, configuration, experiments, system
+from app.api import auth, catalog, configuration, execution, experiments, system
 from app.core.config import get_settings
 from app.version import VERSION
 
@@ -11,6 +11,7 @@ app = FastAPI(title="SeedLab API", version=VERSION, docs_url="/docs" if settings
 app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(configuration.router, prefix="/api")
+app.include_router(execution.router, prefix="/api")
 app.include_router(experiments.router, prefix="/api")
 app.include_router(system.router, prefix="/api")
 

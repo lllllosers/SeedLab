@@ -280,7 +280,7 @@ def replace_days(db: Session, experiment_id: str, days: list[int], user_id: str)
 
 
 def set_status(db: Session, experiment: Experiment, target: str) -> None:
-    allowed = {"draft": {"ready", "cancelled"}, "ready": {"draft", "active", "cancelled"},
+    allowed = {"draft": {"ready", "cancelled"}, "ready": {"draft", "cancelled"},
                "active": {"completed", "cancelled"}, "completed": set(), "cancelled": set()}
     if target == experiment.status:
         return

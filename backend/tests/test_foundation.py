@@ -25,7 +25,7 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d50447b51d78"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "f705a6bb943c"
         timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
         sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
         assert "day_after_germination" in timepoint_columns
@@ -131,7 +131,7 @@ def test_zero_is_fact_and_null_is_missing(client: TestClient, tmp_path):
         timepoint = MeasurementTimepoint(experiment_id=experiment.id, day_after_germination=0)
         db.add_all([material, timepoint])
         db.flush()
-        dish = GerminationDish(material_id=material.id, label="A1", seed_count=10)
+        dish = GerminationDish(material_id=material.id, code="EXP-2026-001-M001-R01", replicate_no=1, label="A1", seed_count=10)
         db.add(dish)
         db.flush()
         germinated_at = datetime(2026, 9, 28, 8, tzinfo=timezone.utc)
@@ -177,7 +177,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
         material = ExperimentMaterial(experiment_id=experiment.id, seed_lot_id=lot.id)
         db.add(material)
         db.flush()
-        dish = GerminationDish(material_id=material.id, label="A1", seed_count=10)
+        dish = GerminationDish(material_id=material.id, code="EXP-2026-001-M001-R01", replicate_no=1, label="A1", seed_count=10)
         db.add(dish)
         db.flush()
         sample = SeedlingSample(dish_id=dish.id, sample_number=1, germinated_at=datetime(2026, 9, 28, tzinfo=timezone.utc))
@@ -205,7 +205,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d50447b51d78"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "f705a6bb943c"
         assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
         index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
         assert "uq_timepoint_experiment_dag" in index_names

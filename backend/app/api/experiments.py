@@ -59,8 +59,6 @@ def update_experiment(item_id: str, data: ExperimentPatch, db: Session = Depends
             setattr(item, key, value)
     if "status" in patch:
         set_status(db, item, patch["status"])
-        if item.status == "active" and item.started_at is None:
-            item.started_at = now_utc()
         if item.status in {"completed", "cancelled"} and item.ended_at is None:
             item.ended_at = now_utc()
     flush_or_conflict(db)

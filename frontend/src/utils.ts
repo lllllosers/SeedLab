@@ -6,6 +6,17 @@ export function dateText(value: string | null | undefined): string {
     day: '2-digit',
   }).format(new Date(value))
 }
+export function dateTimeText(value: string | null | undefined): string {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value))
+}
 export const statusLabels: Record<string, string> = {
   draft: '草稿',
   ready: '已就绪',

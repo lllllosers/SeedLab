@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class ORMModel(BaseModel):
@@ -143,6 +143,31 @@ class DagInput(BaseModel):
 
 class MaterialOrderInput(BaseModel):
     material_ids: list[str]
+
+
+class StartExperimentInput(BaseModel):
+    sown_at: AwareDatetime
+
+
+class ObservationEntry(BaseModel):
+    dish_id: str
+    new_germinated_count: int | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+
+class BatchObservationInput(BaseModel):
+    observed_at: AwareDatetime
+    entries: list[ObservationEntry] = Field(min_length=1)
+
+
+class ObservationInput(ObservationEntry):
+    observed_at: AwareDatetime
+    new_germinated_count: int = Field(ge=0)
+
+
+class ObservationPatch(BaseModel):
+    new_germinated_count: int | None = Field(default=None, ge=0)
+    notes: str | None = None
 
 
 class AuditOut(ORMModel):

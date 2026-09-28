@@ -11,6 +11,7 @@ import type {
   ExperimentStatus,
 } from '../types'
 import { dateText, statusLabels } from '../utils'
+import StartExperimentDialog from './GerminationExecution/StartExperimentDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,7 +22,7 @@ const statusChoices = computed<ExperimentStatus[]>(
   () =>
     ({
       draft: ['draft', 'ready', 'cancelled'],
-      ready: ['ready', 'draft', 'active', 'cancelled'],
+      ready: ['ready', 'draft', 'cancelled'],
       active: ['active', 'completed', 'cancelled'],
       completed: ['completed'],
       cancelled: ['cancelled'],
@@ -33,6 +34,7 @@ const protocolOpen = ref(false)
 const materialOpen = ref(false)
 const addOpen = ref(false)
 const dagOpen = ref(false)
+const startOpen = ref(false)
 const info = reactive({
   name: '',
   description: '',
@@ -207,6 +209,14 @@ onMounted(load)
     </div>
     <div class="heading-actions">
       <span class="status-pill large" :class="item.status">{{ statusLabels[item.status] }}</span
+      ><el-button v-if="item.status === 'ready'" type="primary" @click="startOpen = true"
+        >正式开始实验</el-button
+      ><el-button
+        v-if="item.started_at"
+        type="primary"
+        plain
+        @click="router.push(`/experiments/${item.id}/germination`)"
+        >进入实验执行</el-button
       ><el-button @click="editInfo">编辑信息</el-button>
     </div>
   </div>
@@ -471,4 +481,11 @@ onMounted(load)
       ><el-button type="primary" @click="saveDag">保存</el-button></template
     ></el-dialog
   >
+  <StartExperimentDialog
+    v-if="config"
+    v-model="startOpen"
+    :experiment-id="config.experiment.id"
+    :workload="config.workload"
+    @started="router.push(`/experiments/${config.experiment.id}/germination`)"
+  />
 </template>

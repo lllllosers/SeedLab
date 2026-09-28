@@ -89,6 +89,62 @@ export interface ExperimentConfiguration {
   dag_days: number[]
   workload: Workload | null
 }
+export interface GerminationDishStatus {
+  id: string
+  code: string
+  material_id: string
+  taxon_name: string
+  seed_lot_code: string
+  replicate_no: number
+  label: string
+  seed_count: number
+  sown_at: string | null
+  cumulative_germinated: number
+  germination_rate: number
+  remaining_ungerminated: number
+  sample_count: number
+  sample_target: number | null
+  material_sample_count: number
+  last_observed_at: string | null
+  observation_count: number
+}
+export interface GerminationMaterialStatus {
+  id: string
+  taxon_name: string
+  seed_lot_code: string
+  dish_count: number
+  seed_count: number
+  cumulative_germinated: number
+  germination_rate: number
+  sample_count: number
+  sample_target: number | null
+}
+export interface GerminationObservation {
+  id: string
+  dish_id: string
+  dish_code: string
+  replicate_no: number
+  observed_at: string
+  new_germinated_count: number
+  notes: string | null
+  generated_sample_count: number
+}
+export interface GerminationExecution {
+  experiment: Pick<Experiment, 'id' | 'code' | 'name' | 'status' | 'started_at'>
+  sampling_rule: string | null
+  sample_scope: 'per_dish' | 'per_material' | null
+  observation_period_days: number | null
+  observation_period_end_at: string | null
+  observation_period_overdue: boolean
+  dish_count: number
+  seed_count: number
+  cumulative_germinated: number
+  germination_rate: number
+  sample_count: number
+  materials: GerminationMaterialStatus[]
+  dishes: GerminationDishStatus[]
+  recent_observations: GerminationObservation[]
+}
 export interface Audit {
   id: string
   user_id: string | null

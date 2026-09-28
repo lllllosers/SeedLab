@@ -123,10 +123,18 @@ class MeasurementTimepoint(Identity, Base):
 class GerminationDish(Identity, Base):
     __tablename__ = "germination_dishes"
     material_id: Mapped[str] = mapped_column(ForeignKey("experiment_materials.id", ondelete="RESTRICT"), index=True)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    replicate_no: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str] = mapped_column(String(80), nullable=False)
     seed_count: Mapped[int] = mapped_column(Integer, nullable=False)
     sown_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (CheckConstraint("seed_count > 0", name="ck_dish_seed_count"), UniqueConstraint("material_id", "label", name="uq_dish_label"))
+    __table_args__ = (
+        CheckConstraint("seed_count > 0", name="ck_dish_seed_count"),
+        CheckConstraint("replicate_no > 0", name="ck_dish_replicate_no"),
+        UniqueConstraint("code", name="uq_dish_code"),
+        UniqueConstraint("material_id", "label", name="uq_dish_label"),
+        UniqueConstraint("material_id", "replicate_no", name="uq_dish_material_replicate"),
+    )
 
 
 class GerminationObservation(Identity, Base):
@@ -143,6 +151,8 @@ class SeedlingSample(Identity, Base):
     dish_id: Mapped[str] = mapped_column(ForeignKey("germination_dishes.id", ondelete="RESTRICT"), index=True)
     sample_number: Mapped[int] = mapped_column(Integer, nullable=False)
     germinated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_observation_id: Mapped[str | None] = mapped_column(ForeignKey("germination_observations.id", ondelete="RESTRICT"), index=True)
+    position_label: Mapped[str | None] = mapped_column(String(80))
     __table_args__ = (CheckConstraint("sample_number > 0", name="ck_sample_number"), UniqueConstraint("dish_id", "sample_number", name="uq_sample_number"))
 
 
