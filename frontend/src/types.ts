@@ -4,6 +4,7 @@ export interface User {
   display_name: string
   is_admin: boolean
   is_active: boolean
+  must_change_password: boolean
 }
 export interface Taxon {
   id: string

@@ -99,7 +99,9 @@ async function logout() {
                 ><el-dropdown-item disabled
                   >{{ auth.user?.username }} ·
                   {{ auth.user?.is_admin ? '管理员' : '成员' }}</el-dropdown-item
-                ><el-dropdown-item divided @click="logout"
+                ><el-dropdown-item divided @click="router.push('/change-password')"
+                  >修改密码</el-dropdown-item
+                ><el-dropdown-item @click="logout"
                   ><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item
                 ></el-dropdown-menu
               ></template

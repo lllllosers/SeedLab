@@ -14,13 +14,38 @@ class UserOut(ORMModel):
     display_name: str
     is_admin: bool
     is_active: bool
+    must_change_password: bool
 
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
     display_name: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=10, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     is_admin: bool = False
+
+
+class UserPatch(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    is_admin: bool | None = None
+    is_active: bool | None = None
+
+
+class PasswordReset(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str
+
+
+class BootstrapInput(BaseModel):
+    bootstrap_token: str
+    username: str = Field(min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    display_name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=8, max_length=128)
+    confirm_password: str
 
 
 class Login(BaseModel):

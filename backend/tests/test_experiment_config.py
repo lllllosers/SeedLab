@@ -163,7 +163,7 @@ def test_stage1_migration_round_trip_preserves_data(client, tmp_path):
                     ExperimentMaterial(experiment_id=experiment["id"], seed_lot_id=lot["id"], display_order=0)])
         db.commit()
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "f705a6bb943c"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
         assert "seeds_per_dish" in {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(experiment_protocols)")}
     engine.dispose()
     command.downgrade(config, "9456099da4fd")
@@ -177,7 +177,7 @@ def test_stage1_migration_round_trip_preserves_data(client, tmp_path):
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "f705a6bb943c"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
         assert conn.execute(text("SELECT seeds_per_dish FROM experiment_protocols WHERE experiment_id=:id"), {"id": experiment["id"]}).scalar() == 12
         assert conn.execute(text("SELECT display_order FROM experiment_materials WHERE experiment_id=:id"), {"id": experiment["id"]}).scalar() == 0
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []

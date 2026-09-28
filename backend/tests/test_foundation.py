@@ -25,7 +25,7 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "f705a6bb943c"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
         timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
         sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
         assert "day_after_germination" in timepoint_columns
@@ -205,7 +205,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "f705a6bb943c"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
         assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
         index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
         assert "uq_timepoint_experiment_dag" in index_names
@@ -216,8 +216,8 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
 
 
 def test_create_admin_cli(client: TestClient):
-    script = "import getpass, sys; getpass.getpass=lambda _prompt: 'cli-password-123'; sys.argv=['seedlab', 'create-admin', 'cliadmin']; from app.cli import main; main()"
+    script = "import getpass, sys; getpass.getpass=lambda _prompt: 'cli-pass'; sys.argv=['seedlab', 'create-admin', 'cliadmin']; from app.cli import main; main()"
     result = subprocess.run([sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    login = client.post("/api/auth/login", json={"username": "cliadmin", "password": "cli-password-123"})
+    login = client.post("/api/auth/login", json={"username": "cliadmin", "password": "cli-pass"})
     assert login.status_code == 200 and login.json()["user"]["is_admin"] is True

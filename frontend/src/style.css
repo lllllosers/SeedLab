@@ -964,6 +964,34 @@ button {
   color: #b2bdb4;
   font-size: 10px;
 }
+.setup-panel-inner {
+  padding: 28px 0;
+}
+.setup-panel-inner .login-help {
+  margin-bottom: 14px;
+}
+.setup-panel-inner .field-label {
+  margin-top: 11px;
+}
+.setup-entry {
+  margin-bottom: 18px;
+}
+.setup-notice {
+  color: #286849;
+  line-height: 1.6;
+}
+.account-secondary-actions {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 18px;
+}
+.account-dialog-help {
+  color: #68786b;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 4px 0 16px;
+}
 .el-dialog {
   border-radius: 13px !important;
 }

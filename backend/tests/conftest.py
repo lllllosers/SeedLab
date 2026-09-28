@@ -18,6 +18,7 @@ from app.models import User
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
     monkeypatch.setenv("SEEDLAB_DATABASE_URL", url)
+    monkeypatch.setenv("SEEDLAB_BOOTSTRAP_TOKEN_PATH", str(tmp_path / "bootstrap.token"))
     get_settings.cache_clear()
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))

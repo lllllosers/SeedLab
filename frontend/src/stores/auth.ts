@@ -10,28 +10,33 @@ interface AuthResult {
 export const useAuth = defineStore('auth', {
   state: () => ({ user: null as User | null, ready: false }),
   actions: {
+    apply(result: AuthResult) {
+      this.user = result.user
+      setCsrfToken(result.csrf_token)
+      this.ready = true
+    },
+    forget() {
+      this.user = null
+      setCsrfToken('')
+      this.ready = true
+    },
     async restore() {
       try {
         const { data } = await api.get<AuthResult>('/auth/me')
-        this.user = data.user
-        setCsrfToken(data.csrf_token)
+        this.apply(data)
       } catch {
-        this.user = null
-        setCsrfToken('')
+        this.forget()
       } finally {
         this.ready = true
       }
     },
     async login(username: string, password: string) {
       const { data } = await api.post<AuthResult>('/auth/login', { username, password })
-      this.user = data.user
-      setCsrfToken(data.csrf_token)
-      this.ready = true
+      this.apply(data)
     },
     async logout() {
       await api.post('/auth/logout')
-      this.user = null
-      setCsrfToken('')
+      this.forget()
     },
   },
 })

@@ -16,6 +16,19 @@ from app.models.entities import now_utc
 
 hasher = PasswordHasher()
 COOKIE_NAME = "seedlab_session"
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 128
+
+
+def password_error(password: str) -> str | None:
+    if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
+        return "密码长度须为 8 至 128 位"
+    return None
+
+
+def require_password(password: str) -> None:
+    if message := password_error(password):
+        raise HTTPException(422, message)
 
 
 def hash_password(password: str) -> str:
@@ -29,12 +42,15 @@ def check_password(hash_value: str, password: str) -> bool:
         return False
 
 
-def create_session(db: Session, user: User) -> tuple[str, str]:
+def create_session(db: Session, user: User, *, commit: bool = True) -> tuple[str, str]:
     raw = secrets.token_urlsafe(32)
     csrf = secrets.token_urlsafe(32)
     db.add(SessionToken(user_id=user.id, token_hash=hashlib.sha256(raw.encode()).hexdigest(), csrf_token=csrf,
                         expires_at=now_utc() + timedelta(hours=get_settings().seedlab_session_hours)))
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return raw, csrf
 
 
@@ -52,8 +68,14 @@ def session_for_request(request: Request, db: Session) -> SessionToken:
     return session
 
 
-def current_user(request: Request, db: Session = Depends(get_db)) -> User:
+def authenticated_user(request: Request, db: Session = Depends(get_db)) -> User:
     return session_for_request(request, db).user
+
+
+def current_user(user: User = Depends(authenticated_user)) -> User:
+    if user.must_change_password:
+        raise HTTPException(403, "请先修改初始密码")
+    return user
 
 
 def admin_user(user: User = Depends(current_user)) -> User:

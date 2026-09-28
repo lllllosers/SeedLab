@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuth } from '../stores/auth'
-import { errorMessage } from '../api/client'
+import { api, errorMessage } from '../api/client'
 import { ArrowRight } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -11,12 +11,21 @@ const auth = useAuth()
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
+const uninitialized = ref(false)
+onMounted(async () => {
+  try {
+    uninitialized.value = !(await api.get<{ initialized: boolean }>('/setup/status')).data
+      .initialized
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  }
+})
 async function submit() {
   if (!username.value || !password.value) return ElMessage.warning('请输入用户名和密码')
   loading.value = true
   try {
     await auth.login(username.value.trim(), password.value)
-    router.push('/')
+    router.push(auth.user?.must_change_password ? '/change-password' : '/')
   } catch (error) {
     ElMessage.error(errorMessage(error))
   } finally {
@@ -50,7 +59,18 @@ async function submit() {
         </div>
         <div class="login-kicker">欢迎回来</div>
         <h2>登录 SeedLab</h2>
-        <p class="login-help">使用课题组分配的账号继续工作。</p>
+        <p v-if="uninitialized" class="login-help setup-notice">
+          SeedLab 尚未完成首次初始化。请使用本机终端显示的一次性初始化码。
+        </p>
+        <p v-else class="login-help">使用课题组分配的账号继续工作。</p>
+        <el-button
+          v-if="uninitialized"
+          class="setup-entry"
+          type="primary"
+          plain
+          @click="router.push('/setup')"
+          >初始化管理员</el-button
+        >
         <form @submit.prevent="submit">
           <label class="field-label" for="username">用户名</label
           ><el-input

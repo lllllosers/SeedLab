@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     seedlab_env: str = "development"
     seedlab_database_url: str = "sqlite:///./data/seedlab.db"
+    seedlab_bootstrap_token_path: str = "./data/bootstrap.token"
     seedlab_session_hours: int = 12
     seedlab_cookie_secure: bool = False
 
