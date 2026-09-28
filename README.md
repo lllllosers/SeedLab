@@ -1,6 +1,6 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前为 **Stage 1 实验配置 / 0.1.0-dev**：可以通过七步向导配置实验材料、默认方案、取样范围、DAG 时间点、材料覆盖，并在保存前查看预计工作量。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前发布版为 **v0.2.0 / Stage 1 实验配置**：可以通过七步向导配置实验材料、默认方案、取样范围、DAG 时间点、材料覆盖，并在保存前查看预计工作量。
 
 幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株实际发芽时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 1 只配置方案，不生成培养皿、样本或测定任务。
 
@@ -47,7 +47,7 @@ scripts/   开发启动与测试入口
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为稳定主线，短期使用 `feat/*`、`fix/*`。本分支不合并主线或创建标签。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为当前发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置。下一阶段开发再建立短期功能分支。
 
 ## 开发者与许可
 
