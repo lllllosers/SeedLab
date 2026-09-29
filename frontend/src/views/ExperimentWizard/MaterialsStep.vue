@@ -150,7 +150,7 @@ onMounted(() => {
       <div class="wizard-bulk-actions"><el-button @click="removal = selected.map((lot) => lot.id)">全选已加入材料</el-button><el-button @click="removal = []">取消全选</el-button><el-button type="danger" :disabled="!removal.length" @click="removeChecked">批量移除（{{ removal.length }}）</el-button></div>
       <div class="wizard-list selected selected-material-list"><div v-for="(lot, index) in selected" :key="lot.id" class="wizard-list-row">
         <el-checkbox v-model="removal" :value="lot.id" aria-label="选择移除实验材料" />
-        <div class="wizard-order">预计 {{ String(index + 1).padStart(3, '0') }}</div>
+        <span class="experiment-number-badge">预计 {{ String(index + 1).padStart(3, '0') }}</span>
         <div class="grow"><b>{{ lot.taxon_common_name || lot.taxon_scientific_name }}</b><small v-if="lot.taxon_common_name">{{ lot.taxon_scientific_name }}</small><small>{{ lot.code }}</small></div>
         <el-button text type="danger" @click="selected = selected.filter((item) => item.id !== lot.id)">移除</el-button>
       </div><div v-if="!selected.length" class="wizard-empty">尚未加入材料，请先勾选批次。</div></div>

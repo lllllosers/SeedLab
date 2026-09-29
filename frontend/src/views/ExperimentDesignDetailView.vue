@@ -338,7 +338,7 @@ onMounted(load)
           <el-button v-if="editable" type="primary" plain @click="openAdd">添加材料</el-button>
         </div>
         <div v-for="entry in visibleMaterials" :key="entry.id" class="detail-material-row">
-          <span class="wizard-order">{{ entry.experiment_number ? String(entry.experiment_number).padStart(3, '0') : `预计 ${String(entry.preview_number).padStart(3, '0')}` }}</span>
+          <span class="experiment-number-badge">{{ entry.experiment_number ? String(entry.experiment_number).padStart(3, '0') : `预计 ${String(entry.preview_number).padStart(3, '0')}` }}</span>
           <div class="grow">
             <b>{{ entry.taxon_common_name || entry.taxon_scientific_name }}</b>
             <small v-if="entry.taxon_common_name">{{ entry.taxon_scientific_name }}</small>
@@ -368,7 +368,7 @@ onMounted(load)
           <el-button v-if="item?.numbering_locked_at" @click="downloadSowingSheet">下载 Excel</el-button>
         </div>
         <el-table :data="config.materials" max-height="560">
-          <el-table-column label="实验编号" width="100"><template #default="{ row }">{{ row.experiment_number ? String(row.experiment_number).padStart(3, '0') : `预计 ${String(row.preview_number).padStart(3, '0')}` }}</template></el-table-column>
+          <el-table-column label="实验编号" width="100"><template #default="{ row }"><span class="experiment-number-badge">{{ row.experiment_number ? String(row.experiment_number).padStart(3, '0') : `预计 ${String(row.preview_number).padStart(3, '0')}` }}</span></template></el-table-column>
           <el-table-column label="物种" min-width="180"><template #default="{ row }"><div class="sowing-name"><b>{{ row.taxon_common_name || row.taxon_scientific_name }}</b><small v-if="row.taxon_common_name"><i>{{ row.taxon_scientific_name }}</i></small></div></template></el-table-column>
           <el-table-column label="原始材料编号" width="120"><template #default="{ row }">{{ row.source_code || '未填写' }}</template></el-table-column>
           <el-table-column prop="seed_lot_code" label="系统批次编号" width="145" />
