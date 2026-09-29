@@ -330,7 +330,7 @@ def test_stage2_migration_preserves_existing_dish_and_sample(tmp_path, monkeypat
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e8b62c74a901"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0b6111724c00"
         assert conn.execute(text("SELECT COUNT(*) FROM germination_observations")).scalar() == 1
         assert conn.execute(text("SELECT COUNT(*) FROM seedling_samples")).scalar() == 1
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []

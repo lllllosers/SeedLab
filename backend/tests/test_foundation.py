@@ -27,7 +27,7 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e8b62c74a901"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0b6111724c00"
         timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
         sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
         assert "day_after_germination" in timepoint_columns
@@ -214,7 +214,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e8b62c74a901"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0b6111724c00"
         assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
         index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
         assert "uq_timepoint_experiment_dag" in index_names
