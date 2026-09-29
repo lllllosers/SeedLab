@@ -16,10 +16,11 @@ from sqlalchemy.orm import Session
 
 from app.db.session import make_engine
 from app.models import Experiment, ExperimentMaterial, GerminationDish, GerminationObservation, MeasurementTimepoint, SeedlingMeasurement, SeedlingSample, SeedLot, Taxon
+from app.version import VERSION
 
 
 def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
-    assert client.get("/api/health").json()["version"] == "0.3.1"
+    assert client.get("/api/health").json()["version"] == VERSION
     engine = make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     with engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}

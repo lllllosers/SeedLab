@@ -1,6 +1,6 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.3.1 / Account Bootstrap and Management**。本开发分支正在收口 v0.3.2 人工测试反馈，应用版本仍为 0.3.1，尚未发布 v0.3.2。系统已具备实验配置、确认置床编号、分批实际置床、发芽巡检、累计发芽动态计算、按培养皿或材料取前 N 株幼苗、来源追踪、巡检纠错和审计，以及首次浏览器初始化和成员账号管理。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.3.2 / Manual Workflow & Usability Closeout**。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
 
 幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株首次在巡检中判定发芽的时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 3 的 DAG 今日测定任务、根长苗长录入、`SeedlingMeasurement` 正式操作接口、测定历史与快速纠错，以及数据统计分析尚未实现。
 
@@ -62,7 +62,7 @@ scripts/   开发启动与测试入口
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为当前发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management。Stage 3 尚未开始。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。Stage 3 尚未开始。
 
 ## 开发者与许可
 
