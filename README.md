@@ -2,7 +2,7 @@
 
 SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.3.2 / Manual Workflow & Usability Closeout**。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
 
-幼苗根苗长测定采用 DAG（Days After Germination）：实验配置非负的 `day_after_germination` 节点，未来以单株首次在巡检中判定发芽的时间 `germinated_at` 计算测定任务。培养皿置床时间 `sown_at` 另行保留，用于派生巡检所需的置床后天数。Stage 3 的 DAG 今日测定任务、根长苗长录入、`SeedlingMeasurement` 正式操作接口、测定历史与快速纠错，以及数据统计分析尚未实现。
+当前开发分支正在实现 Stage 3 幼苗测定闭环，应用版本仍为 0.3.2，尚未发布 v0.4.0。幼苗根苗长测定采用 DAG（Days After Germination，发芽后测定时间）：将单株首次在巡检中判定发芽的时间 `germinated_at` 转为实验室本地日期，再加动态配置的 DAG 自然日。培养皿置床时间 `sown_at` 另行保留，用于巡检，不作为幼苗测定基准。测定任务由样本与时间点实时派生；根长、苗长均以 mm 记录，区分真实 0、无法测量和尚未测定。统计分析与派生指标留待 Stage 4。
 
 ## 技术栈
 
@@ -58,11 +58,11 @@ docs/      总体设计、数据模型、实验配置与执行业务规则、路
 scripts/   开发启动与测试入口
 ```
 
-详细设计见 [docs/01_系统总体设计.md](docs/01_系统总体设计.md)、[docs/02_核心数据模型.md](docs/02_核心数据模型.md)、[docs/03_开发路线图.md](docs/03_开发路线图.md)、[docs/05_实验配置业务规则.md](docs/05_实验配置业务规则.md)、[docs/06_发芽实验执行业务规则.md](docs/06_发芽实验执行业务规则.md) 与 [docs/07_账号初始化与权限管理.md](docs/07_账号初始化与权限管理.md)。
+详细设计见 [docs/01_系统总体设计.md](docs/01_系统总体设计.md)、[docs/02_核心数据模型.md](docs/02_核心数据模型.md)、[docs/03_开发路线图.md](docs/03_开发路线图.md)、[docs/05_实验配置业务规则.md](docs/05_实验配置业务规则.md)、[docs/06_发芽实验执行业务规则.md](docs/06_发芽实验执行业务规则.md)、[docs/07_账号初始化与权限管理.md](docs/07_账号初始化与权限管理.md) 与 [docs/08_幼苗测定业务规则.md](docs/08_幼苗测定业务规则.md)。
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。Stage 3 尚未开始。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。Stage 3 在 `feat/stage-3-seedling-measurement` 开发，尚未发布。
 
 ## 开发者与许可
 
