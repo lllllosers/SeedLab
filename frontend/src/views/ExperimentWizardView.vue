@@ -234,8 +234,12 @@ async function create() {
         <div class="review-section">
           <h3>材料与发芽后测定时间（DAG）</h3>
           <div v-for="(entry, index) in materials" :key="entry.seed_lot_id" class="review-material">
-            <b>{{ lots[index]?.taxon_name }} · {{ lots[index]?.code }}</b
-            ><span
+            <div>
+              <b>{{ lots[index]?.taxon_common_name || lots[index]?.taxon_scientific_name }}</b>
+              <small v-if="lots[index]?.taxon_common_name">{{ lots[index]?.taxon_scientific_name }}</small>
+              <small>{{ lots[index]?.code }}</small>
+            </div>
+            <span
               >每皿 {{ entry.seeds_per_dish_override ?? '默认' }} 粒 · 重复
               {{ entry.replicate_count_override ?? '默认' }} 次 · 取样
               {{ entry.sample_count_override ?? '默认' }} 株</span

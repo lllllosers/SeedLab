@@ -10,7 +10,7 @@ from app.db.session import make_engine
 def workbook_bytes(rows):
     workbook = Workbook()
     sheet = workbook.active
-    sheet.append(["taxon_code", "common_name", "scientific_name", "source", "quantity", "notes"])
+    sheet.append(["物种编号", "中文名", "学名", "来源", "数量", "备注"])
     for row in rows:
         sheet.append(row)
     output = BytesIO()
@@ -29,7 +29,7 @@ def test_seed_lot_import_200_rows_template_and_audit(auth_client, tmp_path):
     taxa_template = client.get("/api/export/taxa-template.xlsx")
     assert taxa_template.status_code == 200
     assert list(load_workbook(BytesIO(taxa_template.content), read_only=True).active.values) == [
-        ("scientific_name", "common_name", "family")
+        ("学名", "中文名", "科")
     ]
     for index in range(200):
         response = client.post("/api/taxa", headers=headers,
@@ -40,7 +40,7 @@ def test_seed_lot_import_200_rows_template_and_audit(auth_client, tmp_path):
     sheet = load_workbook(BytesIO(template.content), read_only=True).active
     rows = list(sheet.iter_rows(values_only=True))
     assert len(rows) == 201
-    assert rows[0] == ("taxon_code", "common_name", "scientific_name", "source", "quantity", "notes")
+    assert rows[0] == ("物种编号", "中文名", "学名", "来源", "数量", "备注")
     assert rows[1][:3] == ("SP-0001", "物种0", "Species 0")
 
     data_rows = [(*row[:3], "采集地", index, "人工测试") for index, row in enumerate(rows[1:])]
@@ -77,12 +77,51 @@ def test_seed_lot_import_rejects_invalid_rows_without_partial_writes(auth_client
     assert response.status_code == 422
     assert all(f"第 {line} 行" in response.json()["detail"] for line in (3, 4, 5))
     assert "整表未导入" in response.json()["detail"]
+    assert "第 3 行：找不到物种编号 SP-9999" in response.json()["detail"]
+    assert "taxon_code" not in response.json()["detail"]
     assert client.get("/api/seed-lots").json() == []
     engine = make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT COUNT(*) FROM import_jobs")).scalar() == 0
         assert connection.execute(text("SELECT COUNT(*) FROM audit_logs WHERE entity_type='SeedLot'")).scalar() == 0
     engine.dispose()
+
+
+def test_material_and_seed_lot_search_use_all_taxon_names(auth_client):
+    client, headers = auth_client
+    taxon = client.post("/api/taxa", headers=headers,
+                        json={"scientific_name": "Setaria viridis", "common_name": "狗尾草"}).json()
+    lot = client.post("/api/seed-lots", headers=headers,
+                      json={"taxon_id": taxon["id"], "source": "野外采集"}).json()
+    for term in ("狗尾草", "Setaria", taxon["code"]):
+        available = client.get("/api/experiments/available-seed-lots", params={"q": term}).json()
+        assert len(available) == 1
+        assert available[0]["id"] == lot["id"]
+        assert available[0]["taxon_common_name"] == "狗尾草"
+        assert available[0]["taxon_scientific_name"] == "Setaria viridis"
+        assert available[0]["taxon_code"] == taxon["code"]
+        assert "taxon_name" not in available[0]
+        listed = client.get("/api/seed-lots", params={"q": term}).json()
+        assert [item["id"] for item in listed] == [lot["id"]]
+    for term in (lot["code"], "野外采集"):
+        assert [item["id"] for item in client.get("/api/seed-lots", params={"q": term}).json()] == [lot["id"]]
+
+
+def test_taxa_chinese_template_rejects_invalid_sheet_without_partial_writes(auth_client):
+    client, headers = auth_client
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["学名", "中文名", "科"])
+    sheet.append(["Setaria viridis", "狗尾草", "禾本科"])
+    sheet.append([None, "缺少学名", None])
+    output = BytesIO()
+    workbook.save(output)
+    response = client.post("/api/import/taxa", headers=headers,
+                           files={"file": ("taxa.xlsx", output.getvalue(),
+                                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+    assert response.status_code == 422
+    assert "第 3 行缺少学名" in response.json()["detail"]
+    assert client.get("/api/taxa").json() == []
 
 
 def test_seed_lot_import_nullable_quantity_and_new_lot_per_row(auth_client):

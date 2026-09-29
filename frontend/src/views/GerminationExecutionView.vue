@@ -108,8 +108,9 @@ onMounted(load)
           :key="material.id"
           class="material-progress-card"
         >
-          <b>{{ material.taxon_name }}</b
-          ><small>{{ material.seed_lot_code }} · {{ material.dish_count }} 个重复</small>
+          <b>{{ material.taxon_common_name || material.taxon_scientific_name }}</b>
+          <small v-if="material.taxon_common_name">{{ material.taxon_scientific_name }}</small>
+          <small>{{ material.seed_lot_code }} · {{ material.dish_count }} 个重复</small>
           <div class="material-progress-numbers">
             <span>发芽 {{ material.cumulative_germinated }} / {{ material.seed_count }}</span
             ><strong>{{ material.germination_rate }}%</strong>

@@ -103,7 +103,8 @@ def material_dict(db: Session, material: ExperimentMaterial, protocol: Experimen
     taxon = require_entity(db, Taxon, lot.taxon_id)
     result = {
         "id": material.id, "seed_lot_id": material.seed_lot_id, "seed_lot_code": lot.code,
-        "taxon_id": taxon.id, "taxon_name": taxon.scientific_name,
+        "taxon_id": taxon.id, "taxon_common_name": taxon.common_name,
+        "taxon_scientific_name": taxon.scientific_name, "taxon_code": taxon.code,
         "label": material.label, "display_order": material.display_order,
         "seeds_per_dish_override": material.seeds_per_dish_override,
         "replicate_count_override": material.replicate_count_override,

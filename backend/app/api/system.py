@@ -116,9 +116,10 @@ def reset_user_password(user_id: str, data: PasswordReset,
 def export_taxa(db: Session = Depends(get_db), _user: User = Depends(current_user)):
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["code", "scientific_name", "common_name", "family", "is_active", "notes"])
+    writer.writerow(["物种编号", "学名", "中文名", "科", "状态", "备注"])
     for item in db.scalars(select(Taxon).order_by(Taxon.code)):
-        writer.writerow([item.code, item.scientific_name, item.common_name or "", item.family or "", item.is_active, item.notes or ""])
+        writer.writerow([item.code, item.scientific_name, item.common_name or "", item.family or "",
+                         "使用中" if item.is_active else "已停用", item.notes or ""])
     return StreamingResponse(iter(["\ufeff" + output.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": 'attachment; filename="seedlab-taxa.csv"'})
 
@@ -128,7 +129,7 @@ def taxa_template(_user: User = Depends(current_user)):
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "物种导入"
-    sheet.append(("scientific_name", "common_name", "family"))
+    sheet.append(("学名", "中文名", "科"))
     for column, width in {"A": 32, "B": 24, "C": 24}.items():
         sheet.column_dimensions[column].width = width
     output = io.BytesIO()
@@ -152,18 +153,18 @@ async def import_taxa(file: UploadFile = File(...), db: Session = Depends(get_db
         sheet = workbook.active
         rows = sheet.iter_rows(values_only=True)
         header = [str(value or "").strip() for value in next(rows)]
-        if "scientific_name" not in header:
+        if "学名" not in header:
             raise ValueError("首行缺少学名列，请按导入格式填写")
         entries = []
         for line, values in enumerate(rows, start=2):
             row = dict(zip(header, values))
-            name = str(row.get("scientific_name") or "").strip()
+            name = str(row.get("学名") or "").strip()
             if not name:
                 if any(value is not None for value in values):
                     raise ValueError(f"第 {line} 行缺少学名")
                 continue
-            entries.append({"scientific_name": name, "common_name": str(row.get("common_name") or "").strip() or None,
-                            "family": str(row.get("family") or "").strip() or None})
+            entries.append({"scientific_name": name, "common_name": str(row.get("中文名") or "").strip() or None,
+                            "family": str(row.get("科") or "").strip() or None})
         workbook.close()
     except (OSError, BadZipFile) as exc:
         raise HTTPException(422, "无法读取物种文件，请确认上传的是有效的 Excel 文件") from exc
@@ -186,7 +187,7 @@ async def import_taxa(file: UploadFile = File(...), db: Session = Depends(get_db
     return {"id": job.id, "imported": len(entries)}
 
 
-SEED_LOT_COLUMNS = ("taxon_code", "common_name", "scientific_name", "source", "quantity", "notes")
+SEED_LOT_COLUMNS = ("物种编号", "中文名", "学名", "来源", "数量", "备注")
 
 
 @router.get("/export/seed-lots-template.xlsx")
@@ -223,7 +224,7 @@ async def import_seed_lots(file: UploadFile = File(...), db: Session = Depends(g
         try:
             rows = workbook.active.iter_rows(values_only=True)
             header = [str(value or "").strip() for value in next(rows)]
-            if "taxon_code" not in header or len(header) != len(set(header)):
+            if "物种编号" not in header or len(header) != len(set(header)):
                 raise ValueError("首行需要包含物种编号列，且列名不能重复；请使用下载的模板")
             entries = []
             for line, values in enumerate(rows, start=2):
@@ -242,12 +243,12 @@ async def import_seed_lots(file: UploadFile = File(...), db: Session = Depends(g
     if not entries:
         raise HTTPException(422, "文件中没有需要导入的种子批次")
 
-    codes = {str(row.get("taxon_code") or "").strip() for _, row in entries}
+    codes = {str(row.get("物种编号") or "").strip() for _, row in entries}
     taxa = {item.code: item for item in db.scalars(select(Taxon).where(Taxon.code.in_(codes)))}
     validated = []
     errors = []
     for line, row in entries:
-        code = str(row.get("taxon_code") or "").strip()
+        code = str(row.get("物种编号") or "").strip()
         taxon = taxa.get(code)
         if not code:
             errors.append(f"第 {line} 行：请填写物种编号")
@@ -256,10 +257,10 @@ async def import_seed_lots(file: UploadFile = File(...), db: Session = Depends(g
         elif not taxon.is_active:
             errors.append(f"第 {line} 行：物种 {code} 已停用，不能添加种子批次")
 
-        source = str(row.get("source") or "").strip() or None
+        source = str(row.get("来源") or "").strip() or None
         if source and len(source) > 255:
             errors.append(f"第 {line} 行：来源不能超过 255 个字符")
-        raw_quantity = row.get("quantity")
+        raw_quantity = row.get("数量")
         quantity = None
         if raw_quantity is not None and str(raw_quantity).strip() != "":
             try:
@@ -270,7 +271,7 @@ async def import_seed_lots(file: UploadFile = File(...), db: Session = Depends(g
                 quantity = int(raw_quantity)
             except (TypeError, ValueError, OverflowError):
                 errors.append(f"第 {line} 行：数量请填写大于或等于 0 的整数（最多 19 位），或留空")
-        validated.append((taxon, source, quantity, str(row.get("notes") or "").strip() or None))
+        validated.append((taxon, source, quantity, str(row.get("备注") or "").strip() or None))
     if errors:
         raise HTTPException(422, "整表未导入。请修正以下行后重新上传：\n" + "\n".join(errors))
 

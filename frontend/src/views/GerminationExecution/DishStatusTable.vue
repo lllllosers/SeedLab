@@ -33,7 +33,9 @@ defineProps<{ execution: GerminationExecution }>()
             <b>{{ dish.code }}</b>
           </td>
           <td>
-            {{ dish.taxon_name }}<small>{{ dish.seed_lot_code }}</small>
+            <b>{{ dish.taxon_common_name || dish.taxon_scientific_name }}</b>
+            <small v-if="dish.taxon_common_name">{{ dish.taxon_scientific_name }}</small>
+            <small>{{ dish.seed_lot_code }}</small>
           </td>
           <td>R{{ dish.replicate_no }}</td>
           <td>{{ dish.seed_count }}</td>

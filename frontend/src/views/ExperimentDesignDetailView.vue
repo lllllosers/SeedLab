@@ -326,8 +326,9 @@ onMounted(load)
         <div v-for="(entry, index) in config.materials" :key="entry.id" class="detail-material-row">
           <span class="wizard-order">{{ index + 1 }}</span>
           <div class="grow">
-            <b>{{ entry.taxon_name }}</b
-            ><small>{{ entry.seed_lot_code }} {{ entry.label || '' }}</small>
+            <b>{{ entry.taxon_common_name || entry.taxon_scientific_name }}</b>
+            <small v-if="entry.taxon_common_name">{{ entry.taxon_scientific_name }}</small>
+            <small>{{ entry.seed_lot_code }} {{ entry.label || '' }}</small>
           </div>
           <div class="material-metrics">
             <span
@@ -465,7 +466,7 @@ onMounted(load)
   >
   <el-dialog v-model="addOpen" title="添加实验材料" width="620px"
     ><div class="wizard-search-row">
-      <el-input v-model="search" placeholder="搜索物种或批次" @keyup.enter="searchLots" /><el-button
+      <el-input v-model="search" placeholder="搜索中文名、学名、物种编号或批次" @keyup.enter="searchLots" /><el-button
         @click="searchLots"
         >搜索</el-button
       >
@@ -474,8 +475,14 @@ onMounted(load)
       ><el-option
         v-for="lot in available"
         :key="lot.id"
-        :label="`${lot.taxon_name} · ${lot.code}`"
-        :value="lot.id" /></el-select
+        class="taxon-select-option"
+        :label="`${lot.taxon_common_name || lot.taxon_scientific_name} · ${lot.code}`"
+        :value="lot.id">
+          <div class="taxon-option">
+            <b>{{ lot.taxon_common_name || lot.taxon_scientific_name }}</b>
+            <small>{{ lot.taxon_common_name ? `${lot.taxon_scientific_name} · ${lot.code}` : lot.code }}</small>
+          </div>
+        </el-option></el-select
     ><template #footer
       ><el-button @click="addOpen = false">取消</el-button
       ><el-button type="primary" @click="addMaterial">加入实验材料</el-button></template

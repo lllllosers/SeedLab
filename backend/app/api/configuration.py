@@ -23,7 +23,9 @@ def available_seed_lots(q: str = "", taxon_id: str | None = None, db: Session = 
         term = f"%{q.strip()}%"
         query = query.where(or_(Taxon.scientific_name.ilike(term), Taxon.common_name.ilike(term),
                                 Taxon.code.ilike(term), SeedLot.code.ilike(term), SeedLot.source.ilike(term)))
-    return [{"id": lot.id, "code": lot.code, "taxon_id": taxon.id, "taxon_name": taxon.scientific_name,
+    return [{"id": lot.id, "code": lot.code, "taxon_id": taxon.id,
+             "taxon_common_name": taxon.common_name, "taxon_scientific_name": taxon.scientific_name,
+             "taxon_code": taxon.code,
              "source": lot.source, "quantity": lot.quantity} for lot, taxon in db.execute(query.order_by(Taxon.scientific_name, SeedLot.code).limit(500))]
 
 

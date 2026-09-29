@@ -84,7 +84,7 @@ onMounted(load)
       <div class="toolbar-actions">
         <el-input
           v-model="query"
-          placeholder="搜索编号或来源"
+          placeholder="搜索中文名、学名、物种编号、批次编号或来源"
           clearable
           :prefix-icon="Search"
           @input="load"

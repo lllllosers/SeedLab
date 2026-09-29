@@ -61,21 +61,27 @@ onMounted(() => {
       filterable
       remote
       clearable
-      placeholder="筛选物种"
+      placeholder="筛选物种（中文名、学名或编号）"
       :remote-method="loadTaxa"
       @change="loadLots"
     >
       <el-option
         v-for="taxon in taxa"
         :key="taxon.id"
-        :label="taxon.scientific_name"
+        class="taxon-select-option"
+        :label="taxon.common_name || taxon.scientific_name"
         :value="taxon.id"
-      />
+      >
+        <div class="taxon-option">
+          <b>{{ taxon.common_name || taxon.scientific_name }}</b>
+          <small>{{ taxon.common_name ? `${taxon.scientific_name} · ${taxon.code}` : taxon.code }}</small>
+        </div>
+      </el-option>
     </el-select>
     <el-input
       v-model="search"
       clearable
-      placeholder="搜索学名、物种编号或批次编号"
+      placeholder="搜索中文名、学名、物种编号、批次编号或来源"
       @keyup.enter="loadLots"
       @clear="loadLots"
     />
@@ -84,8 +90,9 @@ onMounted(() => {
   <div class="wizard-list" v-loading="busy">
     <div v-for="lot in lots" :key="lot.id" class="wizard-list-row">
       <div>
-        <b>{{ lot.taxon_name }}</b
-        ><small
+        <b>{{ lot.taxon_common_name || lot.taxon_scientific_name }}</b>
+        <small v-if="lot.taxon_common_name">{{ lot.taxon_scientific_name }}</small>
+        <small
           >{{ lot.code }} · {{ lot.source || '来源未填写' }} · 登记数量
           {{ lot.quantity ?? '未知' }}</small
         >
@@ -110,8 +117,9 @@ onMounted(() => {
     <div v-for="(lot, index) in selected" :key="lot.id" class="wizard-list-row">
       <div class="wizard-order">{{ index + 1 }}</div>
       <div class="grow">
-        <b>{{ lot.taxon_name }}</b
-        ><small>{{ lot.code }}</small>
+        <b>{{ lot.taxon_common_name || lot.taxon_scientific_name }}</b>
+        <small v-if="lot.taxon_common_name">{{ lot.taxon_scientific_name }}</small>
+        <small>{{ lot.code }}</small>
       </div>
       <el-button text :disabled="index === 0" @click="move(index, -1)">上移</el-button>
       <el-button text :disabled="index === selected.length - 1" @click="move(index, 1)"

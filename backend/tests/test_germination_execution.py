@@ -61,6 +61,9 @@ def test_start_is_atomic_uses_effective_values_and_never_decrements_lot(auth_cli
     assert summary["experiment"]["status"] == "active"
     assert summary["experiment"]["started_at"] == "2026-09-01T00:00:00Z"
     assert summary["dish_count"] == 5
+    assert summary["materials"][0]["taxon_scientific_name"] == "Setaria viridis"
+    assert summary["materials"][0]["taxon_common_name"] is None
+    assert summary["dishes"][0]["taxon_code"] == original["materials"][0]["taxon_code"]
     assert [dish["seed_count"] for dish in summary["dishes"]] == [5, 5, 3, 3, 3]
     assert [dish["replicate_no"] for dish in summary["dishes"]] == [1, 2, 1, 2, 3]
     assert [dish["code"] for dish in summary["dishes"]] == [

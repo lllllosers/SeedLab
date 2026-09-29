@@ -1,4 +1,5 @@
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 from datetime import datetime, timezone
 import subprocess
 import sys
@@ -106,15 +107,22 @@ def test_excel_import_and_csv_export(auth_client):
     client, headers = auth_client
     workbook = Workbook()
     sheet = workbook.active
-    sheet.append(["scientific_name", "common_name", "family"])
+    sheet.append(["学名", "中文名", "科"])
     sheet.append(["Festuca rubra", "羊茅", "Poaceae"])
     stream = BytesIO()
     workbook.save(stream)
     response = client.post("/api/import/taxa", files={"file": ("taxa.xlsx", stream.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}, headers=headers)
     assert response.status_code == 201 and response.json()["imported"] == 1
     exported = client.get("/api/export/taxa.csv")
-    assert exported.status_code == 200 and "Festuca rubra" in exported.text
-    assert client.get("/api/audit-logs").json()[0]["action"] == "import"
+    assert exported.status_code == 200
+    rows = list(csv.reader(StringIO(exported.text.lstrip("\ufeff"))))
+    assert rows[0] == ["物种编号", "学名", "中文名", "科", "状态", "备注"]
+    assert rows[1][1:] == ["Festuca rubra", "羊茅", "Poaceae", "使用中", ""]
+    taxon = client.get("/api/taxa", params={"q": "Festuca"}).json()[0]
+    assert client.patch(f"/api/taxa/{taxon['id']}", headers=headers, json={"is_active": False}).status_code == 200
+    inactive_rows = list(csv.reader(StringIO(client.get("/api/export/taxa.csv").text.lstrip("\ufeff"))))
+    assert inactive_rows[1][4] == "已停用"
+    assert any(log["action"] == "import" for log in client.get("/api/audit-logs").json())
 
 
 def test_zero_is_fact_and_null_is_missing(client: TestClient, tmp_path):

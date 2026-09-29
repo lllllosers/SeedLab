@@ -54,7 +54,9 @@ export interface AvailableLot {
   id: string
   code: string
   taxon_id: string
-  taxon_name: string
+  taxon_common_name: string | null
+  taxon_scientific_name: string
+  taxon_code: string
   source: string | null
   quantity: number | null
 }
@@ -69,7 +71,9 @@ export interface ExperimentMaterial extends ExperimentMaterialInput {
   id: string
   seed_lot_code: string
   taxon_id: string
-  taxon_name: string
+  taxon_common_name: string | null
+  taxon_scientific_name: string
+  taxon_code: string
   display_order: number
   effective_seeds_per_dish: number | null
   effective_replicate_count: number | null
@@ -95,7 +99,9 @@ export interface GerminationDishStatus {
   id: string
   code: string
   material_id: string
-  taxon_name: string
+  taxon_common_name: string | null
+  taxon_scientific_name: string
+  taxon_code: string
   seed_lot_code: string
   replicate_no: number
   label: string
@@ -112,7 +118,9 @@ export interface GerminationDishStatus {
 }
 export interface GerminationMaterialStatus {
   id: string
-  taxon_name: string
+  taxon_common_name: string | null
+  taxon_scientific_name: string
+  taxon_code: string
   seed_lot_code: string
   dish_count: number
   seed_count: number

@@ -73,11 +73,14 @@ def delete_taxon(item_id: str, db: Session = Depends(get_db), user: User = Depen
 
 @router.get("/seed-lots", response_model=list[SeedLotOut])
 def list_lots(taxon_id: str | None = None, q: str = "", db: Session = Depends(get_db), _user: User = Depends(current_user)):
-    statement = select(SeedLot).options(selectinload(SeedLot.taxon))
+    statement = select(SeedLot).join(SeedLot.taxon).options(selectinload(SeedLot.taxon))
     if taxon_id:
         statement = statement.where(SeedLot.taxon_id == taxon_id)
     if q.strip():
-        statement = statement.where(or_(SeedLot.code.ilike(f"%{q.strip()}%"), SeedLot.source.ilike(f"%{q.strip()}%")))
+        term = f"%{q.strip()}%"
+        statement = statement.where(or_(SeedLot.code.ilike(term), SeedLot.source.ilike(term),
+                                        Taxon.common_name.ilike(term), Taxon.scientific_name.ilike(term),
+                                        Taxon.code.ilike(term)))
     return db.scalars(statement.order_by(SeedLot.created_at.desc()).limit(500)).all()
 
 

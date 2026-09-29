@@ -289,7 +289,8 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
             material_germinated += germinated
             dish_rows.append({
                 "id": dish.id, "code": dish.code, "material_id": material.id,
-                "taxon_name": taxon.scientific_name, "seed_lot_code": lot.code,
+                "taxon_common_name": taxon.common_name, "taxon_scientific_name": taxon.scientific_name,
+                "taxon_code": taxon.code, "seed_lot_code": lot.code,
                 "replicate_no": dish.replicate_no, "label": dish.label,
                 "seed_count": dish.seed_count, "sown_at": iso_utc(dish.sown_at),
                 "cumulative_germinated": germinated,
@@ -302,7 +303,9 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
                 "observation_count": len(history),
             })
         material_rows.append({
-            "id": material.id, "taxon_name": taxon.scientific_name, "seed_lot_code": lot.code,
+            "id": material.id, "taxon_common_name": taxon.common_name,
+            "taxon_scientific_name": taxon.scientific_name, "taxon_code": taxon.code,
+            "seed_lot_code": lot.code,
             "dish_count": len(relevant), "seed_count": material_seed_total,
             "cumulative_germinated": material_germinated,
             "germination_rate": round(material_germinated / material_seed_total * 100, 2) if material_seed_total else 0,

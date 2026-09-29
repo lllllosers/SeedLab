@@ -39,6 +39,9 @@ def test_configured_creation_defaults_and_workload(auth_client, tmp_path):
     assert config["experiment"]["owner_id"]
     assert config["dag_days"] == [0, 3, 7]
     assert config["materials"][0]["taxon_id"] == taxon["id"]
+    assert config["materials"][0]["taxon_common_name"] is None
+    assert config["materials"][0]["taxon_scientific_name"] == "Setaria viridis"
+    assert config["materials"][0]["taxon_code"] == taxon["code"]
     assert config["materials"][0]["effective_seeds_per_dish"] == 20
     assert config["workload"] == {
         "material_count": 1, "estimated_dish_count": 3, "estimated_seed_count": 60,

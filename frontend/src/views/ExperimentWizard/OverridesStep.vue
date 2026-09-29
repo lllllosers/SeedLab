@@ -12,8 +12,9 @@ const materials = defineModel<ExperimentMaterialInput[]>({ required: true })
     <div class="override-title">
       <span class="wizard-order">{{ index + 1 }}</span>
       <div>
-        <b>{{ lots.find((lot) => lot.id === material.seed_lot_id)?.taxon_name }}</b
-        ><small>{{ lots.find((lot) => lot.id === material.seed_lot_id)?.code }}</small>
+        <b>{{ lots[index]?.taxon_common_name || lots[index]?.taxon_scientific_name }}</b>
+        <small v-if="lots[index]?.taxon_common_name">{{ lots[index]?.taxon_scientific_name }}</small>
+        <small>{{ lots[index]?.code }}</small>
       </div>
     </div>
     <div class="wizard-form-grid">
