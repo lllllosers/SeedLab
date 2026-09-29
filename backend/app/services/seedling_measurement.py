@@ -4,7 +4,7 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.schemas import MeasurementInput, MeasurementPatch
@@ -48,9 +48,10 @@ def task_data(db: Session, experiment_id: str, status: str | None = None,
     if dag is not None and dag not in {point.day_after_germination for point in days}:
         raise HTTPException(422, "该实验没有所选的发芽后测定时间")
     rows = _rows(db, experiment_id)
-    counts = {}
-    for _, dish, material, _, _ in rows:
-        counts[material.id] = max(counts.get(material.id, 0), dish.replicate_no)
+    counts = dict(db.execute(select(GerminationDish.material_id, func.max(GerminationDish.replicate_no))
+                             .join(ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id)
+                             .where(ExperimentMaterial.experiment_id == experiment_id)
+                             .group_by(GerminationDish.material_id)).all())
     sample_ids = [sample.id for sample, *_ in rows]
     measurements = { (item.sample_id, item.timepoint_id): item for item in db.scalars(
         select(SeedlingMeasurement).where(SeedlingMeasurement.sample_id.in_(sample_ids)))} if sample_ids else {}

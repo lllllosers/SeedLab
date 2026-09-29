@@ -17,11 +17,11 @@ from app.db.session import make_engine
 from app.services.local_time import local_date, today
 
 
-def setup_experiment(client, headers, days=(0, 1, 3)):
+def setup_experiment(client, headers, days=(0, 1, 3), replicates=1):
     taxon = client.post("/api/taxa", json={"scientific_name": "Setaria viridis", "common_name": "狗尾草"}, headers=headers).json()
     lot = client.post("/api/seed-lots", json={"taxon_id": taxon["id"], "quantity": 100, "source_code": "SRC-1"}, headers=headers).json()
     response = client.post("/api/experiments/configured", json={"name": "幼苗测定试验",
-        "protocol": {"seeds_per_dish": 10, "replicate_count": 1, "observation_period_days": 30,
+        "protocol": {"seeds_per_dish": 10, "replicate_count": replicates, "observation_period_days": 30,
                      "sampling_rule": "first_germinated", "sample_count": 2, "sample_scope": "per_dish",
                      "germination_criterion": "胚根露出"}, "materials": [{"seed_lot_id": lot["id"]}],
         "dag_days": list(days)}, headers=headers)
@@ -88,6 +88,18 @@ def test_local_day_boundary_and_germination_basis(auth_client):
     assert any(item["status"] == "due_today" for item in tasks)
     assert any(item["status"] == "upcoming" for item in tasks)
     assert tasks[0]["scheduled_date"] != local_date(datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    day0 = next(item for item in tasks if item["day_after_germination"] == 0)
+    day1 = next(item for item in tasks if item["day_after_germination"] == 1)
+    assert client.post(f"{base}/measurements", json=payload(day0, datetime.now(timezone.utc)), headers=headers).status_code == 201
+    assert client.post(f"{base}/measurements", json=payload(day1, datetime.now(timezone.utc)), headers=headers).status_code == 422
+
+
+def test_field_number_keeps_replicate_suffix_before_other_dishes_have_samples(auth_client):
+    client, headers = auth_client
+    base, dish, _, _ = setup_experiment(client, headers, days=(0,), replicates=2)
+    observe(client, headers, base, dish, datetime.now(timezone.utc) - timedelta(days=1))
+    task = client.get(f"{base}/measurement-tasks").json()["tasks"][0]
+    assert task["field_number"] == "001-1"
 
 
 def test_create_correct_clear_position_and_export(auth_client):
