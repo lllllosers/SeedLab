@@ -6,6 +6,7 @@ import { api, errorMessage } from '../api/client'
 import type { Experiment, ExperimentStatus } from '../types'
 import { dateText, statusLabels } from '../utils'
 import { Plus, Search } from '@element-plus/icons-vue'
+import { useClientPagination } from '../composables/useClientPagination'
 
 const router = useRouter(),
   route = useRoute(),
@@ -16,19 +17,21 @@ const router = useRouter(),
 const sort = ref<{ prop: string; order: string | null }>({ prop: 'created_at', order: 'descending' })
 function onSortChange(value: { prop: string; order: string | null }) {
   sort.value = { prop: value.prop || 'created_at', order: value.order }
+  resetPage()
 }
 const visibleItems = computed(() => [...items.value].sort((a, b) => {
   const prop = sort.value.prop as keyof Experiment
   const direction = sort.value.order === 'ascending' ? 1 : -1
   return direction * String(a[prop] || '').localeCompare(String(b[prop] || ''))
 }))
+const { page, pageSize, pageItems, resetPage } = useClientPagination(visibleItems)
 watch(() => route.query.status, (value) => {
   status.value = typeof value === 'string' ? value : ''
   load()
 })
 function changeStatusFilter() {
+  resetPage()
   router.replace({ query: { ...route.query, status: status.value || undefined } })
-  load()
 }
 async function load() {
   loading.value = true
@@ -69,23 +72,13 @@ onMounted(load)
           placeholder="搜索实验编号或名称"
           clearable
           :prefix-icon="Search"
-          @input="load"
-        /><el-select
-          v-model="status"
-          placeholder="全部状态"
-          clearable
-          style="width: 145px"
-          @change="changeStatusFilter"
-          ><el-option label="草稿" value="draft" /><el-option
-            label="已就绪"
-            value="ready" /><el-option label="进行中" value="active" /><el-option
-            label="已完成"
-            value="completed" /><el-option label="已取消" value="cancelled"
-        /></el-select>
+          @input="() => { resetPage(); load() }"
+        />
       </div>
     </div>
+    <el-tabs v-model="status" class="experiment-status-tabs" @tab-change="changeStatusFilter"><el-tab-pane label="全部" name="" /><el-tab-pane label="草稿" name="draft" /><el-tab-pane label="已就绪" name="ready" /><el-tab-pane label="进行中" name="active" /><el-tab-pane label="已完成" name="completed" /><el-tab-pane label="已取消" name="cancelled" /></el-tabs>
     <el-table
-      :data="visibleItems"
+      :data="pageItems"
       v-loading="loading"
       class="data-table"
       @sort-change="onSortChange"
@@ -117,5 +110,6 @@ onMounted(load)
         ></el-table-column
       ></el-table
     >
+    <el-pagination v-model:current-page="page" v-model:page-size="pageSize" class="list-pagination" :page-sizes="[25, 50, 100]" layout="total, sizes, prev, pager, next" :total="visibleItems.length" />
   </div>
 </template>

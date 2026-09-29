@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { GerminationExecution } from '../../types'
 import { dateTimeText } from '../../utils'
-defineProps<{ execution: GerminationExecution }>()
+const props = defineProps<{ execution: GerminationExecution; materialId?: string | null }>()
+defineEmits<{ showAll: [] }>()
+const dishes = computed(() => props.materialId ? props.execution.dishes.filter((dish) => dish.material_id === props.materialId) : props.execution.dishes)
 </script>
 <template>
   <div class="execution-section-head">
@@ -9,7 +12,7 @@ defineProps<{ execution: GerminationExecution }>()
       <h3>培养皿状态</h3>
       <p>累计发芽数、发芽率和剩余数量均由巡检事实动态计算。</p>
     </div>
-    <el-tag type="success" effect="plain">{{ execution.dish_count }} 个培养皿</el-tag>
+    <div><el-button v-if="materialId" link @click="$emit('showAll')">查看全部培养皿</el-button><el-tag type="success" effect="plain">{{ dishes.length }} 个培养皿</el-tag></div>
   </div>
   <div class="execution-table-wrap">
     <table class="execution-table">
@@ -29,7 +32,7 @@ defineProps<{ execution: GerminationExecution }>()
         </tr>
       </thead>
       <tbody>
-        <tr v-for="dish in execution.dishes" :key="dish.id">
+        <tr v-for="dish in dishes" :key="dish.id">
           <td>
             <b>{{ dish.field_number || dish.code }}</b><small v-if="dish.field_number">系统编号：{{ dish.code }}</small>
           </td>
@@ -46,13 +49,14 @@ defineProps<{ execution: GerminationExecution }>()
             <strong>{{ dish.cumulative_germinated }}</strong>
           </td>
           <td>
-            <div class="rate-cell">
+            <div v-if="dish.sown_at && dish.observation_count" class="rate-cell">
               <el-progress
                 :percentage="dish.germination_rate"
                 :show-text="false"
                 :stroke-width="5"
               /><span>{{ dish.germination_rate }}%</span>
             </div>
+            <span v-else>—</span>
           </td>
           <td>{{ dish.remaining_ungerminated }}</td>
           <td>{{ dish.sample_count }}</td>

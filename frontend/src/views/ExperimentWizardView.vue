@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
@@ -17,6 +17,7 @@ import SamplingStep from './ExperimentWizard/SamplingStep.vue'
 import TimepointsStep from './ExperimentWizard/TimepointsStep.vue'
 import OverridesStep from './ExperimentWizard/OverridesStep.vue'
 import PageBackButton from '../components/PageBackButton.vue'
+import { effectiveMaterial } from '../utils/effectiveMaterial'
 
 const router = useRouter()
 const route = useRoute()
@@ -36,6 +37,9 @@ const steps = [
 const form = reactive({ name: '', description: '', planned_start_date: '' })
 const lots = ref<AvailableLot[]>([])
 const materials = ref<ExperimentMaterialInput[]>([])
+const reviewMaterials = computed(() => materials.value.map((entry, index) => ({
+  entry, lot: lots.value[index], values: effectiveMaterial(entry, protocol.value),
+})))
 const dagDays = ref<number[]>([3, 7, 14])
 const protocol = ref<ExperimentProtocol>({
   seeds_per_dish: 20,
@@ -189,7 +193,7 @@ async function create() {
               v-model="form.planned_start_date"
               type="date"
               value-format="YYYY-MM-DD"
-              placeholder="可选，用于预计最晚完成日期" /></el-form-item></el-form
+              placeholder="可选，填写计划开始日期" /></el-form-item></el-form
       ></template>
       <MaterialsStep v-else-if="step === 1" v-model="lots" />
       <ProtocolStep v-else-if="step === 2" v-model="protocol" />
@@ -199,7 +203,7 @@ async function create() {
       <template v-else
         ><div class="wizard-step-copy">
           <h2>检查并创建实验</h2>
-          <p>确认下面的设计与预计工作量。创建后仍可在实验开始前调整配置。</p>
+          <p>确认下面的材料、实际使用参数与预计工作量。创建后仍可在实验开始前调整配置。</p>
         </div>
         <div class="review-grid">
           <div>
@@ -217,14 +221,7 @@ async function create() {
           <div>
             <small>预计测定记录</small><strong>{{ estimate?.estimated_measurement_count }}</strong>
           </div>
-          <div>
-            <small>按计划估算最晚完成</small
-            ><strong class="date">{{
-              estimate?.estimated_latest_finish_date || '未设置计划日期'
-            }}</strong>
-          </div>
         </div>
-        <p class="form-hint">最晚完成日期仅按所有材料在计划日置床、观察期最后一天发芽估算；实际分批置床后可能变化。</p>
         <div class="review-section">
           <h3>{{ form.name }}</h3>
           <p>{{ form.description || '暂无实验说明' }}</p>
@@ -249,16 +246,16 @@ async function create() {
         </div>
         <div class="review-section">
           <h3>材料与发芽后测定时间（DAG）</h3>
-          <div v-for="(entry, index) in materials" :key="entry.seed_lot_id" class="review-material">
+          <div v-for="item in reviewMaterials" :key="item.entry.seed_lot_id" class="review-material">
             <div>
-              <b>{{ lots[index]?.taxon_common_name || lots[index]?.taxon_scientific_name }}</b>
-              <small v-if="lots[index]?.taxon_common_name">{{ lots[index]?.taxon_scientific_name }}</small>
-              <small>{{ lots[index]?.code }}</small>
+              <b>{{ item.lot?.taxon_common_name || item.lot?.taxon_scientific_name }}</b>
+              <small v-if="item.lot?.taxon_common_name">{{ item.lot?.taxon_scientific_name }}</small>
+              <small>{{ item.lot?.code }}</small>
             </div>
             <span
-              >每皿 {{ entry.seeds_per_dish_override ?? '默认' }} 粒 · 重复
-              {{ entry.replicate_count_override ?? '默认' }} 次 · 取样
-              {{ entry.sample_count_override ?? '默认' }} 株</span
+              >每皿 {{ item.values.seedsPerDish }} 粒 · 重复
+              {{ item.values.replicateCount }} 次 · 取样
+              {{ item.values.sampleCount }} 株</span
             >
           </div>
           <div class="dag-chips">

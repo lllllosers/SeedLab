@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
@@ -13,19 +13,33 @@ import PageBackButton from '../components/PageBackButton.vue'
 
 const route = useRoute()
 const execution = ref<GerminationExecution | null>(null)
-const tab = ref('entry')
+const tab = ref('overview')
+const overviewSearch = ref('')
+const overviewStatus = ref('all')
+const overviewPage = ref(1)
+const overviewPageSize = 15
+const selectedMaterialId = ref<string | null>(null)
+function inspectMaterial(id: string) { selectedMaterialId.value = id; tab.value = 'dishes' }
+const filteredMaterials = computed(() => {
+  const term = overviewSearch.value.trim().toLocaleLowerCase()
+  return (execution.value?.materials || []).filter((material) => {
+    const matches = !term || [material.taxon_common_name, material.taxon_scientific_name,
+      material.taxon_code, material.seed_lot_code, material.source_code,
+      String(material.experiment_number || material.preview_number)]
+      .some((value) => value?.toLocaleLowerCase().includes(term))
+    const state = material.sown_count > 0 ? (material.sown_count + material.cancelled_count >= material.dish_count ? 'sown' : 'partial') : (material.cancelled_count >= material.dish_count ? 'cancelled' : 'pending')
+    return matches && (overviewStatus.value === 'all' || overviewStatus.value === state)
+  })
+})
+const overviewMaterials = computed(() => filteredMaterials.value.slice((overviewPage.value - 1) * overviewPageSize, overviewPage.value * overviewPageSize))
+watch([overviewSearch, overviewStatus], () => { overviewPage.value = 1 })
 const loading = ref(false)
-const loadedOnce = ref(false)
 async function load() {
   loading.value = true
   try {
     execution.value = (
       await api.get<GerminationExecution>(`/experiments/${route.params.id}/execution`)
     ).data
-    if (!loadedOnce.value) {
-      tab.value = execution.value.experiment.status === 'ready' ? 'sowing' : 'entry'
-      loadedOnce.value = true
-    }
   } catch (error) {
     ElMessage.error(errorMessage(error))
   } finally {
@@ -52,69 +66,26 @@ onMounted(load)
     ><div v-if="execution.observation_period_overdue" class="execution-alert">
       <b>已超过计划观察期</b><span>仍可继续记录真实巡检与晚期发芽；实验不会自动完成。</span>
     </div>
-    <div class="execution-hero surface-panel"><div>
-      <span class="eyebrow">实际置床进度</span>
-      <h2>已置床 {{ execution.sown_count }} / {{ execution.dish_count }} 个培养皿</h2>
-      <p v-if="execution.pending_count">尚有 {{ execution.pending_material_count }} 个材料未完成置床，整个实验最终完成日期暂不能确定。</p>
-      <p v-else-if="execution.sown_count">按已置床培养皿估算最晚完成：{{ dateTimeText(execution.latest_sown_estimated_finish_at) }}</p>
-      <p v-else>尚无培养皿实际置床。</p>
-      <p v-if="execution.sown_count && execution.pending_count">当前已置床部分预计最晚完成：{{ dateTimeText(execution.latest_sown_estimated_finish_at) }}</p>
-    </div></div>
-    <div class="execution-stats">
-      <div class="surface-panel">
-        <small>培养皿</small><strong>{{ execution.dish_count }}</strong>
-      </div>
-      <div class="surface-panel">
-        <small>置床种子</small><strong>{{ execution.seed_count }}</strong>
-      </div>
-      <div class="surface-panel">
-        <small>累计发芽</small><strong>{{ execution.cumulative_germinated }}</strong>
-      </div>
-      <div class="surface-panel">
-        <small>当前发芽率</small><strong>{{ execution.germination_rate }}%</strong>
-      </div>
-      <div class="surface-panel">
-        <small>已选幼苗</small><strong>{{ execution.sample_count }}</strong>
-      </div>
-      <div class="surface-panel"><small>待置床</small><strong>{{ execution.pending_count }}</strong></div>
-    </div>
-    <section class="surface-panel material-overview">
-      <div class="execution-section-head">
-        <div>
-          <h3>实验材料进度</h3>
-          <p>
-            {{
-              execution.sample_scope === 'per_dish'
-                ? '每个培养皿分别按发芽顺序取样'
-                : '每个实验材料合计按发芽顺序取样'
-            }}
-          </p>
-        </div>
-      </div>
-      <div class="material-overview-grid">
-        <div
-          v-for="material in execution.materials"
-          :key="material.id"
-          class="material-progress-card"
-        >
-          <b>{{ material.taxon_common_name || material.taxon_scientific_name }}</b>
-          <small v-if="material.taxon_common_name">{{ material.taxon_scientific_name }}</small>
-          <small>{{ material.seed_lot_code }} · {{ material.dish_count }} 个重复</small>
-          <div class="material-progress-numbers">
-            <span>发芽 {{ material.cumulative_germinated }} / {{ material.seed_count }}</span
-            ><strong>{{ material.germination_rate }}%</strong>
-          </div>
-          <el-progress
-            :percentage="material.germination_rate"
-            :show-text="false"
-            :stroke-width="5"
-          />
-          <p>已选幼苗 {{ material.sample_count }} / {{ material.sample_target ?? '—' }}</p>
-        </div>
-      </div>
-    </section>
     <section class="surface-panel execution-workspace">
       <el-tabs v-model="tab"
+        ><el-tab-pane label="概览" name="overview">
+          <p class="wizard-help">查看整个实验的执行进度，按名称或状态查找材料。具体操作请切换到置床管理、发芽巡检或培养皿状态。</p>
+          <div class="execution-overview-scope">整个实验</div>
+          <div class="execution-overview-stats">
+            <div><small>计划培养皿</small><strong>{{ execution.dish_count }}</strong></div>
+            <div><small>已置床</small><strong>{{ execution.sown_count }} / {{ execution.dish_count }}</strong></div>
+            <div><small>今日待巡检</small><strong>{{ execution.today_pending_count }}</strong></div>
+            <div><small>已选幼苗</small><strong>{{ execution.sample_count }}</strong></div>
+          </div>
+          <div class="execution-overview-toolbar"><div><h3>实验材料进度总览</h3><p>共 {{ filteredMaterials.length }} 份材料；点击材料可查看培养皿状态。</p></div>
+            <el-input v-model="overviewSearch" placeholder="搜索中文名、学名、实验编号或批次" clearable />
+            <el-select v-model="overviewStatus" aria-label="筛选材料状态"><el-option label="全部状态" value="all" /><el-option label="待置床" value="pending" /><el-option label="部分置床" value="partial" /><el-option label="已置床" value="sown" /><el-option label="已取消" value="cancelled" /></el-select>
+          </div>
+          <div class="execution-overview-tiles"><button v-for="material in overviewMaterials" :key="material.id" type="button" class="execution-overview-tile" @click="inspectMaterial(material.id)"><span>{{ String(material.experiment_number || material.preview_number).padStart(3, '0') }}</span><b>{{ material.taxon_common_name || material.taxon_scientific_name }}</b><small>{{ material.sown_count }}/{{ material.dish_count }} 已置床</small></button></div>
+          <div v-if="!filteredMaterials.length" class="wizard-empty">没有符合条件的材料。请调整搜索词或状态筛选。</div>
+          <el-pagination v-if="filteredMaterials.length" v-model:current-page="overviewPage" class="list-pagination" layout="prev, pager, next, jumper" :page-size="overviewPageSize" :total="filteredMaterials.length" />
+          <p v-if="filteredMaterials.length" class="pagination-caption">{{ overviewPage }} / {{ Math.ceil(filteredMaterials.length / overviewPageSize) }} 页</p>
+        </el-tab-pane
         ><el-tab-pane label="置床管理" name="sowing"><SowingManagement :execution="execution" @changed="load" /></el-tab-pane
         ><el-tab-pane label="发芽巡检" name="entry"
           ><GerminationQuickEntry
@@ -124,7 +95,7 @@ onMounted(load)
           />
           <div v-else class="wizard-empty">当前实验还不能新增发芽巡检。请先确认置床编号，并在“置床管理”登记至少一个培养皿的实际置床时间。</div></el-tab-pane
         ><el-tab-pane label="培养皿状态" name="dishes"
-          ><DishStatusTable :execution="execution" /></el-tab-pane
+          ><DishStatusTable :execution="execution" :material-id="selectedMaterialId" @show-all="selectedMaterialId = null" /></el-tab-pane
         ><el-tab-pane label="巡检历史" name="history"
           ><ObservationHistory :execution="execution" @changed="load" /></el-tab-pane
       ></el-tabs>

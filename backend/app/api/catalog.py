@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.schemas import TaxonIn, TaxonOut, TaxonPatch, SeedLotIn, SeedLotOut, SeedLotPatch
 from app.core.auth import current_user
 from app.db.session import get_db
-from app.models import SeedLot, Taxon, User
+from app.models import ExperimentMaterial, SeedLot, Taxon, User
 from app.services.common import commit_or_conflict, flush_or_conflict, next_code, record, require_entity
 from app.services.ordering import taxon_key, material_key
 
@@ -66,6 +66,8 @@ def update_taxon(item_id: str, data: TaxonPatch, db: Session = Depends(get_db), 
 @router.delete("/taxa/{item_id}", status_code=204)
 def delete_taxon(item_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = require_entity(db, Taxon, item_id)
+    if db.scalar(select(SeedLot.id).where(SeedLot.taxon_id == item_id).limit(1)):
+        raise HTTPException(409, "该物种已有种子批次或实验记录，不能直接删除。可以将其停用，以保留历史数据。")
     before = taxon_snapshot(item)
     db.delete(item)
     record(db, user.id, "delete", "Taxon", item_id, before, None)
@@ -118,6 +120,8 @@ def update_lot(item_id: str, data: SeedLotPatch, db: Session = Depends(get_db), 
 @router.delete("/seed-lots/{item_id}", status_code=204)
 def delete_lot(item_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = require_entity(db, SeedLot, item_id)
+    if db.scalar(select(ExperimentMaterial.id).where(ExperimentMaterial.seed_lot_id == item_id).limit(1)):
+        raise HTTPException(409, "该种子批次已经用于实验，不能直接删除。可以将其停用，以保留实验记录。")
     before = lot_snapshot(item)
     db.delete(item)
     record(db, user.id, "delete", "SeedLot", item_id, before, None)

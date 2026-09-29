@@ -36,12 +36,15 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
     workbook = Workbook()
     materials_sheet = workbook.active
     materials_sheet.title = "01_材料总表"
-    observation_sheet = workbook.create_sheet("02_发芽原始记录")
-    long_sheet = workbook.create_sheet("03_幼苗测定长表")
-    wide_sheet = workbook.create_sheet("04_幼苗测定宽表")
-    explanation = workbook.create_sheet("05_导出说明")
+    rate_sheet = workbook.create_sheet("02_发芽率汇总")
+    observation_sheet = workbook.create_sheet("03_发芽原始记录")
+    long_sheet = workbook.create_sheet("04_幼苗测定长表")
+    wide_sheet = workbook.create_sheet("05_幼苗测定宽表")
+    explanation = workbook.create_sheet("06_导出说明")
     materials_sheet.append(("汇总编号", "来源实验", "原实验编号", "中文名", "学名", "科", "属", "生活型",
                             "原始材料编号", "系统物种编号", "系统种子批次编号", "来源", "采集/获得日期", "数量", "备注"))
+    rate_sheet.append(("汇总编号", "来源实验", "原实验编号", "中文名", "学名", "原始材料编号",
+                       "种子批次", "实际已置床培养皿数", "实际置床种子数", "累计发芽数", "发芽率（%）"))
     observation_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "系统培养皿编号",
                               "中文名", "学名", "实际置床时间", "巡检时间", "本次新增发芽数", "累计发芽数", "发芽率"))
     long_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "发芽时间",
@@ -81,6 +84,13 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                                 lot.source_code, taxon.code, lot.code, lot.source, _date(lot.collected_at),
                                 lot.quantity, lot.notes))
         relevant = sorted(dishes_by_material.get(material.id, []), key=lambda dish: dish.replicate_no)
+        sown = [dish for dish in relevant if dish.sown_at is not None and dish.cancelled_at is None]
+        actual_seeds = sum(dish.seed_count for dish in sown)
+        germinated = sum(observation.new_germinated_count for dish in sown
+                         for observation in observations_by_dish.get(dish.id, []))
+        rate_sheet.append((summary_number, source_name, original_number, taxon.common_name,
+                           taxon.scientific_name, lot.source_code, lot.code, len(sown), actual_seeds,
+                           germinated, round(germinated / actual_seeds * 100, 2) if actual_seeds else None))
         for dish in relevant:
             dish_number = field_number(material, len(relevant), dish.replicate_no) if material.experiment_number else dish.code
             count = 0
@@ -117,6 +127,7 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
         ("培养皿现场编号", "单重复使用实验编号，多重复在编号后加 -1、-2 等"),
         ("DAG", "Days After Germination，幼苗实际发芽后第 N 天"),
         ("0 与缺失", "0 是已记录的事实；空白表示没有对应记录，不应当作 0"),
+        ("发芽率汇总", "仅以实际已置床的培养皿种子数为分母；没有实际置床种子时发芽率留空"),
         ("测定数据", "仅导出已有的正式测定记录；空表不代表测定值为 0"),
     ]
     for note in notes:

@@ -34,17 +34,18 @@ def row(scientific, code, common=None, *, taxon_code=None, source=None, collecte
             collected, quantity, None, None)
 
 
-def preview(client, headers, content):
+def preview(client, headers, content, mode="complete"):
     response = client.post("/api/import/materials/preview", headers=headers,
+                           data={"mode": mode},
                            files={"file": ("materials.xlsx", content,
                                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def confirm(client, headers, content, decisions=None):
+def confirm(client, headers, content, decisions=None, mode="complete"):
     return client.post("/api/import/materials/confirm", headers=headers,
-                       data={"decisions": json.dumps(decisions or {})},
+                       data={"decisions": json.dumps(decisions or {}), "mode": mode},
                        files={"file": ("materials.xlsx", content,
                                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
 
@@ -138,7 +139,7 @@ def test_import_ambiguous_and_duplicate_rows_need_decision(auth_client):
     content = material_file([row("Setaria viridis", None, source="武威", collected="2026-09-01"),
                              row("Setaria viridis", None, source="武威", collected="2026-09-01")])
     report = preview(client, headers, content)
-    assert [item["status"] for item in report["rows"]] == ["confirm", "confirm"]
+    assert [item["status"] for item in report["rows"]] == ["updatable", "confirm"]
     assert report["rows"][1]["candidate_row"] == 2
     assert confirm(client, headers, content).status_code == 422
     response = confirm(client, headers, content, {"2": "reuse", "3": "reuse"})
@@ -163,6 +164,59 @@ def test_import_multiple_possible_lots_requires_specific_choice(auth_client):
     chosen = confirm(client, headers, content, {"2": f"reuse:{lots[1]['id']}"})
     assert chosen.status_code == 200, chosen.text
     assert chosen.json()["selected_lot_ids"] == [lots[1]["id"]]
+
+
+def test_catalog_deletion_respects_experiment_history(auth_client):
+    client, headers = auth_client
+    unused = client.post("/api/taxa", headers=headers, json={"scientific_name": "Unused species"}).json()
+    assert client.delete(f"/api/taxa/{unused['id']}", headers=headers).status_code == 204
+    taxon = client.post("/api/taxa", headers=headers, json={"scientific_name": "Setaria viridis"}).json()
+    unused_lot = client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxon["id"]}).json()
+    assert client.delete(f"/api/taxa/{taxon['id']}", headers=headers).status_code == 409
+    assert client.delete(f"/api/seed-lots/{unused_lot['id']}", headers=headers).status_code == 204
+    used_lot = client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxon["id"]}).json()
+    config(client, headers, [used_lot["id"]])
+    blocked = client.delete(f"/api/seed-lots/{used_lot['id']}", headers=headers)
+    assert blocked.status_code == 409
+    assert "停用" in blocked.json()["detail"]
+    assert client.patch(f"/api/seed-lots/{used_lot['id']}", headers=headers,
+                        json={"is_active": False}).status_code == 200
+    assert client.delete(f"/api/taxa/{taxon['id']}", headers=headers).status_code == 409
+
+
+def test_import_modes_and_batch_decisions_without_source_codes(auth_client):
+    client, headers = auth_client
+    taxa = [client.post("/api/taxa", headers=headers, json={"scientific_name": f"Species {i}"}).json()
+            for i in range(3)]
+    first = client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxa[0]["id"],
+                        "source": "采集地甲", "quantity": 20}).json()
+    historical = client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxa[0]["id"],
+                              "source": "历史来源"}).json()
+    assert client.patch(f"/api/seed-lots/{historical['id']}", headers=headers,
+                        json={"is_active": False}).status_code == 200
+    client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxa[1]["id"], "source": "采集地乙"})
+    client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxa[1]["id"], "source": "采集地丙"})
+    client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxa[2]["id"], "source": "采集地丁"})
+    content = material_file([row("Species 0", None, source="采集地甲", quantity=20),
+                             row("Species 1", None, source="采集地乙"),
+                             row("Species 2", None, source="新来源")])
+    report = preview(client, headers, content)
+    assert [item["status"] for item in report["rows"]] == ["registered", "confirm", "confirm"]
+    assert report["rows"][0]["candidate_lot_id"] == first["id"]
+    assert confirm(client, headers, content).status_code == 422
+    decisions = {str(item["line"]): "new" for item in report["rows"] if item["status"] == "confirm"}
+    imported = confirm(client, headers, content, decisions)
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["new_lots"] == 2
+    new_content = material_file([row("Species 0", None, source="另一来源", quantity=10)])
+    assert preview(client, headers, new_content, mode="new")["rows"][0]["status"] == "new"
+    assert confirm(client, headers, new_content, mode="new").json()["new_lots"] == 1
+    dated = client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxa[0]["id"],
+                         "source": "有日期的材料", "collected_at": "2026-09-01T00:00:00Z"}).json()
+    exact = material_file([row("Species 0", None, source="有日期的材料", collected="2026-09-01")])
+    duplicate = preview(client, headers, exact, mode="new")["rows"][0]
+    assert duplicate["status"] == "confirm"
+    assert dated["id"] in {item["id"] for item in duplicate["candidate_lots"]}
 
 
 def test_import_bad_cell_reports_row_and_blocks_entire_file(auth_client):
@@ -317,17 +371,19 @@ def test_multiday_sowing_observation_and_export(auth_client, tmp_path):
                                     json={"experiment_ids": [first_id, second_id]})
     assert workbook_response.status_code == 200, workbook_response.text
     workbook = load_workbook(BytesIO(workbook_response.content), read_only=True)
-    assert workbook.sheetnames == ["01_材料总表", "02_发芽原始记录", "03_幼苗测定长表",
-                                   "04_幼苗测定宽表", "05_导出说明"]
+    assert workbook.sheetnames == ["01_材料总表", "02_发芽率汇总", "03_发芽原始记录",
+                                   "04_幼苗测定长表", "05_幼苗测定宽表", "06_导出说明"]
     material_rows = list(workbook.worksheets[0].values)
     assert [item[0] for item in material_rows[1:]] == ["001", "002"]
     assert [item[2] for item in material_rows[1:]] == ["001", "001"]
-    observation_rows = list(workbook.worksheets[1].values)
+    rate_rows = list(workbook.worksheets[1].values)
+    assert sorted((row[7], row[8], row[9], row[10]) for row in rate_rows[1:]) == [(0, 0, 0, None), (2, 40, 2, 5)]
+    observation_rows = list(workbook.worksheets[2].values)
     assert len(observation_rows) == 3
     assert sorted(item[9] for item in observation_rows[1:]) == [0, 2]
     assert observation_rows[1][3].startswith("001-")
-    assert len(list(workbook.worksheets[2].values)) == 1
-    assert list(workbook.worksheets[4].values)[1][0] == "导出时间"
+    assert len(list(workbook.worksheets[3].values)) == 1
+    assert list(workbook.worksheets[5].values)[1][0] == "导出时间"
     workbook.close()
     assert client.get(f"/api/experiments/{first_id}/configuration").json()["materials"][0]["experiment_number"] == 1
     single_response = client.post("/api/export/experiments/workbook.xlsx", headers=headers,
@@ -337,6 +393,28 @@ def test_multiday_sowing_observation_and_export(auth_client, tmp_path):
     assert len(list(single.worksheets[0].values)) == 2
     assert [item[0] for item in list(single.worksheets[0].values)[1:]] == ["001"]
     single.close()
+
+
+def test_rate_summary_zero_germination_excludes_unplaced_and_cancelled_dishes(auth_client):
+    client, headers = auth_client
+    taxon = client.post("/api/taxa", headers=headers, json={"scientific_name": "Setaria viridis"}).json()
+    lot = client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxon["id"]}).json()
+    experiment_id = config(client, headers, [lot["id"]], replicates=3)["experiment"]["id"]
+    dishes = ready(client, headers, experiment_id)["dishes"]
+    assert client.post(f"/api/experiments/{experiment_id}/sowing/batch", headers=headers,
+                       json={"sown_at": "2026-09-28T09:00:00Z", "dish_ids": [dishes[0]["id"]]}).status_code == 200
+    assert client.post(f"/api/experiments/{experiment_id}/sowing/{dishes[1]['id']}/cancel", headers=headers,
+                       json={"reason": "培养皿破损"}).status_code == 200
+    assert client.post(f"/api/experiments/{experiment_id}/observations/batch", headers=headers,
+                       json={"observed_at": "2026-09-29T09:00:00Z", "entries": [
+                           {"dish_id": dishes[0]["id"], "new_germinated_count": 0}]}).status_code == 200
+    response = client.post("/api/export/experiments/workbook.xlsx", headers=headers,
+                           json={"experiment_ids": [experiment_id]})
+    assert response.status_code == 200, response.text
+    workbook = load_workbook(BytesIO(response.content), read_only=True)
+    rate = list(workbook["02_发芽率汇总"].values)[1]
+    assert rate[7:] == (1, 20, 0, 0)
+    workbook.close()
 
 
 def test_partial_daily_observation_keeps_other_dishes_pending(auth_client):

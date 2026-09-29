@@ -4,8 +4,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import type { Taxon } from '../types'
-import { dateText } from '../utils'
-import { Plus, Search, Collection } from '@element-plus/icons-vue'
+import { useClientPagination } from '../composables/useClientPagination'
+import { Plus, Search } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const items = ref<Taxon[]>([])
@@ -18,6 +18,7 @@ const form = reactive({ scientific_name: '', common_name: '', family: '', genus:
 const sort = ref<{ prop: string; order: string | null }>({ prop: 'default', order: null })
 function onSortChange(value: { prop: string; order: string | null }) {
   sort.value = { prop: value.prop || 'default', order: value.order }
+  resetPage()
 }
 const collator = new Intl.Collator('zh-Hans-CN-u-co-pinyin')
 const visibleItems = computed(() => sort.value.prop === 'default' ? items.value : [...items.value].sort((a, b) => {
@@ -26,10 +27,12 @@ const visibleItems = computed(() => sort.value.prop === 'default' ? items.value 
   const comparison = prop === 'code' ? a.code.localeCompare(b.code) :
     prop === 'scientific_name' ? a.scientific_name.localeCompare(b.scientific_name) :
     prop === 'family' ? (a.family || '').localeCompare(b.family || '') :
-    prop === 'created_at' ? a.created_at.localeCompare(b.created_at) :
+    prop === 'genus' ? (a.genus || '').localeCompare(b.genus || '') :
+    prop === 'life_form' ? (a.life_form || '').localeCompare(b.life_form || '') :
     collator.compare(a.common_name || a.scientific_name, b.common_name || b.scientific_name)
   return direction * (comparison || a.code.localeCompare(b.code))
 }))
+const { page, pageSize, pageItems, resetPage } = useClientPagination(visibleItems)
 async function load() {
   loading.value = true
   try {
@@ -92,6 +95,16 @@ async function toggle(item: Taxon) {
     if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
   }
 }
+async function remove(item: Taxon) {
+  try {
+    await ElMessageBox.confirm(`永久删除“${item.common_name || item.scientific_name}”及其物种档案？此操作不能撤销；已有种子批次或实验记录的物种不能删除。`, '删除物种', { type: 'warning', confirmButtonText: '永久删除', cancelButtonText: '返回' })
+    await api.delete(`/taxa/${item.id}`)
+    ElMessage.success('物种已删除')
+    await load()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+  }
+}
 onMounted(load)
 </script>
 <template>
@@ -115,47 +128,48 @@ onMounted(load)
           placeholder="搜索物种编号、中文名或学名"
           clearable
           :prefix-icon="Search"
-          @input="load"
-        /><el-checkbox v-model="includeInactive" @change="load">显示停用</el-checkbox>
+          @input="() => { resetPage(); load() }"
+        /><el-checkbox v-model="includeInactive" @change="() => { resetPage(); load() }">显示停用</el-checkbox>
       </div>
     </div>
     <el-table
-      :data="visibleItems"
+      :data="pageItems"
       v-loading="loading"
       class="data-table"
       @row-dblclick="(row: Taxon) => router.push(`/taxa/${row.id}`)"
       @sort-change="onSortChange"
       empty-text="还没有物种信息。请点击右上角新增物种，再添加种子批次。"
-      ><el-table-column prop="code" label="物种编号" width="130" sortable="custom" /><el-table-column
+      ><el-table-column prop="code" label="物种编号" width="100" sortable="custom" /><el-table-column
         prop="common_name" label="中文名"
-        min-width="260"
+        min-width="165"
         sortable="custom"
         ><template #default="{ row }"
           ><div class="taxon-name">
             <router-link class="table-link strong" :to="`/taxa/${row.id}`">{{ row.common_name || row.scientific_name }}</router-link>
           </div></template
         ></el-table-column
-      ><el-table-column prop="scientific_name" label="学名" min-width="180" sortable="custom" />
-      <el-table-column prop="family" label="科" min-width="130" sortable="custom"
+      ><el-table-column prop="scientific_name" label="学名" min-width="155" sortable="custom" show-overflow-tooltip />
+      <el-table-column prop="family" label="科" min-width="90" sortable="custom"
         ><template #default="{ row }">{{ row.family || '—' }}</template></el-table-column
+      ><el-table-column prop="genus" label="属" min-width="80" sortable="custom"><template #default="{ row }">{{ row.genus || '—' }}</template></el-table-column
+      ><el-table-column prop="life_form" label="生活型" min-width="80" sortable="custom"><template #default="{ row }">{{ row.life_form || '—' }}</template></el-table-column
       ><el-table-column label="状态" width="100"
         ><template #default="{ row }"
           ><span class="status-pill" :class="row.is_active ? 'active' : 'cancelled'">{{
             row.is_active ? '使用中' : '已停用'
           }}</span></template
         ></el-table-column
-      ><el-table-column prop="created_at" label="创建日期" width="120" sortable="custom"
-        ><template #default="{ row }">{{ dateText(row.created_at) }}</template></el-table-column
-      ><el-table-column label="操作" width="220" fixed="right"
+      ><el-table-column label="操作" width="250" fixed="right"
         ><template #default="{ row }"
           ><el-button link type="primary" @click="router.push(`/taxa/${row.id}`)">查看详情</el-button
           ><el-button link @click="openEditor(row)">编辑</el-button
           ><el-button link :type="row.is_active ? 'warning' : 'success'" @click="toggle(row)">{{
             row.is_active ? '停用' : '启用'
-          }}</el-button></template
+          }}</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template
         ></el-table-column
       ></el-table
     >
+    <el-pagination v-model:current-page="page" v-model:page-size="pageSize" class="list-pagination" :page-sizes="[25, 50, 100]" layout="total, sizes, prev, pager, next" :total="visibleItems.length" />
   </div>
   <el-dialog v-model="editorOpen" :title="editingId ? '编辑物种' : '新增物种'" width="540px"
     ><el-form label-position="top"

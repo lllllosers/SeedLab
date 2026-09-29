@@ -109,7 +109,9 @@ def _lot_changes(row: dict, lot: SeedLot) -> tuple[list[str], list[str]]:
     return fills, conflicts
 
 
-def preview(db: Session, content: bytes) -> dict:
+def preview(db: Session, content: bytes, mode: str = "complete") -> dict:
+    if mode not in {"complete", "new"}:
+        raise HTTPException(422, "请选择完整清单或本次新增材料，再重新预检")
     file_hash = sha256(content).hexdigest()
     already = db.scalar(select(ImportJob.id).where(ImportJob.file_hash == file_hash,
                 ImportJob.status == "completed")) is not None
@@ -148,6 +150,7 @@ def preview(db: Session, content: bytes) -> dict:
         candidate = exact[0] if len(exact) == 1 else None
         possible = exact
         candidate_row = None
+        identity_conflict = False
         status = "new"
         if len(exact) > 1:
             errors.append(f"第 {line} 行：同一物种与原始材料编号对应多个已有批次，请先整理已有数据")
@@ -157,11 +160,26 @@ def preview(db: Session, content: bytes) -> dict:
             conflicts.extend(lot_conflicts)
             status = "updatable" if fills or conflicts else "registered"
         elif not source_code and matching_lots:
-            possible = [lot for lot in matching_lots
-                        if (not row["来源"] or lot.source == row["来源"])
-                        and (not row["采集/获得日期"] or lot.collected_at == row["采集/获得日期"])]
-            candidate = possible[0] if len(possible) == 1 else None
-            if possible:
+            possible = matching_lots
+            active_lots = [lot for lot in matching_lots if lot.is_active]
+            candidate = (active_lots[0] if mode == "complete" and len(active_lots) == 1 else
+                         matching_lots[0] if mode == "new" and len(matching_lots) == 1 else None)
+            identity_conflict = bool(candidate and any(
+                row[label] is not None and getattr(candidate, field) is not None
+                and row[label] != getattr(candidate, field)
+                for label, field in (("来源", "source"), ("采集/获得日期", "collected_at"))))
+            exact_identity = bool(row["来源"] and row["采集/获得日期"] and any(
+                lot.source == row["来源"] and lot.collected_at == row["采集/获得日期"]
+                for lot in matching_lots))
+            if mode == "complete" and candidate and not identity_conflict:
+                lot_fills, lot_conflicts = _lot_changes(row, candidate)
+                fills.extend(lot_fills)
+                conflicts.extend(lot_conflicts)
+                status = "updatable" if fills or conflicts else "registered"
+            elif mode == "new" and not exact_identity:
+                candidate = None
+                status = "new"
+            else:
                 status = "confirm"
         identity = (taxon_key, source_code) if source_code else (
             taxon_key, row["来源"], row["采集/获得日期"])
@@ -172,16 +190,20 @@ def preview(db: Session, content: bytes) -> dict:
             seen_identity[identity] = line
         if errors:
             status = "error"
+        suggested = (f"reuse-row:{candidate_row}" if candidate_row is not None else
+                     f"reuse:{candidate.id}" if status == "confirm" and candidate and not identity_conflict else None)
         results.append({"line": line, "status": status, "taxon_id": taxon.id if taxon else None,
                         "new_taxon": taxon is None, "candidate_lot_id": candidate.id if candidate else None,
-                        "candidate_lots": [{"id": lot.id, "code": lot.code, "source_code": lot.source_code,
+                        "candidate_lots": [{"id": lot.id, "code": lot.code, "is_active": lot.is_active,
+                                            "source_code": lot.source_code,
                                             "source": lot.source, "collected_at": lot.collected_at.isoformat()
                                             if lot.collected_at else None} for lot in possible],
                         "candidate_row": candidate_row, "name": row["中文名"] or sci,
                         "scientific_name": sci or (taxon.scientific_name if taxon else None),
                         "source_code": source_code, "fills": fills, "conflicts": conflicts,
+                        "suggested_decision": suggested,
                         "errors": errors})
-    return {"file_hash": file_hash, "already_imported": already,
+    return {"file_hash": file_hash, "already_imported": already, "mode": mode,
             "rows": results,
             "stats": {"total": len(results), "registered": sum(r["status"] == "registered" for r in results),
                       "new": sum(r["status"] == "new" for r in results),
@@ -206,8 +228,9 @@ def _valid_decision(row: dict, choice: str | None) -> bool:
     return False
 
 
-def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str], user_id: str) -> dict:
-    report = preview(db, content)
+def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str], user_id: str,
+            mode: str = "complete") -> dict:
+    report = preview(db, content, mode)
     if report["already_imported"]:
         raise HTTPException(409, "这份文件已经成功导入过；请使用更新后的完整清单")
     if report["stats"]["errors"]:

@@ -11,10 +11,13 @@ import type {
 } from '../types'
 import { dateText, statusLabels } from '../utils'
 import PageBackButton from '../components/PageBackButton.vue'
+import { useClientPagination } from '../composables/useClientPagination'
 
 const route = useRoute()
 const router = useRouter()
 const config = ref<ExperimentConfiguration | null>(null)
+const materialList = computed(() => config.value?.materials || [])
+const { page: materialPage, pageSize: materialPageSize, pageItems: visibleMaterials } = useClientPagination(materialList)
 const item = computed(() => config.value?.experiment)
 const editable = computed(() => item.value?.status === 'draft')
 const canEditInfo = computed(() => item.value?.status === 'draft' || item.value?.status === 'ready')
@@ -273,14 +276,7 @@ onMounted(load)
             <small>预计测定记录</small
             ><strong>{{ config.workload?.estimated_measurement_count ?? '—' }}</strong>
           </div>
-          <div>
-            <small>按计划估算最晚完成</small
-            ><strong class="date">{{
-              config.workload?.estimated_latest_finish_date || '未计算'
-            }}</strong>
-          </div>
         </div>
-        <p class="form-hint">最晚完成日期按全部材料在计划日置床、观察期最后一天发芽估算；实际分批置床后可能变化。</p>
         <div class="design-note">
           <b>实验说明</b>
           <p>{{ item?.description || '暂无说明' }}</p>
@@ -341,10 +337,9 @@ onMounted(load)
           </div>
           <el-button v-if="editable" type="primary" plain @click="openAdd">添加材料</el-button>
         </div>
-        <div v-for="(entry, index) in config.materials" :key="entry.id" class="detail-material-row">
-          <span class="wizard-order">{{ index + 1 }}</span>
+        <div v-for="entry in visibleMaterials" :key="entry.id" class="detail-material-row">
+          <span class="wizard-order">{{ entry.experiment_number ? String(entry.experiment_number).padStart(3, '0') : `预计 ${String(entry.preview_number).padStart(3, '0')}` }}</span>
           <div class="grow">
-            <span class="wizard-order">{{ entry.experiment_number ? String(entry.experiment_number).padStart(3, '0') : `预计${String(entry.preview_number).padStart(3, '0')}` }}</span>
             <b>{{ entry.taxon_common_name || entry.taxon_scientific_name }}</b>
             <small v-if="entry.taxon_common_name">{{ entry.taxon_scientific_name }}</small>
             <small>原始材料编号：{{ entry.source_code || '未填写' }} · {{ entry.seed_lot_code }} {{ entry.label || '' }}</small>
@@ -363,6 +358,7 @@ onMounted(load)
             ><el-button link type="danger" @click="removeMaterial(entry)">移除</el-button>
           </div>
         </div>
+        <el-pagination v-if="config.materials.length" v-model:current-page="materialPage" v-model:page-size="materialPageSize" class="list-pagination" :page-sizes="[25, 50, 100]" layout="total, sizes, prev, pager, next" :total="config.materials.length" />
         <div v-if="!config.materials.length" class="wizard-empty">
           尚未加入实验材料。请先添加种子批次，再标记为已就绪。
         </div></el-tab-pane
@@ -372,14 +368,14 @@ onMounted(load)
           <el-button v-if="item?.numbering_locked_at" @click="downloadSowingSheet">下载 Excel</el-button>
         </div>
         <el-table :data="config.materials" max-height="560">
-          <el-table-column label="实验编号" width="125"><template #default="{ row }">{{ row.experiment_number ? String(row.experiment_number).padStart(3, '0') : `预计${String(row.preview_number).padStart(3, '0')}` }}</template></el-table-column>
-          <el-table-column label="物种" min-width="200"><template #default="{ row }"><b>{{ row.taxon_common_name || row.taxon_scientific_name }}</b><small class="table-subtitle">{{ row.taxon_scientific_name }}</small></template></el-table-column>
-          <el-table-column prop="source_code" label="原始材料编号" width="150" />
-          <el-table-column prop="seed_lot_code" label="系统批次编号" width="165" />
-          <el-table-column prop="source" label="来源" min-width="130" />
-          <el-table-column label="采集/获得日期" width="155"><template #default="{ row }">{{ row.collected_at?.slice(0, 10) || '未填写' }}</template></el-table-column>
-          <el-table-column prop="effective_replicate_count" label="重复数" width="100" />
-          <el-table-column prop="effective_seeds_per_dish" label="每皿种子数" width="120" />
+          <el-table-column label="实验编号" width="100"><template #default="{ row }">{{ row.experiment_number ? String(row.experiment_number).padStart(3, '0') : `预计 ${String(row.preview_number).padStart(3, '0')}` }}</template></el-table-column>
+          <el-table-column label="物种" min-width="180"><template #default="{ row }"><div class="sowing-name"><b>{{ row.taxon_common_name || row.taxon_scientific_name }}</b><small v-if="row.taxon_common_name"><i>{{ row.taxon_scientific_name }}</i></small></div></template></el-table-column>
+          <el-table-column label="原始材料编号" width="120"><template #default="{ row }">{{ row.source_code || '未填写' }}</template></el-table-column>
+          <el-table-column prop="seed_lot_code" label="系统批次编号" width="145" />
+          <el-table-column label="来源" min-width="130"><template #default="{ row }"><span class="sowing-source">{{ row.source || '未填写' }}</span></template></el-table-column>
+          <el-table-column label="采集/获得日期" width="140"><template #default="{ row }">{{ row.collected_at?.slice(0, 10) || '未填写' }}</template></el-table-column>
+          <el-table-column prop="effective_replicate_count" label="重复数" width="80" />
+          <el-table-column prop="effective_seeds_per_dish" label="每皿种子数" width="105" />
         </el-table>
       </el-tab-pane>
       <el-tab-pane label="发芽后测定时间（DAG）" name="dag"
@@ -418,12 +414,6 @@ onMounted(load)
           <div>
             <small>测定记录</small
             ><strong>{{ config.workload.estimated_measurement_count }}</strong>
-          </div>
-          <div>
-            <small>按计划估算最晚完成</small
-            ><strong class="date">{{
-              config.workload.estimated_latest_finish_date || '未设置计划日期'
-            }}</strong>
           </div>
         </div>
         <div v-else class="wizard-empty">请先填写实验方案并添加材料，再查看预计工作量。</div></el-tab-pane

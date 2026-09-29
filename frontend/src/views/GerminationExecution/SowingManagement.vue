@@ -4,10 +4,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage } from '../../api/client'
 import type { GerminationExecution } from '../../types'
 import { dateTimeText } from '../../utils'
+import { useClientPagination } from '../../composables/useClientPagination'
 
 const props = defineProps<{ execution: GerminationExecution }>()
 const emit = defineEmits<{ changed: [] }>()
 const selected = ref<string[]>([])
+const search = ref('')
+const status = ref('all')
 const busy = ref(false)
 const now = () => {
   const date = new Date()
@@ -21,6 +24,16 @@ const sowAt = ref(now())
 const groups = computed(() => props.execution.materials.map((material) => ({
   material, dishes: props.execution.dishes.filter((dish) => dish.material_id === material.id),
 })))
+const filteredGroups = computed(() => groups.value.filter(({ material }) => {
+  const term = search.value.trim().toLocaleLowerCase()
+  const matches = !term || [material.taxon_common_name, material.taxon_scientific_name,
+    material.seed_lot_code, material.source_code,
+    String(material.experiment_number || material.preview_number)]
+    .some((value) => value?.toLocaleLowerCase().includes(term))
+  const state = material.sown_count > 0 ? (material.sown_count + material.cancelled_count >= material.dish_count ? 'sown' : 'partial') : (material.cancelled_count >= material.dish_count ? 'cancelled' : 'pending')
+  return matches && (status.value === 'all' || status.value === state)
+}))
+const { page, pageSize, pageItems, resetPage } = useClientPagination(filteredGroups)
 function selectMaterial(id: string) {
   const ids = props.execution.dishes.filter((dish) => dish.material_id === id && !dish.sown_at && !dish.cancelled_at).map((dish) => dish.id)
   selected.value = [...new Set([...selected.value, ...ids])]
@@ -66,22 +79,22 @@ async function cancel(dishId: string) {
   <div class="execution-section-head"><div><h3>置床管理</h3>
     <p>现场编号已确认。选择任意材料或单个重复，分批登记真实置床时间；首次置床会自动开始实验。</p></div>
   </div>
-  <div class="import-stats">
+  <div class="import-stats sowing-stats">
     <span>计划培养皿 <b>{{ execution.dish_count }}</b></span>
     <span>已置床 <b>{{ execution.sown_count }}</b></span>
     <span>待置床 <b>{{ execution.pending_count }}</b></span>
     <span>已取消 <b>{{ execution.cancelled_count }}</b></span>
   </div>
-  <div class="wizard-bulk-actions">
+  <div class="sowing-batch-panel">
     <label>本批实际置床时间 <input v-model="sowAt" type="datetime-local" /></label>
-    <el-button @click="selected = execution.dishes.filter((dish) => !dish.sown_at && !dish.cancelled_at).map((dish) => dish.id)">全选待置床</el-button>
-    <el-button @click="selected = []">取消全选</el-button>
-    <el-button type="primary" :loading="busy" :disabled="!selected.length" @click="sow">登记置床（{{ selected.length }}）</el-button>
+    <div class="wizard-bulk-actions"><el-button @click="selected = execution.dishes.filter((dish) => !dish.sown_at && !dish.cancelled_at).map((dish) => dish.id)">全选待置床</el-button>
+      <el-button @click="selected = []">取消全选</el-button>
+      <el-button type="primary" :loading="busy" :disabled="!selected.length" @click="sow">登记置床（{{ selected.length }}）</el-button></div>
   </div>
+  <div class="sowing-filter-row"><el-input v-model="search" clearable placeholder="搜索中文名、学名、实验编号或批次" @input="resetPage" /><el-select v-model="status" aria-label="筛选置床状态" @change="resetPage"><el-option label="全部状态" value="all" /><el-option label="待置床" value="pending" /><el-option label="部分置床" value="partial" /><el-option label="已置床" value="sown" /><el-option label="已取消" value="cancelled" /></el-select></div>
   <el-collapse class="sowing-groups">
-    <el-collapse-item v-for="group in groups" :key="group.material.id" :name="group.material.id">
-      <template #title><b>{{ String(group.material.experiment_number || group.material.preview_number).padStart(3, '0') }} {{ group.material.taxon_common_name || group.material.taxon_scientific_name }}</b>
-        <span class="group-subtitle">{{ group.material.sown_count }}/{{ group.material.dish_count }} 已置床 · {{ group.material.cancelled_count ? `${group.material.cancelled_count} 已取消` : '原始材料编号：' + (group.material.source_code || '未填写') }}</span>
+    <el-collapse-item v-for="group in pageItems" :key="group.material.id" :name="group.material.id">
+      <template #title><div class="sowing-group-title"><span class="wizard-order">{{ String(group.material.experiment_number || group.material.preview_number).padStart(3, '0') }}</span><div class="grow"><b>{{ group.material.taxon_common_name || group.material.taxon_scientific_name }}</b><small>{{ group.material.sown_count }} / {{ group.material.dish_count }} 已置床 · 原始材料编号：{{ group.material.source_code || '未填写' }}<template v-if="group.material.cancelled_count"> · {{ group.material.cancelled_count }} 已取消</template></small></div></div>
         <el-button size="small" :disabled="!group.dishes.some((dish) => !dish.sown_at && !dish.cancelled_at)" @click.stop="selectMaterial(group.material.id)">选择全部待置床重复</el-button>
       </template>
       <div v-for="dish in group.dishes" :key="dish.id" class="wizard-list-row">
@@ -93,4 +106,6 @@ async function cancel(dishId: string) {
       </div>
     </el-collapse-item>
   </el-collapse>
+  <div v-if="!filteredGroups.length" class="wizard-empty">没有符合条件的材料。请调整搜索词或状态筛选。</div>
+  <el-pagination v-if="filteredGroups.length" v-model:current-page="page" v-model:page-size="pageSize" class="list-pagination" :page-sizes="[25, 50, 100]" layout="total, sizes, prev, pager, next" :total="filteredGroups.length" />
 </template>
