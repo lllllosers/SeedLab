@@ -20,6 +20,7 @@ export interface SeedLot {
   id: string
   code: string
   taxon_id: string
+  taxon: Taxon
   source: string | null
   quantity: number | null
   notes: string | null

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.schemas import TaxonIn, TaxonOut, TaxonPatch, SeedLotIn, SeedLotOut, SeedLotPatch
 from app.core.auth import current_user
@@ -54,7 +54,7 @@ def update_taxon(item_id: str, data: TaxonPatch, db: Session = Depends(get_db), 
     before = taxon_snapshot(item)
     for key, value in data.model_dump(exclude_unset=True).items():
         if key in {"scientific_name", "is_active"} and value is None:
-            raise HTTPException(422, f"{key} 不可为空")
+            raise HTTPException(422, "学名和使用状态不能为空")
         setattr(item, key, value)
     flush_or_conflict(db)
     record(db, user.id, "update", "Taxon", item.id, before, taxon_snapshot(item))
@@ -73,7 +73,7 @@ def delete_taxon(item_id: str, db: Session = Depends(get_db), user: User = Depen
 
 @router.get("/seed-lots", response_model=list[SeedLotOut])
 def list_lots(taxon_id: str | None = None, q: str = "", db: Session = Depends(get_db), _user: User = Depends(current_user)):
-    statement = select(SeedLot)
+    statement = select(SeedLot).options(selectinload(SeedLot.taxon))
     if taxon_id:
         statement = statement.where(SeedLot.taxon_id == taxon_id)
     if q.strip():
@@ -103,7 +103,7 @@ def update_lot(item_id: str, data: SeedLotPatch, db: Session = Depends(get_db), 
     before = lot_snapshot(item)
     for key, value in data.model_dump(exclude_unset=True).items():
         if key == "is_active" and value is None:
-            raise HTTPException(422, "is_active 不可为空")
+            raise HTTPException(422, "种子批次的使用状态不能为空")
         setattr(item, key, value)
     flush_or_conflict(db)
     record(db, user.id, "update", "SeedLot", item.id, before, lot_snapshot(item))

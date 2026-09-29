@@ -52,7 +52,7 @@ def update_experiment(item_id: str, data: ExperimentPatch, db: Session = Depends
     patch = data.model_dump(exclude_unset=True)
     for key, value in patch.items():
         if key in {"name", "status"} and value is None:
-            raise HTTPException(422, f"{key} 不可为空")
+            raise HTTPException(422, "实验名称和当前状态不能为空")
         if key == "planned_start_date":
             editable(item)
         if key != "status":

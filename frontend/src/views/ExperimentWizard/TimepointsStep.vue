@@ -37,5 +37,5 @@ function addDays() {
       >DAG {{ day }}</el-tag
     ><span v-if="!days.length">至少添加一个时间点</span>
   </div>
-  <p class="wizard-help">当前显示的是设计时间点；未来测定任务将基于单株的 germinated_at 计算。</p>
+  <p class="wizard-help">实际测定日期将以每株幼苗被判定发芽的时间为起点计算。</p>
 </template>

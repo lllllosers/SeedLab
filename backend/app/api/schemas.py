@@ -97,6 +97,7 @@ class SeedLotOut(ORMModel):
     id: str
     code: str
     taxon_id: str
+    taxon: TaxonOut
     source: str | None
     quantity: int | None
     notes: str | None

@@ -28,7 +28,7 @@ onMounted(async () => {
 <template>
   <div class="page-heading">
     <div>
-      <div class="eyebrow">WORKSPACE OVERVIEW</div>
+      <div class="eyebrow">工作台</div>
       <h1>工作台</h1>
       <p>掌握种质资源与实验进展，继续今天的研究工作。</p>
     </div>
@@ -36,7 +36,7 @@ onMounted(async () => {
   </div>
   <div class="welcome-banner">
     <div>
-      <div class="banner-kicker">SEEDLAB / RESEARCH</div>
+      <div class="banner-kicker">种子试验记录</div>
       <h2>从可靠的记录开始，<br />积累可追溯的研究数据。</h2>
       <p>物种、批次与实验逐步关联，帮助课题组保留每一次试验的来龙去脉。</p>
       <router-link to="/taxa"
@@ -142,8 +142,8 @@ onMounted(async () => {
           ><el-icon><DataAnalysis /></el-icon></span
         ><span class="activity-main"
           ><b
-            >{{ actionLabels[item.action] || item.action
-            }}{{ entityLabels[item.entity_type] || item.entity_type }}</b
+            >{{ actionLabels[item.action] || '操作'
+            }}{{ entityLabels[item.entity_type] || '相关数据' }}</b
           ><small>{{ dateText(item.created_at) }}</small></span
         >
       </div>

@@ -64,7 +64,7 @@ def session_for_request(request: Request, db: Session) -> SessionToken:
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         supplied = request.headers.get("X-CSRF-Token", "")
         if not secrets.compare_digest(supplied, session.csrf_token):
-            raise HTTPException(403, "CSRF 校验失败")
+            raise HTTPException(403, "页面验证已失效，请刷新页面后重试")
     return session
 
 

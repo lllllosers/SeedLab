@@ -37,7 +37,7 @@ async function submit() {
   <div class="login-page">
     <div class="login-story">
       <div class="login-story-inner">
-        <div class="login-eyebrow"><span class="eyebrow-line" />SEED RESEARCH WORKSPACE</div>
+        <div class="login-eyebrow"><span class="eyebrow-line" />种子试验管理系统</div>
         <div class="login-illustration">
           <div class="orbit orbit-one" />
           <div class="orbit orbit-two" />

@@ -86,7 +86,7 @@ onMounted(() => {
       <div>
         <b>{{ lot.taxon_name }}</b
         ><small
-          >{{ lot.code }} · {{ lot.source || '来源未填写' }} · 库存
+          >{{ lot.code }} · {{ lot.source || '来源未填写' }} · 登记数量
           {{ lot.quantity ?? '未知' }}</small
         >
       </div>
@@ -100,7 +100,7 @@ onMounted(() => {
       >
     </div>
     <div v-if="!lots.length" class="wizard-empty">
-      没有可用的种子批次。请先在物种信息库中建立并启用种子批次。
+      没有可用的种子批次。请先在物种信息库新增物种，再到种子批次页面添加种子批次。
     </div>
   </div>
   <h3 class="wizard-subheading">

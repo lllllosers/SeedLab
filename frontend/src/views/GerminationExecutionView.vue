@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import type { GerminationExecution } from '../types'
@@ -8,9 +8,9 @@ import { dateTimeText, statusLabels } from '../utils'
 import GerminationQuickEntry from './GerminationExecution/GerminationQuickEntry.vue'
 import DishStatusTable from './GerminationExecution/DishStatusTable.vue'
 import ObservationHistory from './GerminationExecution/ObservationHistory.vue'
+import PageBackButton from '../components/PageBackButton.vue'
 
 const route = useRoute()
-const router = useRouter()
 const execution = ref<GerminationExecution | null>(null)
 const tab = ref('entry')
 const loading = ref(false)
@@ -39,17 +39,12 @@ const periodProgress = computed(() => {
 onMounted(load)
 </script>
 <template>
-  <button class="back-link" @click="router.push(`/experiments/${route.params.id}`)">
-    ← 返回实验详情
-  </button>
+  <PageBackButton :to="`/experiments/${route.params.id}`" label="返回实验详情" />
   <div v-if="execution" class="page-heading detail-heading">
     <div>
-      <div class="eyebrow">{{ execution.experiment.code }} / GERMINATION EXECUTION</div>
+      <div class="eyebrow">发芽实验执行 · {{ execution.experiment.code }}</div>
       <h1>{{ execution.experiment.name }}</h1>
-      <p>
-        置床于 {{ dateTimeText(execution.experiment.started_at) }} ·
-        {{ execution.dish_count }} 个培养皿
-      </p>
+      <p>填写本次新发芽的种子数量；空白表示未检查，0 表示已检查但没有新发芽。置床于 {{ dateTimeText(execution.experiment.started_at) }} · {{ execution.dish_count }} 个培养皿</p>
     </div>
     <div class="heading-actions">
       <span class="status-pill large" :class="execution.experiment.status">{{
@@ -63,7 +58,7 @@ onMounted(load)
     </div>
     <div class="execution-hero surface-panel">
       <div>
-        <span class="eyebrow">OBSERVATION WINDOW</span>
+        <span class="eyebrow">计划观察期</span>
         <h2>计划观察期 {{ execution.observation_period_days ?? '—' }} 天</h2>
         <p>
           已运行 {{ elapsedDays }} 天 · 计划结束
@@ -101,8 +96,8 @@ onMounted(load)
           <p>
             {{
               execution.sample_scope === 'per_dish'
-                ? '每皿独立选前 N 株'
-                : '每材料跨重复合计选前 N 株'
+                ? '每个培养皿分别按发芽顺序取样'
+                : '每个实验材料合计按发芽顺序取样'
             }}
           </p>
         </div>
@@ -136,7 +131,7 @@ onMounted(load)
             :execution="execution"
             @saved="load"
           />
-          <div v-else class="wizard-empty">当前实验状态不允许新增巡检。</div></el-tab-pane
+          <div v-else class="wizard-empty">该实验目前不在进行中，不能新增巡检记录。可查看已有记录。</div></el-tab-pane
         ><el-tab-pane label="培养皿状态" name="dishes"
           ><DishStatusTable :execution="execution" /></el-tab-pane
         ><el-tab-pane label="最近巡检" name="history"

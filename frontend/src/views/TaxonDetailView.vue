@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { api, errorMessage } from '../api/client'
 import type { SeedLot, Taxon } from '../types'
 import { dateText } from '../utils'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Box, Notebook } from '@element-plus/icons-vue'
+import { Box, Notebook } from '@element-plus/icons-vue'
+import PageBackButton from '../components/PageBackButton.vue'
 
-const route = useRoute(),
-  router = useRouter()
+const route = useRoute()
 const item = ref<Taxon | null>(null),
   lots = ref<SeedLot[]>([])
 onMounted(async () => {
@@ -23,12 +23,10 @@ onMounted(async () => {
 })
 </script>
 <template>
-  <button class="back-link" @click="router.push('/taxa')">
-    <el-icon><ArrowLeft /></el-icon>返回物种信息库
-  </button>
+  <PageBackButton to="/taxa" label="返回物种列表" />
   <div v-if="item" class="page-heading detail-heading">
     <div>
-      <div class="eyebrow">{{ item.code }} / TAXON PROFILE</div>
+      <div class="eyebrow">物种编号 {{ item.code }}</div>
       <h1>
         <i>{{ item.scientific_name }}</i>
       </h1>
@@ -105,7 +103,7 @@ onMounted(async () => {
         </div>
         <div class="empty-inline compact">
           <el-icon><Notebook /></el-icon><b>履历将在后续阶段开放</b
-          ><span>实验材料关系与履历数据结构已预留。</span>
+          ><span>这部分信息将在后续开放；现在可在实验列表查看已建立的实验。</span>
         </div>
       </section>
     </div>

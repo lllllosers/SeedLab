@@ -13,9 +13,14 @@ const lots = ref<SeedLot[]>([]),
 const editorOpen = ref(false),
   editingId = ref<string | null>(null)
 const form = reactive({ taxon_id: '', source: '', quantity: null as number | null, notes: '' })
-const taxonNames = computed(() =>
-  Object.fromEntries(taxa.value.map((item) => [item.id, item.scientific_name])),
-)
+const taxonSearch = ref('')
+const selectedTaxon = computed(() => taxa.value.find((item) => item.id === form.taxon_id))
+const visibleTaxa = computed(() => taxa.value.filter((item) => {
+  if (!item.is_active) return false
+  const query = taxonSearch.value.trim().toLocaleLowerCase()
+  return !query || [item.common_name, item.scientific_name, item.code]
+    .some((value) => value?.toLocaleLowerCase().includes(query))
+}))
 async function load() {
   loading.value = true
   try {
@@ -33,6 +38,7 @@ async function load() {
 }
 function openEditor(item?: SeedLot) {
   editingId.value = item?.id || null
+  taxonSearch.value = ''
   Object.assign(form, {
     taxon_id: item?.taxon_id || '',
     source: item?.source || '',
@@ -63,7 +69,7 @@ onMounted(load)
 <template>
   <div class="page-heading">
     <div>
-      <div class="eyebrow">RESOURCE LIBRARY / SEED LOTS</div>
+      <div class="eyebrow">种子材料</div>
       <h1>种子批次</h1>
       <p>按来源管理种子材料，保留物种与采集批次之间的关系。</p>
     </div>
@@ -95,7 +101,8 @@ onMounted(load)
         min-width="220"
         ><template #default="{ row }"
           ><router-link class="table-link" :to="`/taxa/${row.taxon_id}`"
-            ><i>{{ taxonNames[row.taxon_id] || '未知物种' }}</i></router-link
+            >{{ row.taxon.common_name || row.taxon.scientific_name }}</router-link
+          ><div class="table-subtitle"><i v-if="row.taxon.common_name">{{ row.taxon.scientific_name }}</i><span v-else>{{ row.taxon.code }}</span></div
           ></template
         ></el-table-column
       ><el-table-column prop="source" label="来源" min-width="180"
@@ -124,13 +131,21 @@ onMounted(load)
           v-model="form.taxon_id"
           placeholder="选择物种"
           filterable
+          :filter-method="(query: string) => (taxonSearch = query)"
           style="width: 100%"
           :disabled="!!editingId"
-          ><el-option
-            v-for="item in taxa.filter((value) => value.is_active)"
+          ><el-option class="taxon-select-option"
+            v-for="item in visibleTaxa"
             :key="item.id"
-            :label="`${item.code} · ${item.scientific_name}`"
-            :value="item.id" /></el-select></el-form-item
+            :label="item.common_name || item.scientific_name"
+            :value="item.id">
+            <div class="taxon-option"><strong>{{ item.common_name || item.scientific_name }}</strong>
+              <small>{{ item.common_name ? `${item.scientific_name} · ` : '' }}{{ item.code }}</small></div>
+          </el-option></el-select></el-form-item
+      ><div v-if="selectedTaxon" class="selected-taxon">
+        <b>已选择物种：{{ selectedTaxon.common_name || selectedTaxon.scientific_name }}</b>
+        <span><i v-if="selectedTaxon.common_name">{{ selectedTaxon.scientific_name }} · </i>{{ selectedTaxon.code }}</span>
+      </div
       ><el-form-item label="来源"
         ><el-input v-model="form.source" placeholder="采集地或来源说明" /></el-form-item
       ><el-form-item label="数量（粒）"

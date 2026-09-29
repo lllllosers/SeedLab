@@ -1,5 +1,9 @@
 :root {
   font-family: Inter, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
   color: #22332e;
   background: #f5f7f5;
   font-synthesis: none;
@@ -86,7 +90,7 @@ button {
   letter-spacing: -0.04em;
 }
 .brand-copy small {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   color: #bad2c5;
 }
@@ -101,7 +105,7 @@ button {
   gap: 2px;
 }
 .nav-label {
-  font-size: 11px;
+  font-size: 13px;
   color: #85ab99;
   letter-spacing: 0.14em;
   padding: 24px 14px 8px;
@@ -113,7 +117,7 @@ button {
   min-height: 42px;
   padding: 0 14px;
   border-radius: 9px;
-  font-size: 13px;
+  font-size: 14px;
   color: #c7dccf;
   transition:
     background 0.16s,
@@ -135,7 +139,7 @@ button {
   margin-top: auto;
   border-top: 1px solid #356054;
   padding: 20px 13px 0;
-  font-size: 11px;
+  font-size: 13px;
   color: #a3c4b2;
   display: flex;
   align-items: center;
@@ -164,7 +168,7 @@ button {
   display: flex;
   gap: 13px;
   align-items: center;
-  font-size: 13px;
+  font-size: 14px;
   color: #94a29b;
 }
 .topbar-path strong {
@@ -180,7 +184,7 @@ button {
   align-items: center;
 }
 .topbar-date {
-  font-size: 12px;
+  font-size: 13px;
   color: #91a099;
 }
 .account {
@@ -190,7 +194,7 @@ button {
   gap: 10px;
   align-items: center;
   color: #31483b;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   padding: 5px;
 }
@@ -224,7 +228,7 @@ button {
   font-weight: 720;
 }
 .page-heading p {
-  font-size: 13px;
+  font-size: 14px;
   color: #829188;
   margin: 0;
   line-height: 1.7;
@@ -232,7 +236,7 @@ button {
 .eyebrow {
   color: #588b72;
   letter-spacing: 0.18em;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 .page-heading .el-button {
@@ -256,7 +260,7 @@ button {
 .banner-kicker {
   color: #b7d1ab;
   letter-spacing: 0.19em;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 .welcome-banner h2 {
@@ -266,7 +270,7 @@ button {
   margin: 9px 0 8px;
 }
 .welcome-banner p {
-  font-size: 11px;
+  font-size: 13px;
   color: #c7d9cb;
   margin: 0 0 16px;
 }
@@ -275,7 +279,7 @@ button {
   gap: 7px;
   align-items: center;
   color: #e7f1df;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 .banner-art {
@@ -370,7 +374,7 @@ button {
   color: #b9846e;
 }
 .stat-label {
-  font-size: 12px;
+  font-size: 13px;
   color: #83918a;
 }
 .stat-value {
@@ -380,7 +384,7 @@ button {
   margin: 2px 0 7px;
 }
 .stat-card a {
-  font-size: 11px;
+  font-size: 13px;
   color: #44836b;
   display: inline-flex;
   align-items: center;
@@ -408,12 +412,12 @@ button {
   color: #2b3b31;
 }
 .panel-heading p {
-  font-size: 11px;
+  font-size: 13px;
   color: #93a198;
   margin: 0;
 }
 .panel-heading a {
-  font-size: 11px;
+  font-size: 13px;
   color: #44836b;
   display: flex;
   align-items: center;
@@ -452,20 +456,20 @@ button {
   min-width: 0;
 }
 .activity-main b {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
 }
 .activity-main small {
-  font-size: 10px;
+  font-size: 12px;
   color: #9ba8a0;
 }
 .status-pill {
   border-radius: 99px;
   padding: 4px 9px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
 }
@@ -491,7 +495,7 @@ button {
 }
 .status-pill.large {
   padding: 7px 13px;
-  font-size: 11px;
+  font-size: 13px;
 }
 .empty-inline {
   min-height: 168px;
@@ -511,10 +515,10 @@ button {
 }
 .empty-inline b {
   color: #53675a;
-  font-size: 12px;
+  font-size: 13px;
 }
 .empty-inline span {
-  font-size: 11px;
+  font-size: 13px;
 }
 .empty-inline.compact {
   min-height: 155px;
@@ -539,7 +543,7 @@ button {
   margin: 0;
 }
 .toolbar-title span {
-  font-size: 11px;
+  font-size: 13px;
   color: #9ca9a0;
 }
 .toolbar-actions {
@@ -559,14 +563,14 @@ button {
 .data-table .el-table__header th {
   background: #f9fbf9 !important;
   color: #829188;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   height: 45px;
 }
 .data-table .el-table__row td {
   height: 65px;
   color: #516259;
-  font-size: 12px;
+  font-size: 14px;
 }
 .data-table .cell {
   padding-left: 22px;
@@ -579,13 +583,13 @@ button {
 }
 .taxon-name b {
   color: #283e30;
-  font-size: 12px;
-  font-style: italic;
+  font-size: 14px;
+  font-style: normal;
 }
 .taxon-name small,
 .table-subtitle {
   color: #9aa79e;
-  font-size: 10px;
+  font-size: 13px;
 }
 .table-link {
   color: #317963;
@@ -597,16 +601,104 @@ button {
 .table-subtitle {
   margin-top: 3px;
 }
-.back-link {
-  background: none;
-  border: 0;
-  color: #6c8c78;
-  font-size: 12px;
-  display: flex;
+.page-back-button {
+  width: fit-content;
+  min-height: 40px;
+  border: 1px solid #c6dbcc;
+  border-radius: 9px;
+  background: #fff;
+  color: #285c43;
+  font-size: 14px;
+  font-weight: 650;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0;
-  margin-bottom: 22px;
+  gap: 9px;
+  padding: 8px 14px;
+  margin-bottom: 20px;
+  transition: background .16s, border-color .16s, color .16s;
+}
+.page-back-button:hover,
+.page-back-button:focus-visible {
+  background: #e7f3e9;
+  border-color: #74af87;
+  color: #174c36;
+}
+.heading-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.experiment-current-status {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 650;
+}
+.experiment-flow-hint {
+  margin: -8px 0 22px;
+  color: #526e5b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.taxon-option {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.4;
+  padding: 5px 0;
+}
+.taxon-select-option {
+  height: auto;
+  min-height: 52px;
+  line-height: normal;
+}
+.taxon-option small,
+.selected-taxon span {
+  color: #698075;
+  font-size: 12px;
+}
+.selected-taxon {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -4px 0 18px;
+  padding: 11px 13px;
+  background: #eef7f0;
+  border: 1px solid #cfe5d4;
+  border-radius: 8px;
+  color: #255640;
+}
+.lot-import-card {
+  margin-top: 20px;
+  max-width: 760px;
+}
+.import-error {
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+  color: #9d3f35 !important;
+  background: #fff0ec;
+  border-radius: 8px;
+  padding: 12px;
+  line-height: 1.7;
+}
+.el-button,
+.el-input__inner,
+.el-select__selected-item,
+.el-form-item__label,
+.el-dialog__body {
+  font-size: 14px;
+}
+.el-table__header th {
+  font-size: 13px;
+}
+.execution-table {
+  font-size: 14px;
+}
+.execution-table th {
+  font-size: 13px;
+}
+.execution-table td b,
+.execution-table td strong {
+  font-size: 14px;
 }
 .detail-heading {
   margin-bottom: 24px;
@@ -647,7 +739,7 @@ button {
   padding: 14px 0;
   border-bottom: 1px solid #f0f2ef;
   gap: 15px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .info-list > div:last-child {
   border: 0;
@@ -665,13 +757,13 @@ button {
   justify-content: space-between;
   padding: 13px 24px;
   border-bottom: 1px solid #f0f2ef;
-  font-size: 12px;
+  font-size: 13px;
 }
 .mini-row small {
   color: #899a8e;
 }
 .dialog-intro {
-  font-size: 12px;
+  font-size: 13px;
   color: #87968a;
   margin: 0 0 20px;
 }
@@ -706,7 +798,7 @@ button {
   margin: 20px 0 6px;
 }
 .data-card p {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.8;
   color: #819086;
   margin: 0 0 20px;
@@ -719,7 +811,7 @@ button {
 }
 .data-card small {
   color: #9aa99d;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 14px;
 }
 .file-picker {
@@ -739,7 +831,7 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   min-width: 205px;
 }
@@ -748,7 +840,7 @@ button {
   color: #4e8360;
   padding: 5px 9px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 13px;
 }
 .login-page {
   min-height: 100vh;
@@ -781,7 +873,7 @@ button {
   z-index: 1;
 }
 .login-eyebrow {
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.19em;
   color: #b8d1ad;
   display: flex;
@@ -806,7 +898,7 @@ button {
   font-size: 14px;
 }
 .story-foot {
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
   color: #c1d6c6;
   margin-top: 62px;
@@ -893,7 +985,7 @@ button {
   display: none;
 }
 .login-kicker {
-  font-size: 12px;
+  font-size: 13px;
   color: #4d9070;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -905,13 +997,13 @@ button {
   margin: 8px 0;
 }
 .login-help {
-  font-size: 13px;
+  font-size: 14px;
   color: #94a198;
   margin: 0 0 39px;
 }
 .field-label {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
   color: #485d4c;
   margin: 20px 0 8px;
@@ -934,7 +1026,7 @@ button {
   align-items: center;
   gap: 9px;
   font-weight: 650;
-  font-size: 13px;
+  font-size: 14px;
 }
 .login-submit:hover {
   background: #225d48;
@@ -946,7 +1038,7 @@ button {
   border-top: 1px solid #e8eee8;
   margin-top: 35px;
   padding-top: 21px;
-  font-size: 11px;
+  font-size: 13px;
   color: #a0aca2;
   display: flex;
   align-items: center;
@@ -962,7 +1054,7 @@ button {
   position: absolute;
   bottom: 23px;
   color: #b2bdb4;
-  font-size: 10px;
+  font-size: 12px;
 }
 .setup-panel-inner {
   padding: 28px 0;
@@ -988,7 +1080,7 @@ button {
 }
 .account-dialog-help {
   color: #68786b;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   margin: 4px 0 16px;
 }
@@ -1016,7 +1108,7 @@ button {
 .wizard-header p {
   margin: 0;
   color: #809188;
-  font-size: 12px;
+  font-size: 13px;
 }
 .wizard-progress {
   display: flex;
@@ -1028,7 +1120,7 @@ button {
   font-size: 25px;
 }
 .wizard-progress span {
-  font-size: 11px;
+  font-size: 13px;
 }
 .wizard-bar {
   margin-bottom: 23px;
@@ -1056,7 +1148,7 @@ button {
   align-items: center;
   gap: 11px;
   color: #819186;
-  font-size: 12px;
+  font-size: 13px;
 }
 .wizard-nav button.active {
   background: #e8f3eb;
@@ -1076,7 +1168,7 @@ button {
   border-radius: 7px;
   background: #edf3ef;
   color: #508369;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 .wizard-nav button.active span {
@@ -1098,7 +1190,7 @@ button {
 .wizard-step-copy p,
 .wizard-help {
   color: #829188;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.8;
   margin: 0;
 }
@@ -1108,7 +1200,7 @@ button {
 .wizard-main .el-form-item__label {
   color: #4d6254;
   font-weight: 650;
-  font-size: 12px;
+  font-size: 13px;
 }
 .wizard-main .el-input-number,
 .design-detail .el-input-number {
@@ -1153,7 +1245,7 @@ button {
 .detail-material-row b {
   display: block;
   color: #2d4535;
-  font-size: 12px;
+  font-size: 13px;
 }
 .wizard-list-row small,
 .detail-material-row small,
@@ -1161,7 +1253,7 @@ button {
   display: block;
   margin-top: 4px;
   color: #94a398;
-  font-size: 11px;
+  font-size: 13px;
 }
 .wizard-list-row .grow,
 .detail-material-row .grow {
@@ -1172,11 +1264,11 @@ button {
   text-align: center;
   padding: 28px;
   color: #91a197;
-  font-size: 12px;
+  font-size: 13px;
 }
 .wizard-subheading {
   color: #2c4635;
-  font-size: 13px;
+  font-size: 14px;
   margin: 25px 0 12px;
 }
 .wizard-subheading span {
@@ -1194,11 +1286,11 @@ button {
   margin-bottom: 25px;
 }
 .wizard-rule-card b {
-  font-size: 13px;
+  font-size: 14px;
   color: #28674d;
 }
 .wizard-rule-card span {
-  font-size: 11px;
+  font-size: 13px;
   color: #71947b;
 }
 .wizard-radio-grid {
@@ -1213,7 +1305,7 @@ button {
   gap: 9px;
   min-height: 65px;
   color: #9aaa9f;
-  font-size: 12px;
+  font-size: 13px;
 }
 .override-card {
   border: 1px solid #e8eee8;
@@ -1228,7 +1320,7 @@ button {
   margin-bottom: 17px;
 }
 .override-title b {
-  font-size: 12px;
+  font-size: 13px;
   color: #2b4635;
 }
 .wizard-footer {
@@ -1255,7 +1347,7 @@ button {
 .review-grid small {
   display: block;
   color: #829487;
-  font-size: 11px;
+  font-size: 13px;
   margin-bottom: 5px;
 }
 .review-grid strong {
@@ -1270,12 +1362,12 @@ button {
   border-bottom: 1px solid #edf1ed;
 }
 .review-section h3 {
-  font-size: 13px;
+  font-size: 14px;
   margin: 0 0 10px;
   color: #2b4835;
 }
 .review-section p {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   color: #75867a;
   margin: 4px 0;
@@ -1287,7 +1379,7 @@ button {
   justify-content: space-between;
   padding: 9px 0;
   border-bottom: 1px solid #f1f3f0;
-  font-size: 11px;
+  font-size: 13px;
 }
 .review-material b {
   color: #3b5842;
@@ -1304,7 +1396,7 @@ button {
 .design-note {
   border-top: 1px solid #ebf0eb;
   padding: 17px 2px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .design-note b {
   color: #365540;
@@ -1327,7 +1419,7 @@ button {
   margin: 0 0 5px;
 }
 .design-section-head p {
-  font-size: 11px;
+  font-size: 13px;
   color: #90a093;
   margin: 0;
 }
@@ -1343,12 +1435,12 @@ button {
   flex-wrap: wrap;
   gap: 13px;
   color: #809184;
-  font-size: 11px;
+  font-size: 13px;
 }
 .material-metrics b {
   display: inline;
   color: #315b42;
-  font-size: 12px;
+  font-size: 13px;
 }
 .material-actions {
   display: flex;
@@ -1525,7 +1617,7 @@ button {
   border-radius: 9px;
   background: #fff5e6;
   color: #8e6427;
-  font-size: 12px;
+  font-size: 13px;
 }
 .execution-alert span {
   color: #9c7747;
@@ -1551,7 +1643,7 @@ button {
 .execution-hero p {
   margin: 0;
   color: #d0e0d4;
-  font-size: 11px;
+  font-size: 13px;
 }
 .execution-hero-progress {
   width: 210px;
@@ -1563,7 +1655,7 @@ button {
 }
 .execution-hero-progress small {
   color: #cbdfce;
-  font-size: 10px;
+  font-size: 12px;
 }
 .execution-hero-progress .el-progress {
   margin: 7px 0;
@@ -1587,7 +1679,7 @@ button {
 .execution-stats small {
   display: block;
   color: #89998d;
-  font-size: 11px;
+  font-size: 13px;
   margin-bottom: 6px;
 }
 .execution-stats strong {
@@ -1611,13 +1703,13 @@ button {
 }
 .material-progress-card > b {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   color: #2c4a37;
 }
 .material-progress-card > small {
   display: block;
   margin: 5px 0 16px;
-  font-size: 10px;
+  font-size: 12px;
   color: #91a094;
 }
 .material-progress-numbers {
@@ -1627,7 +1719,7 @@ button {
   align-items: center;
   margin-bottom: 9px;
   color: #7f9083;
-  font-size: 11px;
+  font-size: 13px;
 }
 .material-progress-numbers strong {
   color: #3a7858;
@@ -1636,7 +1728,7 @@ button {
 .material-progress-card p {
   margin: 12px 0 0;
   color: #819184;
-  font-size: 10px;
+  font-size: 12px;
 }
 .execution-workspace {
   padding: 20px 25px 27px;
@@ -1659,7 +1751,7 @@ button {
 .execution-section-head p {
   margin: 0;
   color: #90a093;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.5;
 }
 .execution-time {
@@ -1670,7 +1762,7 @@ button {
 }
 .execution-time label {
   color: #6b806f;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
 }
 .execution-time input,
@@ -1682,7 +1774,7 @@ button {
   color: #304a39;
   padding: 0 9px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 .execution-time input:focus,
 .execution-table input:focus {
@@ -1698,7 +1790,7 @@ button {
   width: 100%;
   border-collapse: collapse;
   min-width: 930px;
-  font-size: 11px;
+  font-size: 14px;
   color: #5d7161;
 }
 .execution-table th {
@@ -1719,17 +1811,17 @@ button {
 }
 .execution-table td b {
   color: #2f4e38;
-  font-size: 11px;
+  font-size: 14px;
 }
 .execution-table td strong {
   color: #2b6c4b;
-  font-size: 12px;
+  font-size: 14px;
 }
 .execution-table td small {
   display: block;
   margin-top: 4px;
   color: #93a297;
-  font-size: 10px;
+  font-size: 12px;
 }
 .quick-entry-table {
   min-width: 1050px;
@@ -1753,7 +1845,7 @@ button {
 .quick-entry-foot span,
 .history-count {
   color: #91a093;
-  font-size: 11px;
+  font-size: 13px;
 }
 .rate-cell {
   min-width: 94px;
@@ -1765,12 +1857,12 @@ button {
   flex: 1;
 }
 .rate-cell span {
-  font-size: 10px;
+  font-size: 12px;
   color: #528365;
 }
 .execution-dialog-copy {
   color: #7f9083;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.8;
   margin: 0 0 19px;
 }
@@ -1788,7 +1880,7 @@ button {
 .start-preview small {
   display: block;
   color: #8a9d8c;
-  font-size: 10px;
+  font-size: 12px;
 }
 .start-preview strong {
   color: #316a4a;

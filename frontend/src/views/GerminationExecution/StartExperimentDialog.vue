@@ -65,7 +65,7 @@ async function start() {
           style="width: 100%" /></el-form-item
     ></el-form>
     <p class="wizard-help">
-      可修正为实际操作时间。种子批次数量作为资料字段保留，本操作不扣减库存。
+      请填写实际完成置床的时间。种子批次登记的数量不会因开始实验而减少。
     </p>
     <template #footer
       ><el-button @click="open = false">取消</el-button

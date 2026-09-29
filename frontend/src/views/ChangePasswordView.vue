@@ -40,7 +40,7 @@ async function logout() {
   <div class="login-page">
     <div class="login-story">
       <div class="login-story-inner">
-        <div class="login-eyebrow"><span class="eyebrow-line" />SEED RESEARCH WORKSPACE</div>
+        <div class="login-eyebrow"><span class="eyebrow-line" />种子试验管理系统</div>
         <h1>保护账号，<br />继续安心记录实验。</h1>
         <p>设置只有你知道的新密码。<br />修改成功后需要重新登录。</p>
         <div class="story-foot">SeedLab <span>·</span> 种子试验管理系统</div>

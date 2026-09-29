@@ -38,8 +38,8 @@ async function save() {
 async function remove(observation: GerminationObservation) {
   try {
     await ElMessageBox.confirm(
-      `删除 ${observation.dish_code} 在 ${dateTimeText(observation.observed_at)} 的巡检？`,
-      '确认删除',
+      `确定删除培养皿 ${observation.dish_code} 在 ${dateTimeText(observation.observed_at)} 的巡检吗？删除后发芽累计数会重新计算。`,
+      '删除巡检记录',
     )
   } catch {
     return
@@ -57,7 +57,7 @@ async function remove(observation: GerminationObservation) {
   <div class="execution-section-head">
     <div>
       <h3>最近巡检记录</h3>
-      <p>展示最近 100 条；已有来源样本的巡检不能删除。</p>
+      <p>显示最近 100 次巡检；已选出幼苗的巡检不能删除。</p>
     </div>
     <span class="history-count">{{ execution.recent_observations.length }} 条</span>
   </div>
@@ -98,7 +98,7 @@ async function remove(observation: GerminationObservation) {
       </tbody>
     </table>
   </div>
-  <div v-else class="wizard-empty">尚无巡检记录</div>
+  <div v-else class="wizard-empty">当前实验还没有发芽巡检记录。检查培养皿后，填写本次新增发芽数并保存。</div>
   <el-dialog v-model="editing" title="修正巡检记录" width="480px"
     ><p class="execution-dialog-copy">
       {{ form.dishCode }} · 修改新增数后会重新校验累计与已选幼苗。已有样本不会被自动删除。

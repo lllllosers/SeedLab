@@ -60,7 +60,7 @@ def start_experiment(db: Session, experiment_id: str, sown_at: datetime, user_id
         protocol = protocol_for(db, experiment_id)
         materials = materials_for(db, experiment_id)
         if not materials or not days_for(db, experiment_id):
-            raise HTTPException(422, "开始实验前至少需要一个材料和一个 DAG 时间点")
+            raise HTTPException(422, "开始实验前，请至少添加一个材料并设置一个发芽后测定时间（DAG）")
         validate_all(protocol, materials)
         if dishes_for(db, experiment_id):
             raise HTTPException(409, "实验已经存在培养皿，不能重新生成")
@@ -93,7 +93,7 @@ def reconcile_samples(db: Session, material: ExperimentMaterial, user_id: str) -
     """Fill first-N slots in stable observation order without deleting sample identities."""
     protocol = protocol_for(db, material.experiment_id)
     if protocol is None:
-        raise HTTPException(422, "实验方案缺失")
+        raise HTTPException(422, "请先填写实验方案，再记录发芽巡检")
     target = effective(material, protocol)["effective_sample_count"]
     dishes = list(db.scalars(select(GerminationDish).where(GerminationDish.material_id == material.id)
                               .order_by(GerminationDish.replicate_no)))
@@ -166,12 +166,13 @@ def batch_create_observations(db: Session, experiment_id: str, data: BatchObserv
                 raise HTTPException(422, f"培养皿 {dish.code} 缺少实际置床时间")
             if observed_at < utc_naive(dish.sown_at):
                 raise HTTPException(422, f"培养皿 {dish.code} 的巡检时间不能早于置床时间")
-            if cumulative(db, dish.id) + entry.new_germinated_count > dish.seed_count:
-                raise HTTPException(422, f"培养皿 {dish.code} 的累计发芽数不能超过置床粒数")
+            current = cumulative(db, dish.id)
+            if current + entry.new_germinated_count > dish.seed_count:
+                raise HTTPException(422, f"培养皿 {dish.code} 已累计发芽 {current} 粒，本次最多还能记录 {dish.seed_count - current} 粒")
             if db.scalar(select(GerminationObservation.id).where(
                     GerminationObservation.dish_id == dish.id,
                     GerminationObservation.observed_at == observed_at)):
-                raise HTTPException(409, f"培养皿 {dish.code} 在该时间已有巡检记录")
+                raise HTTPException(409, f"培养皿 {dish.code} 在这个时间已有巡检记录，请修改原记录或选择其他时间")
             observation = GerminationObservation(dish_id=dish.id, observed_at=observed_at,
                                                  new_germinated_count=entry.new_germinated_count,
                                                  notes=entry.notes)
@@ -216,10 +217,10 @@ def correct_observation(db: Session, experiment_id: str, observation_id: str,
             source_count = db.scalar(select(func.count(SeedlingSample.id)).where(
                 SeedlingSample.source_observation_id == observation.id)) or 0
             if patch["new_germinated_count"] < source_count:
-                raise HTTPException(409, f"此次巡检已产生 {source_count} 株样本，不能将新增数改得更小")
+                raise HTTPException(409, f"此次巡检已选出 {source_count} 株幼苗，本次新增发芽数不能小于 {source_count}")
             other_total = cumulative(db, dish.id) - observation.new_germinated_count
             if other_total + patch["new_germinated_count"] > dish.seed_count:
-                raise HTTPException(422, f"培养皿 {dish.code} 的累计发芽数不能超过置床粒数")
+                raise HTTPException(422, f"培养皿 {dish.code} 的其他巡检已记录 {other_total} 粒，本次最多还能填写 {dish.seed_count - other_total} 粒")
         for key, value in patch.items():
             setattr(observation, key, value)
         flush_or_conflict(db)

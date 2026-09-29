@@ -69,8 +69,10 @@ async function changeRole(user: User) {
   const next = !user.is_admin
   try {
     await ElMessageBox.confirm(
-      `将 ${user.display_name} 设为${next ? '管理员' : '普通成员'}？`,
-      '确认角色变更',
+      next
+        ? `确定将“${user.display_name}”设为管理员吗？该成员将能管理账号、重置密码和停用其他成员。`
+        : `确定将“${user.display_name}”设为普通成员吗？该成员将不能再管理其他账号。`,
+      next ? '设为管理员' : '设为普通成员',
     )
     await api.patch(`/users/${user.id}`, { is_admin: next })
     ElMessage.success('角色已更新')
@@ -83,8 +85,10 @@ async function changeActive(user: User) {
   const next = !user.is_active
   try {
     await ElMessageBox.confirm(
-      `${next ? '启用' : '停用'} ${user.display_name}？${next ? '' : '该账号的所有会话将立即失效。'}`,
-      '确认账号状态',
+      next
+        ? `确定启用“${user.display_name}”的账号吗？启用后该成员可以重新登录。`
+        : `确定停用“${user.display_name}”的账号吗？停用后该成员当前登录会立即失效，重新启用后才能再次登录。`,
+      next ? '启用成员账号' : '停用成员账号',
     )
     await api.patch(`/users/${user.id}`, { is_active: next })
     ElMessage.success(next ? '账号已启用' : '账号已停用')
@@ -121,7 +125,7 @@ onMounted(load)
 <template>
   <div class="page-heading">
     <div>
-      <div class="eyebrow">SYSTEM / TEAM</div>
+      <div class="eyebrow">成员账号</div>
       <h1>用户管理</h1>
       <p>管理员创建成员并管理账号状态。临时密码首次登录后必须修改。</p>
     </div>
@@ -168,7 +172,7 @@ onMounted(load)
             type="warning"
             :disabled="row.id === auth.user?.id"
             @click="beginReset(row)"
-            >重置密码</el-button
+            >重置成员密码</el-button
           >
         </template></el-table-column
       >
@@ -208,7 +212,7 @@ onMounted(load)
     ></el-form>
     <template #footer
       ><el-button @click="editOpen = false">取消</el-button
-      ><el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button></template
+      ><el-button type="primary" :loading="saving" @click="saveEdit">保存成员姓名</el-button></template
     >
   </el-dialog>
   <el-dialog v-model="resetOpen" title="重置成员密码" width="460px">
@@ -225,7 +229,7 @@ onMounted(load)
     />
     <template #footer
       ><el-button @click="resetOpen = false">取消</el-button
-      ><el-button type="primary" :loading="saving" @click="saveReset">确认重置</el-button></template
+      ><el-button type="primary" :loading="saving" @click="saveReset">重置成员密码</el-button></template
     >
   </el-dialog>
 </template>

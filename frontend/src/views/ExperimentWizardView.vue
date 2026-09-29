@@ -16,6 +16,7 @@ import ProtocolStep from './ExperimentWizard/ProtocolStep.vue'
 import SamplingStep from './ExperimentWizard/SamplingStep.vue'
 import TimepointsStep from './ExperimentWizard/TimepointsStep.vue'
 import OverridesStep from './ExperimentWizard/OverridesStep.vue'
+import PageBackButton from '../components/PageBackButton.vue'
 
 const router = useRouter()
 const auth = useAuth()
@@ -27,7 +28,7 @@ const steps = [
   '实验材料',
   '培养皿与重复',
   '幼苗取样',
-  'DAG 测定',
+  '发芽后测定时间',
   '特殊材料',
   '检查与创建',
 ]
@@ -118,10 +119,10 @@ async function create() {
 </script>
 
 <template>
-  <button class="back-link" @click="router.push('/experiments')">← 返回实验列表</button>
+  <PageBackButton to="/experiments" label="返回实验列表" />
   <div class="wizard-header">
     <div>
-      <div class="eyebrow">EXPERIMENT DESIGN · {{ step + 1 }} / 7</div>
+      <div class="eyebrow">创建实验 · 第 {{ step + 1 }} 步，共 7 步</div>
       <h1>{{ form.name || '创建实验' }}</h1>
       <p>
         第 {{ step + 1 }} 步：{{ steps[step] }} · 负责人 {{ auth.user?.display_name || '当前用户' }}
@@ -231,7 +232,7 @@ async function create() {
           </p>
         </div>
         <div class="review-section">
-          <h3>材料与 DAG</h3>
+          <h3>材料与发芽后测定时间（DAG）</h3>
           <div v-for="(entry, index) in materials" :key="entry.seed_lot_id" class="review-material">
             <b>{{ lots[index]?.taxon_name }} · {{ lots[index]?.code }}</b
             ><span

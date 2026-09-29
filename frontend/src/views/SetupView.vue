@@ -38,7 +38,7 @@ async function submit() {
   <div class="login-page">
     <div class="login-story">
       <div class="login-story-inner">
-        <div class="login-eyebrow"><span class="eyebrow-line" />SEED RESEARCH WORKSPACE</div>
+        <div class="login-eyebrow"><span class="eyebrow-line" />种子试验管理系统</div>
         <h1>为课题组建立<br />第一个安全入口。</h1>
         <p>初始化完成后，这个入口会关闭。<br />成员账号由管理员统一创建。</p>
         <div class="story-foot">SeedLab <span>·</span> 种子试验管理系统</div>
@@ -53,7 +53,7 @@ async function submit() {
         <h2>初始化管理员</h2>
         <p class="login-help">请从运行 SeedLab 的服务器本机终端获取一次性初始化码。</p>
         <form @submit.prevent="submit">
-          <label class="field-label" for="bootstrap-token">Bootstrap Token</label>
+          <label class="field-label" for="bootstrap-token">首次初始化码</label>
           <el-input
             id="bootstrap-token"
             v-model="form.bootstrap_token"

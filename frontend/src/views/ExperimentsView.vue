@@ -31,7 +31,7 @@ onMounted(load)
 <template>
   <div class="page-heading">
     <div>
-      <div class="eyebrow">EXPERIMENT MANAGEMENT</div>
+      <div class="eyebrow">实验管理</div>
       <h1>实验列表</h1>
       <p>设计可执行的实验方案，并在开始前核对材料与预计工作量。</p>
     </div>
@@ -88,10 +88,10 @@ onMounted(load)
         ></el-table-column
       ><el-table-column label="创建日期" width="140"
         ><template #default="{ row }">{{ dateText(row.created_at) }}</template></el-table-column
-      ><el-table-column label="操作" width="100"
+      ><el-table-column label="操作" width="140"
         ><template #default="{ row }"
-          ><el-button link type="primary" @click="router.push(`/experiments/${row.id}`)"
-            >查看详情</el-button
+          ><el-button link type="primary" @click="router.push(row.status === 'active' ? `/experiments/${row.id}/germination` : `/experiments/${row.id}`)"
+            >{{ row.status === 'draft' ? '继续配置' : row.status === 'ready' ? '准备开始' : row.status === 'active' ? '进入实验' : '查看详情' }}</el-button
           ></template
         ></el-table-column
       ></el-table

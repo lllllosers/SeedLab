@@ -60,8 +60,10 @@ async function save() {
 async function toggle(item: Taxon) {
   try {
     await ElMessageBox.confirm(
-      `确定${item.is_active ? '停用' : '启用'} ${item.scientific_name}？`,
-      '确认状态变更',
+      item.is_active
+        ? `确定停用“${item.common_name || item.scientific_name}”吗？停用后不会出现在常用物种列表或种子批次导入模板中；已有记录仍保留。`
+        : `确定启用“${item.common_name || item.scientific_name}”吗？启用后可再次在物种列表和种子批次导入模板中选择。`,
+      item.is_active ? '停用物种' : '启用物种',
       { type: 'warning' },
     )
     await api.patch(`/taxa/${item.id}`, { is_active: !item.is_active })
@@ -76,7 +78,7 @@ onMounted(load)
 <template>
   <div class="page-heading">
     <div>
-      <div class="eyebrow">RESOURCE LIBRARY / TAXA</div>
+      <div class="eyebrow">物种信息</div>
       <h1>物种信息库</h1>
       <p>统一维护物种基础信息，关联种子批次与历次试验。</p>
     </div>
@@ -102,14 +104,14 @@ onMounted(load)
       :data="items"
       v-loading="loading"
       class="data-table"
-      empty-text="暂无物种，点击右上角新增"
+      empty-text="还没有物种信息。请点击右上角新增物种，再添加种子批次。"
       ><el-table-column prop="code" label="编号" width="130" /><el-table-column
         label="物种"
         min-width="260"
         ><template #default="{ row }"
           ><div class="taxon-name">
-            <b>{{ row.scientific_name }}</b
-            ><small>{{ row.common_name || '暂无俗名' }}</small>
+            <b>{{ row.common_name || row.scientific_name }}</b
+            ><small>{{ row.scientific_name }}</small>
           </div></template
         ></el-table-column
       ><el-table-column prop="family" label="科" min-width="130"

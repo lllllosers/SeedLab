@@ -8,26 +8,17 @@ import type {
   ExperimentConfiguration,
   ExperimentMaterial,
   ExperimentProtocol,
-  ExperimentStatus,
 } from '../types'
 import { dateText, statusLabels } from '../utils'
 import StartExperimentDialog from './GerminationExecution/StartExperimentDialog.vue'
+import PageBackButton from '../components/PageBackButton.vue'
 
 const route = useRoute()
 const router = useRouter()
 const config = ref<ExperimentConfiguration | null>(null)
 const item = computed(() => config.value?.experiment)
-const editable = computed(() => item.value?.status === 'draft' || item.value?.status === 'ready')
-const statusChoices = computed<ExperimentStatus[]>(
-  () =>
-    ({
-      draft: ['draft', 'ready', 'cancelled'],
-      ready: ['ready', 'draft', 'cancelled'],
-      active: ['active', 'completed', 'cancelled'],
-      completed: ['completed'],
-      cancelled: ['cancelled'],
-    })[item.value?.status || 'draft'] as ExperimentStatus[],
-)
+const editable = computed(() => item.value?.status === 'draft')
+const canEditInfo = computed(() => item.value?.status === 'draft' || item.value?.status === 'ready')
 const activeTab = ref('overview')
 const infoOpen = ref(false)
 const protocolOpen = ref(false)
@@ -39,7 +30,6 @@ const info = reactive({
   name: '',
   description: '',
   planned_start_date: '',
-  status: 'draft' as ExperimentStatus,
 })
 const protocol = reactive<ExperimentProtocol>({
   seeds_per_dish: 20,
@@ -86,7 +76,6 @@ function editInfo() {
     name: item.value.name,
     description: item.value.description || '',
     planned_start_date: item.value.planned_start_date || '',
-    status: item.value.status,
   })
   infoOpen.value = true
 }
@@ -95,14 +84,29 @@ function saveInfo() {
   const patch = {
     name: info.name.trim(),
     description: info.description.trim() || null,
-    status: info.status,
-    ...(editable.value ? { planned_start_date: info.planned_start_date || null } : {}),
+    planned_start_date: info.planned_start_date || null,
   }
   run(
     () => api.patch(base.value, patch),
     '实验信息已更新',
     () => (infoOpen.value = false),
   )
+}
+async function changeStatus(target: 'ready' | 'draft') {
+  const preparing = target === 'ready'
+  try {
+    await ElMessageBox.confirm(
+      preparing
+        ? '标记后仍可返回草稿修改；正式开始实验后将不能再修改材料、重复数和测定时间。'
+        : '返回草稿后可继续调整材料、方案和测定时间；调整完成后需要再次标记为已就绪。',
+      preparing ? '确定将实验标记为“已就绪”吗？' : '确定将实验返回草稿吗？',
+      { confirmButtonText: preparing ? '标记为已就绪' : '返回草稿', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  await run(() => api.patch(base.value, { status: target }),
+    preparing ? '实验已标记为已就绪' : '实验已返回草稿')
 }
 function editProtocol() {
   Object.assign(protocol, config.value?.protocol || {})
@@ -165,7 +169,10 @@ function addMaterial() {
 }
 async function removeMaterial(entry: ExperimentMaterial) {
   try {
-    await ElMessageBox.confirm(`移除 ${entry.seed_lot_code}？`, '确认移除')
+    await ElMessageBox.confirm(
+      `确定从本实验移除种子批次 ${entry.seed_lot_code} 吗？该材料的单独设置也会一并移除。`,
+      '移除实验材料',
+    )
   } catch {
     return
   }
@@ -186,8 +193,8 @@ function saveDag() {
   const parts = dagText.value.split(/[\s,，;；]+/).filter(Boolean)
   const days = parts.map(Number)
   if (!days.length || days.some((day) => !Number.isInteger(day) || day < 0))
-    return ElMessage.warning('DAG 必须填写非负整数')
-  if (new Set(days).size !== days.length) return ElMessage.warning('DAG 不能重复')
+    return ElMessage.warning('请填写发芽后第几天测定，天数不能小于 0')
+  if (new Set(days).size !== days.length) return ElMessage.warning('同一天的测定时间只需填写一次')
   run(
     () => api.put(`${base.value}/dag`, { days }),
     'DAG 计划已保存',
@@ -198,28 +205,34 @@ onMounted(load)
 </script>
 
 <template>
-  <button class="back-link" @click="router.push('/experiments')">← 返回实验列表</button>
+  <PageBackButton to="/experiments" label="返回实验列表" />
   <div v-if="item" class="page-heading detail-heading">
     <div>
-      <div class="eyebrow">{{ item.code }} / EXPERIMENT DESIGN</div>
+      <div class="eyebrow">实验编号 {{ item.code }}</div>
       <h1>{{ item.name }}</h1>
-      <p>
-        计划开始 {{ dateText(item.planned_start_date) }} · 创建于 {{ dateText(item.created_at) }}
-      </p>
+      <p>核对实验材料和测定方案，确认无误后开始实验。计划开始 {{ dateText(item.planned_start_date) }}</p>
     </div>
     <div class="heading-actions">
-      <span class="status-pill large" :class="item.status">{{ statusLabels[item.status] }}</span
+      <span class="experiment-current-status">当前状态：<span class="status-pill large" :class="item.status">{{ statusLabels[item.status] }}</span></span
+      ><el-button v-if="item.status === 'draft'" type="primary" @click="changeStatus('ready')">标记为已就绪</el-button
+      ><el-button v-if="item.status === 'ready'" @click="changeStatus('draft')">返回草稿</el-button
       ><el-button v-if="item.status === 'ready'" type="primary" @click="startOpen = true"
         >正式开始实验</el-button
       ><el-button
-        v-if="item.started_at"
+        v-if="item.status === 'active'"
         type="primary"
         plain
         @click="router.push(`/experiments/${item.id}/germination`)"
         >进入实验执行</el-button
-      ><el-button @click="editInfo">编辑信息</el-button>
+      ><el-button v-if="canEditInfo" @click="editInfo">编辑信息</el-button>
     </div>
   </div>
+  <p v-if="item" class="experiment-flow-hint">{{
+    item.status === 'draft' ? '确认材料、方案和发芽后测定时间（DAG）后，可标记为已就绪。' :
+    item.status === 'ready' ? '确认实际置床时间后正式开始；如需调整方案，请先返回草稿。' :
+    item.status === 'active' ? '实验正在执行，进入发芽巡检页面记录数据。' :
+    '该实验目前不再接受材料和测定方案修改。'
+  }}</p>
   <div v-if="config" class="surface-panel design-detail">
     <el-tabs v-model="activeTab" class="design-tabs">
       <el-tab-pane label="概览" name="overview"
@@ -261,7 +274,7 @@ onMounted(load)
         ><div class="design-section-head">
           <div>
             <h3>默认方案</h3>
-            <p>个别材料可覆盖每皿粒数、重复数和取样数</p>
+            <p>个别材料可单独设置每皿粒数、重复数和取样数</p>
           </div>
           <el-button v-if="editable" @click="editProtocol">编辑方案</el-button>
         </div>
@@ -306,7 +319,7 @@ onMounted(load)
         ><div class="design-section-head">
           <div>
             <h3>本次实验材料</h3>
-            <p>下列数值为继承默认参数后的有效配置</p>
+            <p>下列为每份材料实际使用的参数</p>
           </div>
           <el-button v-if="editable" type="primary" plain @click="openAdd">添加材料</el-button>
         </div>
@@ -337,14 +350,14 @@ onMounted(load)
           </div>
         </div>
         <div v-if="!config.materials.length" class="wizard-empty">
-          尚未加入实验材料
+          尚未加入实验材料。请先添加种子批次，再标记为已就绪。
         </div></el-tab-pane
       >
-      <el-tab-pane label="DAG 测定计划" name="dag"
+      <el-tab-pane label="发芽后测定时间（DAG）" name="dag"
         ><div class="design-section-head">
           <div>
             <h3>发芽后测定时间点</h3>
-            <p>以单株实际发芽时间为基准，未来生成测定任务</p>
+            <p>以每株幼苗实际发芽时间为起点，设置发芽后第几天测定</p>
           </div>
           <el-button v-if="editable" @click="editDag">编辑 DAG</el-button>
         </div>
@@ -357,7 +370,7 @@ onMounted(load)
         ><div class="design-section-head">
           <div>
             <h3>设计工作量</h3>
-            <p>随默认参数、材料覆盖和 DAG 数量实时计算，不存入数据库</p>
+            <p>根据材料数量、实际使用参数和测定次数估算</p>
           </div>
         </div>
         <div v-if="config.workload" class="review-grid">
@@ -384,7 +397,7 @@ onMounted(load)
             }}</strong>
           </div>
         </div>
-        <div v-else class="wizard-empty">填写方案和材料后可查看估算</div></el-tab-pane
+        <div v-else class="wizard-empty">请先填写实验方案并添加材料，再查看预计工作量。</div></el-tab-pane
       >
     </el-tabs>
   </div>
@@ -393,21 +406,15 @@ onMounted(load)
       ><el-form-item label="实验名称"><el-input v-model="info.name" /></el-form-item
       ><el-form-item label="实验说明"
         ><el-input v-model="info.description" type="textarea" :rows="3" /></el-form-item
-      ><el-form-item v-if="editable" label="计划开始日期"
+      ><el-form-item label="计划开始日期"
         ><el-date-picker
           v-model="info.planned_start_date"
           type="date"
           value-format="YYYY-MM-DD" /></el-form-item
-      ><el-form-item label="状态"
-        ><el-select v-model="info.status"
-          ><el-option
-            v-for="choice in statusChoices"
-            :key="choice"
-            :label="statusLabels[choice]"
-            :value="choice" /></el-select></el-form-item></el-form
+      ></el-form
     ><template #footer
       ><el-button @click="infoOpen = false">取消</el-button
-      ><el-button type="primary" @click="saveInfo">保存</el-button></template
+      ><el-button type="primary" @click="saveInfo">保存实验信息</el-button></template
     ></el-dialog
   >
   <el-dialog v-model="protocolOpen" title="编辑默认方案" width="650px"
@@ -471,11 +478,11 @@ onMounted(load)
         :value="lot.id" /></el-select
     ><template #footer
       ><el-button @click="addOpen = false">取消</el-button
-      ><el-button type="primary" @click="addMaterial">加入</el-button></template
+      ><el-button type="primary" @click="addMaterial">加入实验材料</el-button></template
     ></el-dialog
   >
   <el-dialog v-model="dagOpen" title="编辑 DAG 测定时间点" width="540px"
-    ><p class="wizard-help">用逗号或空格分隔非负整数，按发芽后的天数自动排序。</p>
+    ><p class="wizard-help">填写幼苗发芽后第几天测定；用逗号或空格分隔多个天数。</p>
     <el-input v-model="dagText" placeholder="例如 1, 3, 5, 7" /><template #footer
       ><el-button @click="dagOpen = false">取消</el-button
       ><el-button type="primary" @click="saveDag">保存</el-button></template

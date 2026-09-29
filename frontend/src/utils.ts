@@ -35,4 +35,11 @@ export const entityLabels: Record<string, string> = {
   SeedLot: '种子批次',
   Experiment: '实验',
   User: '用户',
+  ExperimentProtocol: '实验方案',
+  ExperimentMaterial: '实验材料',
+  ExperimentMaterialOrder: '材料顺序',
+  MeasurementTimepoint: '测定时间',
+  GerminationDish: '培养皿',
+  GerminationObservation: '发芽巡检',
+  SeedlingSample: '幼苗样本',
 }

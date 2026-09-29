@@ -35,5 +35,5 @@ def flush_or_conflict(db: Session) -> None:
 def require_entity(db: Session, model: type, entity_id: str):
     item = db.get(model, entity_id)
     if item is None:
-        raise HTTPException(404, "记录不存在")
+        raise HTTPException(404, "找不到所选内容，请刷新页面后重试")
     return item

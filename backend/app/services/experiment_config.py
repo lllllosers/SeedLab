@@ -13,7 +13,7 @@ from app.services.common import commit_or_conflict, flush_or_conflict, next_code
 
 def editable(experiment: Experiment) -> None:
     if experiment.status not in {"draft", "ready"}:
-        raise HTTPException(409, "实验已开始或结束，不能修改结构性配置")
+        raise HTTPException(409, "实验已经开始或结束，不能再修改材料、重复数和测定时间")
 
 
 def protocol_for(db: Session, experiment_id: str) -> ExperimentProtocol | None:
@@ -285,12 +285,28 @@ def set_status(db: Session, experiment: Experiment, target: str) -> None:
     if target == experiment.status:
         return
     if target not in allowed[experiment.status]:
-        raise HTTPException(409, "不允许该实验状态转换")
+        raise HTTPException(409, "当前实验不能直接进入该状态，请先完成实验配置并正式开始实验")
     if target in {"ready", "active"}:
         protocol = protocol_for(db, experiment.id)
         materials = materials_for(db, experiment.id)
         days = days_for(db, experiment.id)
-        if not materials or not days:
-            raise HTTPException(422, "实验方案需要至少一个材料和一个 DAG 时间点")
+        missing = []
+        if protocol is None:
+            missing.append("填写默认实验方案")
+        else:
+            fields = {
+                "seeds_per_dish": "每皿种子数", "replicate_count": "重复数",
+                "observation_period_days": "观察周期", "sampling_rule": "取样方式",
+                "sample_count": "取样数", "sample_scope": "取样范围",
+                "germination_criterion": "发芽判定标准",
+            }
+            missing.extend(f"填写{label}" for key, label in fields.items()
+                           if not getattr(protocol, key))
+        if not materials:
+            missing.append("添加至少一个实验材料")
+        if not days:
+            missing.append("设置至少一个发芽后测定时间（DAG）")
+        if missing:
+            raise HTTPException(422, "标记为已就绪前，请先" + "、".join(missing))
         validate_all(protocol, materials)
     experiment.status = target
