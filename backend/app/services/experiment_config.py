@@ -9,9 +9,12 @@ from sqlalchemy.orm import Session
 from app.api.schemas import ConfiguredExperimentInput, MaterialInput, MaterialPatch, ProtocolInput
 from app.models import Experiment, ExperimentMaterial, ExperimentProtocol, GerminationDish, MeasurementTimepoint, SeedLot, Taxon, User
 from app.services.common import commit_or_conflict, flush_or_conflict, next_code, record, require_entity
+from app.services.ordering import material_key
 
 
 def editable(experiment: Experiment) -> None:
+    if experiment.numbering_locked_at:
+        raise HTTPException(409, "置床编号已确认；尚未置床时可先选择“重新调整实验”")
     if experiment.status not in {"draft", "ready"}:
         raise HTTPException(409, "实验已经开始或结束，不能再修改材料、重复数和测定时间")
 
@@ -21,8 +24,11 @@ def protocol_for(db: Session, experiment_id: str) -> ExperimentProtocol | None:
 
 
 def materials_for(db: Session, experiment_id: str) -> list[ExperimentMaterial]:
-    return list(db.scalars(select(ExperimentMaterial).where(ExperimentMaterial.experiment_id == experiment_id)
-                           .order_by(ExperimentMaterial.display_order, ExperimentMaterial.created_at, ExperimentMaterial.id)))
+    rows = db.execute(select(ExperimentMaterial, SeedLot, Taxon)
+                      .join(SeedLot, ExperimentMaterial.seed_lot_id == SeedLot.id)
+                      .join(Taxon, SeedLot.taxon_id == Taxon.id)
+                      .where(ExperimentMaterial.experiment_id == experiment_id)).all()
+    return [material for material, lot, taxon in sorted(rows, key=lambda row: material_key(row[2], row[1]))]
 
 
 def days_for(db: Session, experiment_id: str) -> list[MeasurementTimepoint]:
@@ -105,7 +111,10 @@ def material_dict(db: Session, material: ExperimentMaterial, protocol: Experimen
         "id": material.id, "seed_lot_id": material.seed_lot_id, "seed_lot_code": lot.code,
         "taxon_id": taxon.id, "taxon_common_name": taxon.common_name,
         "taxon_scientific_name": taxon.scientific_name, "taxon_code": taxon.code,
+        "source_code": lot.source_code, "source": lot.source, "collected_at": lot.collected_at,
+        "quantity": lot.quantity, "notes": lot.notes,
         "label": material.label, "display_order": material.display_order,
+        "experiment_number": material.experiment_number,
         "seeds_per_dish_override": material.seeds_per_dish_override,
         "replicate_count_override": material.replicate_count_override,
         "sample_count_override": material.sample_count_override,
@@ -131,7 +140,8 @@ def configuration(db: Session, experiment_id: str) -> dict:
     return {
         "experiment": experiment, "protocol": protocol,
         "owner_name": owner.display_name if owner else None,
-        "materials": [material_dict(db, item, protocol) for item in materials],
+        "materials": [{**material_dict(db, item, protocol), "preview_number": index}
+                      for index, item in enumerate(materials, start=1)],
         "dag_days": days, "workload": estimate,
     }
 
@@ -241,19 +251,7 @@ def remove_material(db: Session, experiment_id: str, material_id: str, user_id: 
 
 
 def reorder_materials(db: Session, experiment_id: str, material_ids: list[str], user_id: str) -> list[dict]:
-    editable(require_entity(db, Experiment, experiment_id))
-    current = materials_for(db, experiment_id)
-    if len(material_ids) != len(current) or set(material_ids) != {item.id for item in current}:
-        raise HTTPException(422, "材料排序必须包含本实验的每一个材料且不能重复")
-    before = [item.id for item in current]
-    by_id = {item.id: item for item in current}
-    for order, material_id in enumerate(material_ids):
-        by_id[material_id].display_order = order
-    record(db, user_id, "update", "ExperimentMaterialOrder", experiment_id,
-           {"material_ids": before}, {"material_ids": material_ids})
-    commit_or_conflict(db)
-    protocol = protocol_for(db, experiment_id)
-    return [material_dict(db, by_id[item_id], protocol) for item_id in material_ids]
+    raise HTTPException(409, "实验材料已按中文名自动排序，不能手动调整顺序")
 
 
 def replace_days(db: Session, experiment_id: str, days: list[int], user_id: str) -> list[int]:
@@ -281,6 +279,8 @@ def replace_days(db: Session, experiment_id: str, days: list[int], user_id: str)
 
 
 def set_status(db: Session, experiment: Experiment, target: str) -> None:
+    if experiment.numbering_locked_at and target == "draft":
+        raise HTTPException(409, "置床编号已确认；若尚未置床，请使用“重新调整实验”")
     allowed = {"draft": {"ready", "cancelled"}, "ready": {"draft", "cancelled"},
                "active": {"completed", "cancelled"}, "completed": set(), "cancelled": set()}
     if target == experiment.status:

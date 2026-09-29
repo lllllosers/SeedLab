@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import type { GerminationExecution } from '../types'
 import { dateTimeText, statusLabels } from '../utils'
 import GerminationQuickEntry from './GerminationExecution/GerminationQuickEntry.vue'
+import SowingManagement from './GerminationExecution/SowingManagement.vue'
 import DishStatusTable from './GerminationExecution/DishStatusTable.vue'
 import ObservationHistory from './GerminationExecution/ObservationHistory.vue'
 import PageBackButton from '../components/PageBackButton.vue'
@@ -14,28 +15,23 @@ const route = useRoute()
 const execution = ref<GerminationExecution | null>(null)
 const tab = ref('entry')
 const loading = ref(false)
+const loadedOnce = ref(false)
 async function load() {
   loading.value = true
   try {
     execution.value = (
       await api.get<GerminationExecution>(`/experiments/${route.params.id}/execution`)
     ).data
+    if (!loadedOnce.value) {
+      tab.value = execution.value.experiment.status === 'ready' ? 'sowing' : 'entry'
+      loadedOnce.value = true
+    }
   } catch (error) {
     ElMessage.error(errorMessage(error))
   } finally {
     loading.value = false
   }
 }
-const elapsedDays = computed(() => {
-  const started = execution.value?.experiment.started_at
-  return started
-    ? Math.max(0, Math.floor((Date.now() - new Date(started).getTime()) / 86400000))
-    : 0
-})
-const periodProgress = computed(() => {
-  const period = execution.value?.observation_period_days
-  return period ? Math.min(100, Math.round((elapsedDays.value / period) * 100)) : 0
-})
 onMounted(load)
 </script>
 <template>
@@ -44,7 +40,7 @@ onMounted(load)
     <div>
       <div class="eyebrow">发芽实验执行 · {{ execution.experiment.code }}</div>
       <h1>{{ execution.experiment.name }}</h1>
-      <p>填写本次新发芽的种子数量；空白表示未检查，0 表示已检查但没有新发芽。置床于 {{ dateTimeText(execution.experiment.started_at) }} · {{ execution.dish_count }} 个培养皿</p>
+      <p>先在置床管理中登记每个培养皿的实际时间，再记录发芽巡检。首次置床 {{ dateTimeText(execution.experiment.started_at) }} · {{ execution.dish_count }} 个计划培养皿</p>
     </div>
     <div class="heading-actions">
       <span class="status-pill large" :class="execution.experiment.status">{{
@@ -56,22 +52,14 @@ onMounted(load)
     ><div v-if="execution.observation_period_overdue" class="execution-alert">
       <b>已超过计划观察期</b><span>仍可继续记录真实巡检与晚期发芽；实验不会自动完成。</span>
     </div>
-    <div class="execution-hero surface-panel">
-      <div>
-        <span class="eyebrow">计划观察期</span>
-        <h2>计划观察期 {{ execution.observation_period_days ?? '—' }} 天</h2>
-        <p>
-          已运行 {{ elapsedDays }} 天 · 计划结束
-          {{ dateTimeText(execution.observation_period_end_at) }}
-        </p>
-      </div>
-      <div class="execution-hero-progress">
-        <strong>{{ periodProgress }}%</strong
-        ><el-progress :percentage="periodProgress" :show-text="false" :stroke-width="6" /><small
-          >计划时间进度</small
-        >
-      </div>
-    </div>
+    <div class="execution-hero surface-panel"><div>
+      <span class="eyebrow">实际置床进度</span>
+      <h2>已置床 {{ execution.sown_count }} / {{ execution.dish_count }} 个培养皿</h2>
+      <p v-if="execution.pending_count">尚有 {{ execution.pending_material_count }} 个材料未完成置床，整个实验最终完成日期暂不能确定。</p>
+      <p v-else-if="execution.sown_count">按已置床培养皿估算最晚完成：{{ dateTimeText(execution.latest_sown_estimated_finish_at) }}</p>
+      <p v-else>尚无培养皿实际置床。</p>
+      <p v-if="execution.sown_count && execution.pending_count">当前已置床部分预计最晚完成：{{ dateTimeText(execution.latest_sown_estimated_finish_at) }}</p>
+    </div></div>
     <div class="execution-stats">
       <div class="surface-panel">
         <small>培养皿</small><strong>{{ execution.dish_count }}</strong>
@@ -88,6 +76,7 @@ onMounted(load)
       <div class="surface-panel">
         <small>已选幼苗</small><strong>{{ execution.sample_count }}</strong>
       </div>
+      <div class="surface-panel"><small>待置床</small><strong>{{ execution.pending_count }}</strong></div>
     </div>
     <section class="surface-panel material-overview">
       <div class="execution-section-head">
@@ -126,16 +115,17 @@ onMounted(load)
     </section>
     <section class="surface-panel execution-workspace">
       <el-tabs v-model="tab"
-        ><el-tab-pane label="快速巡检" name="entry"
+        ><el-tab-pane label="置床管理" name="sowing"><SowingManagement :execution="execution" @changed="load" /></el-tab-pane
+        ><el-tab-pane label="发芽巡检" name="entry"
           ><GerminationQuickEntry
             v-if="execution.experiment.status === 'active'"
             :execution="execution"
             @saved="load"
           />
-          <div v-else class="wizard-empty">该实验目前不在进行中，不能新增巡检记录。可查看已有记录。</div></el-tab-pane
+          <div v-else class="wizard-empty">当前实验还不能新增发芽巡检。请先确认置床编号，并在“置床管理”登记至少一个培养皿的实际置床时间。</div></el-tab-pane
         ><el-tab-pane label="培养皿状态" name="dishes"
           ><DishStatusTable :execution="execution" /></el-tab-pane
-        ><el-tab-pane label="最近巡检" name="history"
+        ><el-tab-pane label="巡检历史" name="history"
           ><ObservationHistory :execution="execution" @changed="load" /></el-tab-pane
       ></el-tabs>
     </section>

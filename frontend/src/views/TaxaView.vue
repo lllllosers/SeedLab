@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage } from '../api/client'
@@ -14,7 +14,22 @@ const includeInactive = ref(false)
 const loading = ref(false)
 const editorOpen = ref(false)
 const editingId = ref<string | null>(null)
-const form = reactive({ scientific_name: '', common_name: '', family: '', notes: '' })
+const form = reactive({ scientific_name: '', common_name: '', family: '', genus: '', life_form: '', notes: '' })
+const sort = ref<{ prop: string; order: string | null }>({ prop: 'default', order: null })
+function onSortChange(value: { prop: string; order: string | null }) {
+  sort.value = { prop: value.prop || 'default', order: value.order }
+}
+const collator = new Intl.Collator('zh-Hans-CN-u-co-pinyin')
+const visibleItems = computed(() => sort.value.prop === 'default' ? items.value : [...items.value].sort((a, b) => {
+  const direction = sort.value.order === 'descending' ? -1 : 1
+  const prop = sort.value.prop
+  const comparison = prop === 'code' ? a.code.localeCompare(b.code) :
+    prop === 'scientific_name' ? a.scientific_name.localeCompare(b.scientific_name) :
+    prop === 'family' ? (a.family || '').localeCompare(b.family || '') :
+    prop === 'created_at' ? a.created_at.localeCompare(b.created_at) :
+    collator.compare(a.common_name || a.scientific_name, b.common_name || b.scientific_name)
+  return direction * (comparison || a.code.localeCompare(b.code))
+}))
 async function load() {
   loading.value = true
   try {
@@ -35,6 +50,8 @@ function openEditor(item?: Taxon) {
     scientific_name: item?.scientific_name || '',
     common_name: item?.common_name || '',
     family: item?.family || '',
+    genus: item?.genus || '',
+    life_form: item?.life_form || '',
     notes: item?.notes || '',
   })
   editorOpen.value = true
@@ -45,6 +62,8 @@ async function save() {
     scientific_name: form.scientific_name.trim(),
     common_name: form.common_name.trim() || null,
     family: form.family.trim() || null,
+    genus: form.genus.trim() || null,
+    life_form: form.life_form.trim() || null,
     notes: form.notes.trim() || null,
   }
   try {
@@ -93,7 +112,7 @@ onMounted(load)
       <div class="toolbar-actions">
         <el-input
           v-model="query"
-          placeholder="搜索编号、学名或俗名"
+          placeholder="搜索物种编号、中文名或学名"
           clearable
           :prefix-icon="Search"
           @input="load"
@@ -101,20 +120,23 @@ onMounted(load)
       </div>
     </div>
     <el-table
-      :data="items"
+      :data="visibleItems"
       v-loading="loading"
       class="data-table"
+      @row-dblclick="(row: Taxon) => router.push(`/taxa/${row.id}`)"
+      @sort-change="onSortChange"
       empty-text="还没有物种信息。请点击右上角新增物种，再添加种子批次。"
-      ><el-table-column prop="code" label="编号" width="130" /><el-table-column
-        label="物种"
+      ><el-table-column prop="code" label="物种编号" width="130" sortable="custom" /><el-table-column
+        prop="common_name" label="中文名"
         min-width="260"
+        sortable="custom"
         ><template #default="{ row }"
           ><div class="taxon-name">
-            <b>{{ row.common_name || row.scientific_name }}</b
-            ><small>{{ row.scientific_name }}</small>
+            <router-link class="table-link strong" :to="`/taxa/${row.id}`">{{ row.common_name || row.scientific_name }}</router-link>
           </div></template
         ></el-table-column
-      ><el-table-column prop="family" label="科" min-width="130"
+      ><el-table-column prop="scientific_name" label="学名" min-width="180" sortable="custom" />
+      <el-table-column prop="family" label="科" min-width="130" sortable="custom"
         ><template #default="{ row }">{{ row.family || '—' }}</template></el-table-column
       ><el-table-column label="状态" width="100"
         ><template #default="{ row }"
@@ -122,11 +144,11 @@ onMounted(load)
             row.is_active ? '使用中' : '已停用'
           }}</span></template
         ></el-table-column
-      ><el-table-column label="创建日期" width="120"
+      ><el-table-column prop="created_at" label="创建日期" width="120" sortable="custom"
         ><template #default="{ row }">{{ dateText(row.created_at) }}</template></el-table-column
       ><el-table-column label="操作" width="220" fixed="right"
         ><template #default="{ row }"
-          ><el-button link type="primary" @click="router.push(`/taxa/${row.id}`)">查看</el-button
+          ><el-button link type="primary" @click="router.push(`/taxa/${row.id}`)">查看详情</el-button
           ><el-button link @click="openEditor(row)">编辑</el-button
           ><el-button link :type="row.is_active ? 'warning' : 'success'" @click="toggle(row)">{{
             row.is_active ? '停用' : '启用'
@@ -144,6 +166,8 @@ onMounted(load)
       ><el-form-item label="中文名 / 俗名"
         ><el-input v-model="form.common_name" placeholder="选填" /></el-form-item
       ><el-form-item label="科"><el-input v-model="form.family" placeholder="选填" /></el-form-item
+      ><el-form-item label="属"><el-input v-model="form.genus" placeholder="选填" /></el-form-item
+      ><el-form-item label="生活型"><el-input v-model="form.life_form" placeholder="选填" /></el-form-item
       ><el-form-item label="备注"
         ><el-input
           v-model="form.notes"

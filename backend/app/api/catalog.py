@@ -9,6 +9,7 @@ from app.core.auth import current_user
 from app.db.session import get_db
 from app.models import SeedLot, Taxon, User
 from app.services.common import commit_or_conflict, flush_or_conflict, next_code, record, require_entity
+from app.services.ordering import taxon_key, material_key
 
 
 router = APIRouter(tags=["catalog"])
@@ -30,7 +31,7 @@ def list_taxa(q: str = "", include_inactive: bool = False, db: Session = Depends
         statement = statement.where(or_(Taxon.code.ilike(term), Taxon.scientific_name.ilike(term), Taxon.common_name.ilike(term)))
     if not include_inactive:
         statement = statement.where(Taxon.is_active.is_(True))
-    return db.scalars(statement.order_by(Taxon.created_at.desc()).limit(500)).all()
+    return sorted(db.scalars(statement.limit(500)).all(), key=taxon_key)
 
 
 @router.post("/taxa", response_model=TaxonOut, status_code=201)
@@ -80,8 +81,8 @@ def list_lots(taxon_id: str | None = None, q: str = "", db: Session = Depends(ge
         term = f"%{q.strip()}%"
         statement = statement.where(or_(SeedLot.code.ilike(term), SeedLot.source.ilike(term),
                                         Taxon.common_name.ilike(term), Taxon.scientific_name.ilike(term),
-                                        Taxon.code.ilike(term)))
-    return db.scalars(statement.order_by(SeedLot.created_at.desc()).limit(500)).all()
+                                        Taxon.code.ilike(term), SeedLot.source_code.ilike(term)))
+    return sorted(db.scalars(statement.limit(500)).all(), key=lambda lot: material_key(lot.taxon, lot))
 
 
 @router.post("/seed-lots", response_model=SeedLotOut, status_code=201)

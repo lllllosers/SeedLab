@@ -10,7 +10,6 @@ import type {
   ExperimentProtocol,
 } from '../types'
 import { dateText, statusLabels } from '../utils'
-import StartExperimentDialog from './GerminationExecution/StartExperimentDialog.vue'
 import PageBackButton from '../components/PageBackButton.vue'
 
 const route = useRoute()
@@ -25,7 +24,6 @@ const protocolOpen = ref(false)
 const materialOpen = ref(false)
 const addOpen = ref(false)
 const dagOpen = ref(false)
-const startOpen = ref(false)
 const info = reactive({
   name: '',
   description: '',
@@ -97,7 +95,7 @@ async function changeStatus(target: 'ready' | 'draft') {
   try {
     await ElMessageBox.confirm(
       preparing
-        ? '标记后仍可返回草稿修改；正式开始实验后将不能再修改材料、重复数和测定时间。'
+        ? '标记后仍可返回草稿修改；确认置床编号后须先解除确认才能修改材料、重复数和测定时间。'
         : '返回草稿后可继续调整材料、方案和测定时间；调整完成后需要再次标记为已就绪。',
       preparing ? '确定将实验标记为“已就绪”吗？' : '确定将实验返回草稿吗？',
       { confirmButtonText: preparing ? '标记为已就绪' : '返回草稿', cancelButtonText: '取消' },
@@ -178,12 +176,30 @@ async function removeMaterial(entry: ExperimentMaterial) {
   }
   run(() => api.delete(`${base.value}/materials/${entry.id}`), '材料已移除')
 }
-function moveMaterial(index: number, delta: number) {
-  const ids = config.value?.materials.map((entry) => entry.id) || []
-  const other = index + delta
-  if (other < 0 || other >= ids.length) return
-  ;[ids[index], ids[other]] = [ids[other]!, ids[index]!]
-  run(() => api.put(`${base.value}/materials/order`, { material_ids: ids }), '材料顺序已更新')
+async function confirmNumbers() {
+  try {
+    await ElMessageBox.confirm('系统将先按中文名排序，再为材料和培养皿生成正式现场编号。请核对置床清单后确认。',
+      '确认置床编号', { confirmButtonText: '确认置床编号', cancelButtonText: '取消' })
+  } catch { return }
+  await run(() => api.post(`${base.value}/confirm-numbers`), '置床编号已确认')
+}
+async function reopenDesign() {
+  try {
+    await ElMessageBox.confirm('解除编号确认后，当前001、002……编号方案将失效。调整完成后需要重新确认并重新打印置床清单。',
+      '重新调整实验', { confirmButtonText: '重新调整实验', cancelButtonText: '取消' })
+  } catch { return }
+  await run(() => api.post(`${base.value}/reopen-design`), '已返回可调整状态')
+}
+async function downloadSowingSheet() {
+  try {
+    const { data } = await api.get<Blob>(`${base.value}/sowing-sheet.xlsx`, { responseType: 'blob' })
+    const url = URL.createObjectURL(data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'seedlab-sowing-sheet.xlsx'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error) { ElMessage.error(errorMessage(error)) }
 }
 function editDag() {
   dagText.value = config.value?.dag_days.join(', ') || ''
@@ -210,14 +226,15 @@ onMounted(load)
     <div>
       <div class="eyebrow">实验编号 {{ item.code }}</div>
       <h1>{{ item.name }}</h1>
-      <p>核对实验材料和测定方案，确认无误后开始实验。计划开始 {{ dateText(item.planned_start_date) }}</p>
+      <p>核对材料和方案，确认置床编号后可分批登记实际置床时间。计划开始 {{ dateText(item.planned_start_date) }}</p>
     </div>
     <div class="heading-actions">
       <span class="experiment-current-status">当前状态：<span class="status-pill large" :class="item.status">{{ statusLabels[item.status] }}</span></span
       ><el-button v-if="item.status === 'draft'" type="primary" @click="changeStatus('ready')">标记为已就绪</el-button
-      ><el-button v-if="item.status === 'ready'" @click="changeStatus('draft')">返回草稿</el-button
-      ><el-button v-if="item.status === 'ready'" type="primary" @click="startOpen = true"
-        >正式开始实验</el-button
+      ><el-button v-if="item.status === 'ready' && !item.numbering_locked_at" @click="changeStatus('draft')">返回草稿</el-button
+      ><el-button v-if="item.status === 'ready' && !item.numbering_locked_at" type="primary" @click="confirmNumbers">确认置床编号</el-button
+      ><el-button v-if="item.status === 'ready' && item.numbering_locked_at" @click="reopenDesign">重新调整实验</el-button
+      ><el-button v-if="item.status === 'ready' && item.numbering_locked_at" type="primary" @click="router.push(`/experiments/${item.id}/germination`)">进入置床管理</el-button
       ><el-button
         v-if="item.status === 'active'"
         type="primary"
@@ -229,7 +246,7 @@ onMounted(load)
   </div>
   <p v-if="item" class="experiment-flow-hint">{{
     item.status === 'draft' ? '确认材料、方案和发芽后测定时间（DAG）后，可标记为已就绪。' :
-    item.status === 'ready' ? '确认实际置床时间后正式开始；如需调整方案，请先返回草稿。' :
+    item.status === 'ready' ? (item.numbering_locked_at ? '置床编号已确认。可下载清单并分批置床；尚未置床时可以重新调整实验。' : '方案已就绪。请先预览置床清单，再确认置床编号。') :
     item.status === 'active' ? '实验正在执行，进入发芽巡检页面记录数据。' :
     '该实验目前不再接受材料和测定方案修改。'
   }}</p>
@@ -257,12 +274,13 @@ onMounted(load)
             ><strong>{{ config.workload?.estimated_measurement_count ?? '—' }}</strong>
           </div>
           <div>
-            <small>预计最晚完成</small
+            <small>按计划估算最晚完成</small
             ><strong class="date">{{
               config.workload?.estimated_latest_finish_date || '未计算'
             }}</strong>
           </div>
         </div>
+        <p class="form-hint">最晚完成日期按全部材料在计划日置床、观察期最后一天发芽估算；实际分批置床后可能变化。</p>
         <div class="design-note">
           <b>实验说明</b>
           <p>{{ item?.description || '暂无说明' }}</p>
@@ -326,9 +344,10 @@ onMounted(load)
         <div v-for="(entry, index) in config.materials" :key="entry.id" class="detail-material-row">
           <span class="wizard-order">{{ index + 1 }}</span>
           <div class="grow">
+            <span class="wizard-order">{{ entry.experiment_number ? String(entry.experiment_number).padStart(3, '0') : `预计${String(entry.preview_number).padStart(3, '0')}` }}</span>
             <b>{{ entry.taxon_common_name || entry.taxon_scientific_name }}</b>
             <small v-if="entry.taxon_common_name">{{ entry.taxon_scientific_name }}</small>
-            <small>{{ entry.seed_lot_code }} {{ entry.label || '' }}</small>
+            <small>原始材料编号：{{ entry.source_code || '未填写' }} · {{ entry.seed_lot_code }} {{ entry.label || '' }}</small>
           </div>
           <div class="material-metrics">
             <span
@@ -340,13 +359,7 @@ onMounted(load)
             >
           </div>
           <div v-if="editable" class="material-actions">
-            <el-button link :disabled="index === 0" @click="moveMaterial(index, -1)">上移</el-button
-            ><el-button
-              link
-              :disabled="index === config.materials.length - 1"
-              @click="moveMaterial(index, 1)"
-              >下移</el-button
-            ><el-button link @click="editMaterial(entry)">参数</el-button
+            <el-button link @click="editMaterial(entry)">参数</el-button
             ><el-button link type="danger" @click="removeMaterial(entry)">移除</el-button>
           </div>
         </div>
@@ -354,6 +367,21 @@ onMounted(load)
           尚未加入实验材料。请先添加种子批次，再标记为已就绪。
         </div></el-tab-pane
       >
+      <el-tab-pane label="置床清单" name="sowing">
+        <div class="design-section-head"><div><h3>置床清单</h3><p>先按中文名排序，再编号。确认后可下载正式清单，现场编号不会因后续置床顺序改变。</p></div>
+          <el-button v-if="item?.numbering_locked_at" @click="downloadSowingSheet">下载 Excel</el-button>
+        </div>
+        <el-table :data="config.materials" max-height="560">
+          <el-table-column label="实验编号" width="125"><template #default="{ row }">{{ row.experiment_number ? String(row.experiment_number).padStart(3, '0') : `预计${String(row.preview_number).padStart(3, '0')}` }}</template></el-table-column>
+          <el-table-column label="物种" min-width="200"><template #default="{ row }"><b>{{ row.taxon_common_name || row.taxon_scientific_name }}</b><small class="table-subtitle">{{ row.taxon_scientific_name }}</small></template></el-table-column>
+          <el-table-column prop="source_code" label="原始材料编号" width="150" />
+          <el-table-column prop="seed_lot_code" label="系统批次编号" width="165" />
+          <el-table-column prop="source" label="来源" min-width="130" />
+          <el-table-column label="采集/获得日期" width="155"><template #default="{ row }">{{ row.collected_at?.slice(0, 10) || '未填写' }}</template></el-table-column>
+          <el-table-column prop="effective_replicate_count" label="重复数" width="100" />
+          <el-table-column prop="effective_seeds_per_dish" label="每皿种子数" width="120" />
+        </el-table>
+      </el-tab-pane>
       <el-tab-pane label="发芽后测定时间（DAG）" name="dag"
         ><div class="design-section-head">
           <div>
@@ -392,7 +420,7 @@ onMounted(load)
             ><strong>{{ config.workload.estimated_measurement_count }}</strong>
           </div>
           <div>
-            <small>预计最晚完成</small
+            <small>按计划估算最晚完成</small
             ><strong class="date">{{
               config.workload.estimated_latest_finish_date || '未设置计划日期'
             }}</strong>
@@ -495,11 +523,4 @@ onMounted(load)
       ><el-button type="primary" @click="saveDag">保存</el-button></template
     ></el-dialog
   >
-  <StartExperimentDialog
-    v-if="config"
-    v-model="startOpen"
-    :experiment-id="config.experiment.id"
-    :workload="config.workload"
-    @started="router.push(`/experiments/${config.experiment.id}/germination`)"
-  />
 </template>

@@ -1,22 +1,79 @@
-from fastapi import APIRouter, Depends
+import io
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (BatchObservationInput, ObservationInput, ObservationPatch,
-                             StartExperimentInput)
+                             SowDishesInput, CorrectSowingInput, CancelDishInput)
 from app.core.auth import current_user
 from app.db.session import get_db
-from app.models import ExperimentMaterial, GerminationDish, SeedlingSample, User
+from app.models import Experiment, ExperimentMaterial, GerminationDish, SeedlingSample, User
 from app.services import germination_execution as execution
+from app.services import sowing_workflow as sowing
+from app.services import experiment_config as design
+from app.services.common import require_entity
+from app.services.ordering import display_number
 
 
 router = APIRouter(prefix="/experiments", tags=["germination execution"])
 
 
-@router.post("/{experiment_id}/start")
-def start_experiment(experiment_id: str, data: StartExperimentInput,
-                     db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return execution.start_experiment(db, experiment_id, data.sown_at, user.id)
+@router.get("/{experiment_id}/sowing-sheet.xlsx")
+def sowing_sheet(experiment_id: str, db: Session = Depends(get_db), _user: User = Depends(current_user)):
+    experiment = require_entity(db, Experiment, experiment_id)
+    if not experiment.numbering_locked_at:
+        raise HTTPException(422, "请先确认置床编号，再下载正式清单")
+    config = design.configuration(db, experiment_id)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "置床清单"
+    sheet.append(("实验编号", "中文名", "学名", "原始材料编号", "系统种子批次编号", "来源",
+                  "采集/获得日期", "重复数", "每皿种子数", "培养皿现场编号"))
+    for material in config["materials"]:
+        number = display_number(material["experiment_number"])
+        count = material["effective_replicate_count"]
+        for replicate in range(1, count + 1):
+            sheet.append((number, material["taxon_common_name"], material["taxon_scientific_name"],
+                          material["source_code"], material["seed_lot_code"], material["source"],
+                          material["collected_at"], count, material["effective_seeds_per_dish"],
+                          number if count == 1 else f"{number}-{replicate}"))
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": 'attachment; filename="seedlab-sowing-sheet.xlsx"'})
+
+
+@router.post("/{experiment_id}/confirm-numbers")
+def confirm_numbers(experiment_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return sowing.confirm_numbers(db, experiment_id, user.id)
+
+
+@router.post("/{experiment_id}/reopen-design")
+def reopen_design(experiment_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return sowing.unlock_numbers(db, experiment_id, user.id)
+
+
+@router.post("/{experiment_id}/sowing/batch")
+def batch_sowing(experiment_id: str, data: SowDishesInput,
+                 db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return sowing.sow_dishes(db, experiment_id, data.dish_ids, data.sown_at, user.id)
+
+
+@router.patch("/{experiment_id}/sowing/{dish_id}")
+def correct_sowing(experiment_id: str, dish_id: str, data: CorrectSowingInput,
+                   db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return sowing.correct_sowing(db, experiment_id, dish_id, data.sown_at, user.id)
+
+
+@router.post("/{experiment_id}/sowing/{dish_id}/cancel")
+def cancel_dish(experiment_id: str, dish_id: str, data: CancelDishInput,
+                db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return sowing.cancel_dish(db, experiment_id, dish_id, data.reason, user.id)
 
 
 @router.get("/{experiment_id}/execution")

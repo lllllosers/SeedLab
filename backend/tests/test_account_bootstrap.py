@@ -195,7 +195,7 @@ def test_migration_round_trip_preserves_users_and_sessions(tmp_path, monkeypatch
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e8b62c74a901"
         assert connection.execute(text("SELECT COUNT(*) FROM sessions WHERE user_id=:id"), {"id": user_id}).scalar() == 1
         assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     engine.dispose()

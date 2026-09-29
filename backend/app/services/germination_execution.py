@@ -11,7 +11,8 @@ from app.api.schemas import BatchObservationInput, ObservationPatch
 from app.models import (Experiment, ExperimentMaterial, GerminationDish, GerminationObservation,
                         SeedlingSample, SeedLot, Taxon)
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
-from app.services.experiment_config import days_for, effective, materials_for, protocol_for, validate_all
+from app.services.experiment_config import days_for, effective, materials_for, protocol_for
+from app.services.ordering import display_number, field_number
 
 
 def utc_naive(value: datetime) -> datetime:
@@ -29,53 +30,6 @@ def dishes_for(db: Session, experiment_id: str) -> list[GerminationDish]:
     return list(db.scalars(select(GerminationDish).join(ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id)
                            .where(ExperimentMaterial.experiment_id == experiment_id)
                            .order_by(ExperimentMaterial.display_order, GerminationDish.replicate_no)))
-
-
-def generate_dishes(db: Session, experiment: Experiment, materials: list[ExperimentMaterial], protocol, sown_at: datetime,
-                    user_id: str) -> list[GerminationDish]:
-    generated = []
-    for material_index, material in enumerate(materials, start=1):
-        values = effective(material, protocol)
-        for replicate in range(1, values["effective_replicate_count"] + 1):
-            dish = GerminationDish(
-                material_id=material.id, code=f"{experiment.code}-M{material_index:03d}-R{replicate:02d}",
-                replicate_no=replicate, label=f"R{replicate}",
-                seed_count=values["effective_seeds_per_dish"], sown_at=sown_at,
-            )
-            db.add(dish)
-            generated.append(dish)
-    flush_or_conflict(db)
-    for dish in generated:
-        record(db, user_id, "create", "GerminationDish", dish.id, None,
-               {"code": dish.code, "material_id": dish.material_id, "replicate_no": dish.replicate_no,
-                "seed_count": dish.seed_count, "sown_at": iso_utc(dish.sown_at)})
-    return generated
-
-
-def start_experiment(db: Session, experiment_id: str, sown_at: datetime, user_id: str) -> dict:
-    try:
-        experiment = require_entity(db, Experiment, experiment_id)
-        if experiment.status != "ready":
-            raise HTTPException(409, "只有已就绪实验可以正式开始，且不能重复开始")
-        protocol = protocol_for(db, experiment_id)
-        materials = materials_for(db, experiment_id)
-        if not materials or not days_for(db, experiment_id):
-            raise HTTPException(422, "开始实验前，请至少添加一个材料并设置一个发芽后测定时间（DAG）")
-        validate_all(protocol, materials)
-        if dishes_for(db, experiment_id):
-            raise HTTPException(409, "实验已经存在培养皿，不能重新生成")
-        actual_start = utc_naive(sown_at)
-        generated = generate_dishes(db, experiment, materials, protocol, actual_start, user_id)
-        experiment.started_at = actual_start
-        experiment.status = "active"
-        record(db, user_id, "update", "Experiment", experiment.id,
-               {"status": "ready", "started_at": None},
-               {"status": "active", "started_at": iso_utc(actual_start), "dish_count": len(generated)})
-        commit_or_conflict(db)
-    except Exception:
-        db.rollback()
-        raise
-    return execution_summary(db, experiment_id)
 
 
 def cumulative(db: Session, dish_id: str) -> int:
@@ -162,6 +116,8 @@ def batch_create_observations(db: Session, experiment_id: str, data: BatchObserv
             material = require_entity(db, ExperimentMaterial, dish.material_id)
             if material.experiment_id != experiment_id:
                 raise HTTPException(404, "培养皿不属于当前实验")
+            if dish.cancelled_at is not None:
+                raise HTTPException(409, "已取消的培养皿不能记录发芽巡检")
             if dish.sown_at is None:
                 raise HTTPException(422, f"培养皿 {dish.code} 缺少实际置床时间")
             if observed_at < utc_naive(dish.sown_at):
@@ -273,7 +229,8 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
             samples_by_source[sample.source_observation_id] += 1
     material_rows = []
     dish_rows = []
-    for material in materials:
+    local_today = datetime.now(timezone(timedelta(hours=8))).date()
+    for preview_number, material in enumerate(materials, start=1):
         lot = require_entity(db, SeedLot, material.seed_lot_id)
         taxon = require_entity(db, Taxon, lot.taxon_id)
         relevant = [dish for dish in dishes if dish.material_id == material.id]
@@ -282,17 +239,28 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
             "seeds_per_dish", "replicate_count", "sample_count", "sample_scope"))
         values = effective(material, protocol) if has_defaults else None
         material_seed_total = material_germinated = 0
+        replicate_count = values["effective_replicate_count"] if values else len(relevant)
         for dish in relevant:
             history = observations_by_dish[dish.id]
             germinated = sum(item.new_germinated_count for item in history)
-            material_seed_total += dish.seed_count
+            if dish.sown_at and not dish.cancelled_at:
+                material_seed_total += dish.seed_count
             material_germinated += germinated
             dish_rows.append({
                 "id": dish.id, "code": dish.code, "material_id": material.id,
                 "taxon_common_name": taxon.common_name, "taxon_scientific_name": taxon.scientific_name,
                 "taxon_code": taxon.code, "seed_lot_code": lot.code,
+                "source_code": lot.source_code,
+                "experiment_number": material.experiment_number,
+                "preview_number": preview_number,
+                "field_number": field_number(material, replicate_count, dish.replicate_no) if material.experiment_number else None,
                 "replicate_no": dish.replicate_no, "label": dish.label,
                 "seed_count": dish.seed_count, "sown_at": iso_utc(dish.sown_at),
+                "cancelled_at": iso_utc(dish.cancelled_at), "cancel_reason": dish.cancel_reason,
+                "today_observed": any((utc_naive(item.observed_at).replace(tzinfo=timezone.utc)
+                                      .astimezone(timezone(timedelta(hours=8))).date() == local_today) for item in history),
+                "observation_period_end_at": iso_utc(utc_naive(dish.sown_at) + timedelta(days=protocol.observation_period_days))
+                  if dish.sown_at and protocol and protocol.observation_period_days else None,
                 "cumulative_germinated": germinated,
                 "germination_rate": round(germinated / dish.seed_count * 100, 2),
                 "remaining_ungerminated": dish.seed_count - germinated,
@@ -305,30 +273,52 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
         material_rows.append({
             "id": material.id, "taxon_common_name": taxon.common_name,
             "taxon_scientific_name": taxon.scientific_name, "taxon_code": taxon.code,
-            "seed_lot_code": lot.code,
+            "seed_lot_code": lot.code, "source_code": lot.source_code,
+            "experiment_number": material.experiment_number, "preview_number": preview_number,
+            "sown_count": sum(dish.sown_at is not None for dish in relevant),
+            "cancelled_count": sum(dish.cancelled_at is not None for dish in relevant),
             "dish_count": len(relevant), "seed_count": material_seed_total,
             "cumulative_germinated": material_germinated,
             "germination_rate": round(material_germinated / material_seed_total * 100, 2) if material_seed_total else 0,
             "sample_count": material_samples,
-            "sample_target": values["effective_sample_count"] * (len(relevant) if protocol.sample_scope == "per_dish" else 1) if values else None,
+            "sample_target": values["effective_sample_count"] * (
+                sum(dish.cancelled_at is None for dish in relevant) if protocol.sample_scope == "per_dish" else 1
+            ) if values else None,
         })
     observations.sort(key=lambda item: (utc_naive(item.observed_at), dish_by_id[item.dish_id].replicate_no), reverse=True)
+    field_by_dish = {row["id"]: row["field_number"] for row in dish_rows}
     recent = [{**observation_snapshot(item), "dish_code": dish_by_id[item.dish_id].code,
+               "field_number": field_by_dish[item.dish_id],
                "replicate_no": dish_by_id[item.dish_id].replicate_no,
                "generated_sample_count": samples_by_source[item.id]}
               for item in observations[:100]]
-    total_seeds = sum(dish.seed_count for dish in dishes)
+    total_seeds = sum(dish.seed_count for dish in dishes if dish.sown_at and not dish.cancelled_at)
     total_germinated = sum(item.new_germinated_count for item in observations)
-    period_end = utc_naive(experiment.started_at) + timedelta(days=protocol.observation_period_days) if experiment.started_at and protocol and protocol.observation_period_days else None
+    sown_dishes = [dish for dish in dishes if dish.sown_at]
+    pending_dishes = [dish for dish in dishes if not dish.sown_at and not dish.cancelled_at]
+    period_end = max((utc_naive(dish.sown_at) + timedelta(days=protocol.observation_period_days)
+                      for dish in sown_dishes), default=None) if protocol and protocol.observation_period_days else None
+    dag_days = [item.day_after_germination for item in days_for(db, experiment_id)]
+    latest_finish = period_end + timedelta(days=max(dag_days)) if period_end and dag_days else None
     return {
         "experiment": {"id": experiment.id, "code": experiment.code, "name": experiment.name,
-                       "status": experiment.status, "started_at": iso_utc(experiment.started_at)},
+                       "status": experiment.status, "started_at": iso_utc(experiment.started_at),
+                       "numbering_locked_at": iso_utc(experiment.numbering_locked_at)},
         "sampling_rule": protocol.sampling_rule if protocol else None,
         "sample_scope": protocol.sample_scope if protocol else None,
         "observation_period_days": protocol.observation_period_days if protocol else None,
         "observation_period_end_at": iso_utc(period_end),
         "observation_period_overdue": bool(period_end and datetime.now(timezone.utc).replace(tzinfo=None) > period_end),
         "dish_count": len(dishes), "seed_count": total_seeds,
+        "sown_count": len(sown_dishes), "pending_count": len(pending_dishes),
+        "cancelled_count": sum(dish.cancelled_at is not None for dish in dishes),
+        "today_observed_count": sum(row["today_observed"] for row in dish_rows if row["sown_at"] and not row["cancelled_at"]),
+        "today_pending_count": sum(not row["today_observed"] for row in dish_rows if row["sown_at"] and not row["cancelled_at"] and
+                                   (not row["observation_period_end_at"] or datetime.now(timezone.utc) <=
+                                    datetime.fromisoformat(row["observation_period_end_at"].replace("Z", "+00:00")))),
+        "latest_sown_estimated_finish_at": iso_utc(latest_finish),
+        "pending_material_count": sum(any(not dish.sown_at and not dish.cancelled_at for dish in dishes
+                                         if dish.material_id == material.id) for material in materials),
         "cumulative_germinated": total_germinated,
         "germination_rate": round(total_germinated / total_seeds * 100, 2) if total_seeds else 0,
         "sample_count": len(samples),

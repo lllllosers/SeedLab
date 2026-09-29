@@ -13,7 +13,7 @@ const form = reactive({ id: '', dishCode: '', count: 0, notes: '' })
 function edit(observation: GerminationObservation) {
   Object.assign(form, {
     id: observation.id,
-    dishCode: observation.dish_code,
+    dishCode: observation.field_number || observation.dish_code,
     count: observation.new_germinated_count,
     notes: observation.notes || '',
   })
@@ -38,7 +38,7 @@ async function save() {
 async function remove(observation: GerminationObservation) {
   try {
     await ElMessageBox.confirm(
-      `确定删除培养皿 ${observation.dish_code} 在 ${dateTimeText(observation.observed_at)} 的巡检吗？删除后发芽累计数会重新计算。`,
+      `确定删除培养皿 ${observation.field_number || observation.dish_code} 在 ${dateTimeText(observation.observed_at)} 的巡检吗？删除后发芽累计数会重新计算。`,
       '删除巡检记录',
     )
   } catch {
@@ -77,7 +77,7 @@ async function remove(observation: GerminationObservation) {
         <tr v-for="observation in execution.recent_observations" :key="observation.id">
           <td>{{ dateTimeText(observation.observed_at) }}</td>
           <td>
-            <b>{{ observation.dish_code }}</b>
+            <b>{{ observation.field_number || observation.dish_code }}</b>
           </td>
           <td>
             <strong>{{ observation.new_germinated_count }}</strong>

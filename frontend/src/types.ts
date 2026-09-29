@@ -12,6 +12,8 @@ export interface Taxon {
   scientific_name: string
   common_name: string | null
   family: string | null
+  genus: string | null
+  life_form: string | null
   notes: string | null
   is_active: boolean
   created_at: string
@@ -22,6 +24,8 @@ export interface SeedLot {
   taxon_id: string
   taxon: Taxon
   source: string | null
+  source_code: string | null
+  collected_at: string | null
   quantity: number | null
   notes: string | null
   is_active: boolean
@@ -37,6 +41,7 @@ export interface Experiment {
   planned_start_date: string | null
   owner_id: string | null
   started_at: string | null
+  numbering_locked_at: string | null
   ended_at: string | null
   created_at: string
 }
@@ -53,11 +58,15 @@ export interface ExperimentProtocol {
 export interface AvailableLot {
   id: string
   code: string
+  sort_rank: number
   taxon_id: string
   taxon_common_name: string | null
   taxon_scientific_name: string
   taxon_code: string
   source: string | null
+  source_code: string | null
+  collected_at: string | null
+  notes: string | null
   quantity: number | null
 }
 export interface ExperimentMaterialInput {
@@ -70,11 +79,18 @@ export interface ExperimentMaterialInput {
 export interface ExperimentMaterial extends ExperimentMaterialInput {
   id: string
   seed_lot_code: string
+  source_code: string | null
+  source: string | null
+  collected_at: string | null
+  quantity: number | null
+  notes: string | null
   taxon_id: string
   taxon_common_name: string | null
   taxon_scientific_name: string
   taxon_code: string
   display_order: number
+  experiment_number: number | null
+  preview_number: number
   effective_seeds_per_dish: number | null
   effective_replicate_count: number | null
   effective_sample_count: number | null
@@ -103,10 +119,18 @@ export interface GerminationDishStatus {
   taxon_scientific_name: string
   taxon_code: string
   seed_lot_code: string
+  source_code: string | null
+  experiment_number: number | null
+  preview_number: number
+  field_number: string | null
   replicate_no: number
   label: string
   seed_count: number
   sown_at: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  today_observed: boolean
+  observation_period_end_at: string | null
   cumulative_germinated: number
   germination_rate: number
   remaining_ungerminated: number
@@ -122,6 +146,11 @@ export interface GerminationMaterialStatus {
   taxon_scientific_name: string
   taxon_code: string
   seed_lot_code: string
+  source_code: string | null
+  experiment_number: number | null
+  preview_number: number
+  sown_count: number
+  cancelled_count: number
   dish_count: number
   seed_count: number
   cumulative_germinated: number
@@ -133,6 +162,7 @@ export interface GerminationObservation {
   id: string
   dish_id: string
   dish_code: string
+  field_number: string | null
   replicate_no: number
   observed_at: string
   new_germinated_count: number
@@ -140,13 +170,20 @@ export interface GerminationObservation {
   generated_sample_count: number
 }
 export interface GerminationExecution {
-  experiment: Pick<Experiment, 'id' | 'code' | 'name' | 'status' | 'started_at'>
+  experiment: Pick<Experiment, 'id' | 'code' | 'name' | 'status' | 'started_at' | 'numbering_locked_at'>
   sampling_rule: string | null
   sample_scope: 'per_dish' | 'per_material' | null
   observation_period_days: number | null
   observation_period_end_at: string | null
   observation_period_overdue: boolean
   dish_count: number
+  sown_count: number
+  pending_count: number
+  cancelled_count: number
+  today_observed_count: number
+  today_pending_count: number
+  latest_sown_estimated_finish_at: string | null
+  pending_material_count: number
   seed_count: number
   cumulative_germinated: number
   germination_rate: number
@@ -170,6 +207,7 @@ export interface Dashboard {
   seed_lots: number
   experiments: number
   active_experiments: number
+  active_experiment_ids: string[]
   recent_experiments: Pick<Experiment, 'id' | 'code' | 'name' | 'status'>[]
   recent_actions: Pick<Audit, 'id' | 'action' | 'entity_type' | 'created_at'>[]
 }

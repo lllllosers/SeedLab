@@ -41,6 +41,8 @@ class Taxon(Identity, Base):
     scientific_name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     common_name: Mapped[str | None] = mapped_column(String(255))
     family: Mapped[str | None] = mapped_column(String(255))
+    genus: Mapped[str | None] = mapped_column(String(255))
+    life_form: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     seed_lots: Mapped[list["SeedLot"]] = relationship(back_populates="taxon")
@@ -52,6 +54,7 @@ class SeedLot(Identity, Base):
     taxon_id: Mapped[str] = mapped_column(ForeignKey("taxa.id", ondelete="RESTRICT"), index=True)
     collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str | None] = mapped_column(String(255))
+    source_code: Mapped[str | None] = mapped_column(String(120))
     quantity: Mapped[int | None] = mapped_column(Integer)
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -68,6 +71,7 @@ class Experiment(Identity, Base):
     planned_start_date: Mapped[date | None] = mapped_column(Date)
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    numbering_locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (CheckConstraint("status IN ('draft', 'ready', 'active', 'completed', 'cancelled')", name="ck_experiment_status"),)
 
@@ -98,12 +102,15 @@ class ExperimentMaterial(Identity, Base):
     seed_lot_id: Mapped[str] = mapped_column(ForeignKey("seed_lots.id", ondelete="RESTRICT"), index=True)
     label: Mapped[str | None] = mapped_column(String(120))
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    experiment_number: Mapped[int | None] = mapped_column(Integer)
     seeds_per_dish_override: Mapped[int | None] = mapped_column(Integer)
     replicate_count_override: Mapped[int | None] = mapped_column(Integer)
     sample_count_override: Mapped[int | None] = mapped_column(Integer)
     __table_args__ = (
         UniqueConstraint("experiment_id", "seed_lot_id", name="uq_material_experiment_lot"),
         CheckConstraint("display_order >= 0", name="ck_material_display_order"),
+        CheckConstraint("experiment_number IS NULL OR experiment_number > 0", name="ck_material_experiment_number"),
+        UniqueConstraint("experiment_id", "experiment_number", name="uq_material_experiment_number"),
         CheckConstraint("seeds_per_dish_override IS NULL OR seeds_per_dish_override > 0", name="ck_material_seeds_override"),
         CheckConstraint("replicate_count_override IS NULL OR replicate_count_override > 0", name="ck_material_replicates_override"),
         CheckConstraint("sample_count_override IS NULL OR sample_count_override > 0", name="ck_material_samples_override"),
@@ -129,9 +136,12 @@ class GerminationDish(Identity, Base):
     label: Mapped[str] = mapped_column(String(80), nullable=False)
     seed_count: Mapped[int] = mapped_column(Integer, nullable=False)
     sown_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
     __table_args__ = (
         CheckConstraint("seed_count > 0", name="ck_dish_seed_count"),
         CheckConstraint("replicate_no > 0", name="ck_dish_replicate_no"),
+        CheckConstraint("sown_at IS NULL OR cancelled_at IS NULL", name="ck_dish_sown_or_cancelled"),
         UniqueConstraint("code", name="uq_dish_code"),
         UniqueConstraint("material_id", "label", name="uq_dish_label"),
         UniqueConstraint("material_id", "replicate_no", name="uq_dish_material_replicate"),
@@ -185,3 +195,4 @@ class ImportJob(Identity, Base):
     total_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     successful_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text)
+    file_hash: Mapped[str | None] = mapped_column(String(64), index=True, unique=True)

@@ -27,11 +27,9 @@ onMounted(async () => {
   <div v-if="item" class="page-heading detail-heading">
     <div>
       <div class="eyebrow">物种编号 {{ item.code }}</div>
-      <h1>
-        <i>{{ item.scientific_name }}</i>
-      </h1>
+      <h1>{{ item.common_name || item.scientific_name }}</h1>
       <p>
-        {{ item.common_name || '暂无中文名' }} <span class="middle-dot">·</span>
+        <i>{{ item.scientific_name }}</i> <span class="middle-dot">·</span>
         {{ item.family || '未填写科' }}
       </p>
     </div>
@@ -66,6 +64,8 @@ onMounted(async () => {
           <dt>科</dt>
           <dd>{{ item.family || '—' }}</dd>
         </div>
+        <div><dt>属</dt><dd>{{ item.genus || '未填写' }}</dd></div>
+        <div><dt>生活型</dt><dd>{{ item.life_form || '未填写' }}</dd></div>
         <div>
           <dt>创建时间</dt>
           <dd>{{ dateText(item.created_at) }}</dd>
@@ -91,7 +91,7 @@ onMounted(async () => {
         </div>
         <div v-for="lot in lots" :key="lot.id" class="mini-row">
           <b>{{ lot.code }}</b
-          ><small>{{ lot.source || '未填写来源' }}</small>
+          ><small>原始材料编号：{{ lot.source_code || '未填写' }} · 来源：{{ lot.source || '未填写' }}</small>
         </div>
       </section>
       <section class="surface-panel detail-card">
@@ -105,6 +105,10 @@ onMounted(async () => {
           <el-icon><Notebook /></el-icon><b>履历将在后续阶段开放</b
           ><span>这部分信息将在后续开放；现在可在实验列表查看已建立的实验。</span>
         </div>
+      </section>
+      <section class="surface-panel detail-card">
+        <div class="panel-heading"><div><h3>外部资料</h3><p>资料扩展区域</p></div></div>
+        <p>联网查询将在后续阶段评估。当前以本系统已登记的物种信息为准。</p>
       </section>
     </div>
   </div>

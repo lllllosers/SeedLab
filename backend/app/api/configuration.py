@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.schemas import ConfiguredExperimentInput, DagInput, MaterialInput, MaterialOrderInput, MaterialPatch, ProtocolInput
@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models import Experiment, SeedLot, Taxon, User
 from app.services import experiment_config as design
 from app.services.common import require_entity
+from app.services.ordering import material_key
 
 
 router = APIRouter(prefix="/experiments", tags=["experiment configuration"])
@@ -17,16 +18,19 @@ router = APIRouter(prefix="/experiments", tags=["experiment configuration"])
 def available_seed_lots(q: str = "", taxon_id: str | None = None, db: Session = Depends(get_db), _user: User = Depends(current_user)):
     query = select(SeedLot, Taxon).join(Taxon, SeedLot.taxon_id == Taxon.id).where(
         SeedLot.is_active.is_(True), Taxon.is_active.is_(True))
-    if taxon_id:
-        query = query.where(Taxon.id == taxon_id)
-    if q.strip():
-        term = f"%{q.strip()}%"
-        query = query.where(or_(Taxon.scientific_name.ilike(term), Taxon.common_name.ilike(term),
-                                Taxon.code.ilike(term), SeedLot.code.ilike(term), SeedLot.source.ilike(term)))
+    all_rows = sorted(db.execute(query.limit(500)).all(), key=lambda pair: material_key(pair[1], pair[0]))
+    term = q.strip().casefold()
+    matches = [(rank, lot, taxon) for rank, (lot, taxon) in enumerate(all_rows, start=1)
+               if (not taxon_id or taxon.id == taxon_id) and
+               (not term or any(term in str(value or "").casefold() for value in (
+                   taxon.common_name, taxon.scientific_name, taxon.code,
+                   lot.code, lot.source, lot.source_code)))]
     return [{"id": lot.id, "code": lot.code, "taxon_id": taxon.id,
+             "sort_rank": rank,
              "taxon_common_name": taxon.common_name, "taxon_scientific_name": taxon.scientific_name,
-             "taxon_code": taxon.code,
-             "source": lot.source, "quantity": lot.quantity} for lot, taxon in db.execute(query.order_by(Taxon.scientific_name, SeedLot.code).limit(500))]
+             "taxon_code": taxon.code, "source_code": lot.source_code,
+             "collected_at": lot.collected_at, "notes": lot.notes,
+             "source": lot.source, "quantity": lot.quantity} for rank, lot, taxon in matches]
 
 
 @router.post("/estimate")

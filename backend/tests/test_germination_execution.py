@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import get_settings
 from app.db.session import make_engine
 from app.services import germination_execution as execution
+from app.services import sowing_workflow as sowing
 
 
 SOWN = "2026-09-01T08:00:00+08:00"
@@ -41,7 +42,11 @@ def configured(client, headers, *, scope="per_dish", target=3, replicates=2, see
 
 
 def start(client, headers, base, at=SOWN):
-    return client.post(f"{base}/start", json={"sown_at": at}, headers=headers)
+    planned = client.post(f"{base}/confirm-numbers", headers=headers)
+    if planned.status_code != 200:
+        return planned
+    return client.post(f"{base}/sowing/batch", headers=headers, json={
+        "sown_at": at, "dish_ids": [dish["id"] for dish in planned.json()["dishes"]]})
 
 
 def batch(client, headers, base, time, entries):
@@ -61,7 +66,7 @@ def test_start_is_atomic_uses_effective_values_and_never_decrements_lot(auth_cli
     assert summary["experiment"]["status"] == "active"
     assert summary["experiment"]["started_at"] == "2026-09-01T00:00:00Z"
     assert summary["dish_count"] == 5
-    assert summary["materials"][0]["taxon_scientific_name"] == "Setaria viridis"
+    assert summary["materials"][0]["taxon_scientific_name"] == "Poa annua"
     assert summary["materials"][0]["taxon_common_name"] is None
     assert summary["dishes"][0]["taxon_code"] == original["materials"][0]["taxon_code"]
     assert [dish["seed_count"] for dish in summary["dishes"]] == [5, 5, 3, 3, 3]
@@ -82,13 +87,17 @@ def test_start_is_atomic_uses_effective_values_and_never_decrements_lot(auth_cli
 def test_start_rolls_back_dishes_status_and_audit_on_failure(auth_client, monkeypatch):
     client, headers = auth_client
     base, _, _ = configured(client, headers)
-    original = execution.generate_dishes
+    original = sowing.flush_or_conflict
+    calls = 0
 
-    def fail_after_generation(*args):
-        original(*args)
-        raise RuntimeError("injected failure")
+    def fail_after_generation(db):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("injected failure")
+        return original(db)
 
-    monkeypatch.setattr(execution, "generate_dishes", fail_after_generation)
+    monkeypatch.setattr(sowing, "flush_or_conflict", fail_after_generation)
     with pytest.raises(RuntimeError, match="injected failure"):
         start(client, headers, base)
     assert client.get(base).json()["status"] == "ready"
@@ -321,7 +330,7 @@ def test_stage2_migration_preserves_existing_dish_and_sample(tmp_path, monkeypat
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e8b62c74a901"
         assert conn.execute(text("SELECT COUNT(*) FROM germination_observations")).scalar() == 1
         assert conn.execute(text("SELECT COUNT(*) FROM seedling_samples")).scalar() == 1
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []

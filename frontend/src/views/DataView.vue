@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import { Download, UploadFilled, Document } from '@element-plus/icons-vue'
+import IntegratedMaterialImport from './IntegratedMaterialImport.vue'
+import type { Experiment } from '../types'
 
 const file = ref<File | null>(null),
   lotFile = ref<File | null>(null),
@@ -11,6 +13,23 @@ const file = ref<File | null>(null),
   busy = ref(false),
   lotBusy = ref(false),
   lotError = ref('')
+const experiments = ref<Experiment[]>([])
+const selectedExperiments = ref<string[]>([])
+const exporting = ref(false)
+onMounted(async () => {
+  try { experiments.value = (await api.get<Experiment[]>('/experiments')).data }
+  catch (error) { ElMessage.error(errorMessage(error)) }
+})
+async function exportExperiments() {
+  if (!selectedExperiments.value.length) return ElMessage.warning('请至少选择一个实验')
+  exporting.value = true
+  try {
+    const { data } = await api.post<Blob>('/export/experiments/workbook.xlsx',
+      { experiment_ids: selectedExperiments.value }, { responseType: 'blob' })
+    saveFile(data, 'seedlab-experiments.xlsx')
+  } catch (error) { ElMessage.error(errorMessage(error)) }
+  finally { exporting.value = false }
+}
 function selected(event: Event) {
   file.value = (event.target as HTMLInputElement).files?.[0] || null
 }
@@ -92,6 +111,17 @@ async function uploadLots() {
       <p>下载模板填写材料信息，再批量导入；导入前会检查整张表。</p>
     </div>
   </div>
+  <IntegratedMaterialImport />
+  <section class="surface-panel integrated-import">
+    <div class="panel-heading"><div><h2>联合导出实验数据</h2><p>选择一个或多个实验，生成保留原实验编号与培养皿身份的数据工作簿。</p></div></div>
+    <el-checkbox-group v-model="selectedExperiments" class="experiment-export-list">
+      <el-checkbox v-for="item in experiments" :key="item.id" :value="item.id">{{ item.name }} · {{ item.code }}</el-checkbox>
+    </el-checkbox-group>
+    <p v-if="!experiments.length">尚无可导出的实验。</p>
+    <el-button type="primary" :loading="exporting" :disabled="!selectedExperiments.length" @click="exportExperiments">生成联合数据工作簿</el-button>
+  </section>
+  <el-collapse class="data-maintenance">
+    <el-collapse-item title="单独维护：仅导入物种、仅导入种子批次与导出物种" name="single">
   <div class="data-cards">
     <section class="surface-panel data-card">
       <div class="data-card-icon">
@@ -131,4 +161,6 @@ async function uploadLots() {
     <p v-if="lotError" class="import-error" role="alert">{{ lotError }}</p>
     <small>一次最多 500 行。若有物种编号或数量填写错误，整张表都不会导入；请按提示修改后重新上传。</small>
   </section>
+    </el-collapse-item>
+  </el-collapse>
 </template>

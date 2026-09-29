@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import type { Experiment, ExperimentStatus } from '../types'
@@ -8,10 +8,28 @@ import { dateText, statusLabels } from '../utils'
 import { Plus, Search } from '@element-plus/icons-vue'
 
 const router = useRouter(),
+  route = useRoute(),
   items = ref<Experiment[]>([]),
   query = ref(''),
-  status = ref(''),
+  status = ref(typeof route.query.status === 'string' ? route.query.status : ''),
   loading = ref(false)
+const sort = ref<{ prop: string; order: string | null }>({ prop: 'created_at', order: 'descending' })
+function onSortChange(value: { prop: string; order: string | null }) {
+  sort.value = { prop: value.prop || 'created_at', order: value.order }
+}
+const visibleItems = computed(() => [...items.value].sort((a, b) => {
+  const prop = sort.value.prop as keyof Experiment
+  const direction = sort.value.order === 'ascending' ? 1 : -1
+  return direction * String(a[prop] || '').localeCompare(String(b[prop] || ''))
+}))
+watch(() => route.query.status, (value) => {
+  status.value = typeof value === 'string' ? value : ''
+  load()
+})
+function changeStatusFilter() {
+  router.replace({ query: { ...route.query, status: status.value || undefined } })
+  load()
+}
 async function load() {
   loading.value = true
   try {
@@ -57,7 +75,7 @@ onMounted(load)
           placeholder="全部状态"
           clearable
           style="width: 145px"
-          @change="load"
+          @change="changeStatusFilter"
           ><el-option label="草稿" value="draft" /><el-option
             label="已就绪"
             value="ready" /><el-option label="进行中" value="active" /><el-option
@@ -67,11 +85,13 @@ onMounted(load)
       </div>
     </div>
     <el-table
-      :data="items"
+      :data="visibleItems"
       v-loading="loading"
       class="data-table"
+      @sort-change="onSortChange"
       empty-text="暂无实验，点击右上角创建"
-      ><el-table-column prop="code" label="实验编号" width="170" /><el-table-column
+      ><el-table-column prop="code" label="实验编号" width="170" sortable="custom" /><el-table-column
+        prop="name" sortable="custom"
         label="实验名称"
         min-width="300"
         ><template #default="{ row }"
@@ -80,13 +100,14 @@ onMounted(load)
           }}</router-link>
           <div class="table-subtitle">{{ row.description || '暂无说明' }}</div></template
         ></el-table-column
-      ><el-table-column label="状态" width="120"
+      ><el-table-column label="状态" prop="status" width="120" sortable="custom"
         ><template #default="{ row }"
           ><span class="status-pill" :class="row.status">{{
             statusLabels[row.status as ExperimentStatus]
           }}</span></template
         ></el-table-column
-      ><el-table-column label="创建日期" width="140"
+      ><el-table-column prop="planned_start_date" label="计划日期" width="140" sortable="custom"><template #default="{ row }">{{ dateText(row.planned_start_date) }}</template></el-table-column>
+      <el-table-column label="创建日期" prop="created_at" width="140" sortable="custom"
         ><template #default="{ row }">{{ dateText(row.created_at) }}</template></el-table-column
       ><el-table-column label="操作" width="140"
         ><template #default="{ row }"

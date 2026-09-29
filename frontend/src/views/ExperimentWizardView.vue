@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import { useAuth } from '../stores/auth'
@@ -19,6 +19,7 @@ import OverridesStep from './ExperimentWizard/OverridesStep.vue'
 import PageBackButton from '../components/PageBackButton.vue'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuth()
 const step = ref(0)
 const saving = ref(false)
@@ -58,6 +59,20 @@ watch(lots, (current) => {
         sample_count_override: null,
       },
   )
+})
+onMounted(async () => {
+  if (route.query.from_import !== '1') return
+  try {
+    const ids = JSON.parse(sessionStorage.getItem('seedlab-import-lots') || '[]') as string[]
+    const available = (await api.get<AvailableLot[]>('/experiments/available-seed-lots')).data
+    const wanted = new Set(ids)
+    lots.value = available.filter((lot) => wanted.has(lot.id))
+    if (lots.value.length) {
+      step.value = 0
+      ElMessage.success(`已带入本次导入的 ${lots.value.length} 份材料`)
+    }
+    sessionStorage.removeItem('seedlab-import-lots')
+  } catch (error) { ElMessage.error(errorMessage(error)) }
 })
 function payload() {
   return {
@@ -203,12 +218,13 @@ async function create() {
             <small>预计测定记录</small><strong>{{ estimate?.estimated_measurement_count }}</strong>
           </div>
           <div>
-            <small>预计最晚完成</small
+            <small>按计划估算最晚完成</small
             ><strong class="date">{{
               estimate?.estimated_latest_finish_date || '未设置计划日期'
             }}</strong>
           </div>
         </div>
+        <p class="form-hint">最晚完成日期仅按所有材料在计划日置床、观察期最后一天发芽估算；实际分批置床后可能变化。</p>
         <div class="review-section">
           <h3>{{ form.name }}</h3>
           <p>{{ form.description || '暂无实验说明' }}</p>

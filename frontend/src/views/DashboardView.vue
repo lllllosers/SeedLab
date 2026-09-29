@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, errorMessage } from '../api/client'
+import { useAuth } from '../stores/auth'
 import type { Dashboard } from '../types'
 import { actionLabels, dateText, entityLabels, statusLabels } from '../utils'
 import { ElMessage } from 'element-plus'
@@ -16,7 +17,15 @@ import {
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
+const auth = useAuth()
 const data = ref<Dashboard | null>(null)
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  return hour < 11 ? '早上好' : hour < 18 ? '下午好' : '晚上好'
+})
+const activeTarget = computed(() => data.value?.active_experiments === 1
+  ? `/experiments/${data.value.active_experiment_ids[0]}/germination`
+  : '/experiments?status=active')
 onMounted(async () => {
   try {
     data.value = (await api.get<Dashboard>('/dashboard')).data
@@ -37,11 +46,13 @@ onMounted(async () => {
   <div class="welcome-banner">
     <div>
       <div class="banner-kicker">种子试验记录</div>
-      <h2>从可靠的记录开始，<br />积累可追溯的研究数据。</h2>
-      <p>物种、批次与实验逐步关联，帮助课题组保留每一次试验的来龙去脉。</p>
-      <router-link to="/taxa"
-        >进入物种信息库 <el-icon><ArrowRight /></el-icon
-      ></router-link>
+      <h2>{{ greeting }}，{{ auth.user?.display_name || '研究伙伴' }}</h2>
+      <p>{{ data?.active_experiments ? `当前有 ${data.active_experiments} 个实验正在进行。` : '目前暂无进行中的实验。' }}从可靠记录开始，继续今天的研究工作。</p>
+      <div class="dashboard-quick-actions">
+        <router-link v-if="data?.active_experiments" :to="activeTarget">继续实验 <el-icon><ArrowRight /></el-icon></router-link>
+        <router-link to="/experiments/new">创建实验 <el-icon><ArrowRight /></el-icon></router-link>
+        <router-link to="/data">导入种子材料 <el-icon><ArrowRight /></el-icon></router-link>
+      </div>
     </div>
     <div class="banner-art">
       <div class="art-ring r1" />
@@ -79,7 +90,7 @@ onMounted(async () => {
       <div class="stat-label">实验总数</div>
       <div class="stat-value">{{ data?.experiments ?? '—' }}</div>
       <router-link to="/experiments"
-        >查看实验 <el-icon><ArrowRight /></el-icon
+        >查看全部实验 <el-icon><ArrowRight /></el-icon
       ></router-link>
     </div>
     <div class="stat-card">
@@ -88,9 +99,8 @@ onMounted(async () => {
       </div>
       <div class="stat-label">进行中实验</div>
       <div class="stat-value">{{ data?.active_experiments ?? '—' }}</div>
-      <router-link to="/experiments"
-        >查看进展 <el-icon><ArrowRight /></el-icon
-      ></router-link>
+      <span v-if="!data?.active_experiments">暂无进行中实验</span>
+      <router-link v-else :to="activeTarget">{{ data?.active_experiments === 1 ? '继续实验' : '查看进行中实验' }} <el-icon><ArrowRight /></el-icon></router-link>
     </div>
   </div>
   <div class="dashboard-columns">

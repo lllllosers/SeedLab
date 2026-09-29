@@ -30,6 +30,7 @@ def dashboard(db: Session = Depends(get_db), _user: User = Depends(current_user)
     return {
         "taxa": count(Taxon), "seed_lots": count(SeedLot), "experiments": count(Experiment),
         "active_experiments": db.scalar(select(func.count()).select_from(Experiment).where(Experiment.status == "active")) or 0,
+        "active_experiment_ids": list(db.scalars(select(Experiment.id).where(Experiment.status == "active").order_by(Experiment.created_at.desc()))),
         "recent_experiments": [{"id": x.id, "code": x.code, "name": x.name, "status": x.status} for x in db.scalars(select(Experiment).order_by(Experiment.created_at.desc()).limit(5))],
         "recent_actions": [{"id": x.id, "action": x.action, "entity_type": x.entity_type, "created_at": x.created_at.isoformat()} for x in db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(5))],
     }
@@ -116,9 +117,10 @@ def reset_user_password(user_id: str, data: PasswordReset,
 def export_taxa(db: Session = Depends(get_db), _user: User = Depends(current_user)):
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["物种编号", "学名", "中文名", "科", "状态", "备注"])
+    writer.writerow(["物种编号", "学名", "中文名", "科", "属", "生活型", "状态", "备注"])
     for item in db.scalars(select(Taxon).order_by(Taxon.code)):
         writer.writerow([item.code, item.scientific_name, item.common_name or "", item.family or "",
+                         item.genus or "", item.life_form or "",
                          "使用中" if item.is_active else "已停用", item.notes or ""])
     return StreamingResponse(iter(["\ufeff" + output.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": 'attachment; filename="seedlab-taxa.csv"'})

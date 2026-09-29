@@ -57,6 +57,8 @@ class TaxonIn(BaseModel):
     scientific_name: str = Field(min_length=2, max_length=255)
     common_name: str | None = Field(default=None, max_length=255)
     family: str | None = Field(default=None, max_length=255)
+    genus: str | None = Field(default=None, max_length=255)
+    life_form: str | None = Field(default=None, max_length=255)
     notes: str | None = None
 
 
@@ -64,6 +66,8 @@ class TaxonPatch(BaseModel):
     scientific_name: str | None = Field(default=None, min_length=2, max_length=255)
     common_name: str | None = Field(default=None, max_length=255)
     family: str | None = Field(default=None, max_length=255)
+    genus: str | None = Field(default=None, max_length=255)
+    life_form: str | None = Field(default=None, max_length=255)
     notes: str | None = None
     is_active: bool | None = None
 
@@ -74,6 +78,8 @@ class TaxonOut(ORMModel):
     scientific_name: str
     common_name: str | None
     family: str | None
+    genus: str | None
+    life_form: str | None
     notes: str | None
     is_active: bool
     created_at: datetime
@@ -82,12 +88,16 @@ class TaxonOut(ORMModel):
 class SeedLotIn(BaseModel):
     taxon_id: str
     source: str | None = Field(default=None, max_length=255)
+    source_code: str | None = Field(default=None, max_length=120)
+    collected_at: AwareDatetime | None = None
     quantity: int | None = Field(default=None, ge=0)
     notes: str | None = None
 
 
 class SeedLotPatch(BaseModel):
     source: str | None = Field(default=None, max_length=255)
+    source_code: str | None = Field(default=None, max_length=120)
+    collected_at: AwareDatetime | None = None
     quantity: int | None = Field(default=None, ge=0)
     notes: str | None = None
     is_active: bool | None = None
@@ -99,6 +109,8 @@ class SeedLotOut(ORMModel):
     taxon_id: str
     taxon: TaxonOut
     source: str | None
+    source_code: str | None
+    collected_at: datetime | None
     quantity: int | None
     notes: str | None
     is_active: bool
@@ -127,6 +139,7 @@ class ExperimentOut(ORMModel):
     planned_start_date: date | None
     owner_id: str | None
     started_at: datetime | None
+    numbering_locked_at: datetime | None
     ended_at: datetime | None
     created_at: datetime
 
@@ -171,8 +184,17 @@ class MaterialOrderInput(BaseModel):
     material_ids: list[str]
 
 
-class StartExperimentInput(BaseModel):
+class SowDishesInput(BaseModel):
+    dish_ids: list[str] = Field(min_length=1)
     sown_at: AwareDatetime
+
+
+class CorrectSowingInput(BaseModel):
+    sown_at: AwareDatetime
+
+
+class CancelDishInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class ObservationEntry(BaseModel):

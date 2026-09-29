@@ -6,7 +6,7 @@ defineProps<{ execution: GerminationExecution }>()
 <template>
   <div class="execution-section-head">
     <div>
-      <h3>实际培养皿</h3>
+      <h3>培养皿状态</h3>
       <p>累计发芽数、发芽率和剩余数量均由巡检事实动态计算。</p>
     </div>
     <el-tag type="success" effect="plain">{{ execution.dish_count }} 个培养皿</el-tag>
@@ -15,11 +15,12 @@ defineProps<{ execution: GerminationExecution }>()
     <table class="execution-table">
       <thead>
         <tr>
-          <th>培养皿编号</th>
+          <th>现场编号</th>
           <th>物种 / 批次</th>
           <th>重复</th>
           <th>置床粒数</th>
           <th>置床时间</th>
+          <th>状态</th>
           <th>累计发芽</th>
           <th>当前发芽率</th>
           <th>剩余未发芽</th>
@@ -30,16 +31,17 @@ defineProps<{ execution: GerminationExecution }>()
       <tbody>
         <tr v-for="dish in execution.dishes" :key="dish.id">
           <td>
-            <b>{{ dish.code }}</b>
+            <b>{{ dish.field_number || dish.code }}</b><small v-if="dish.field_number">系统编号：{{ dish.code }}</small>
           </td>
           <td>
             <b>{{ dish.taxon_common_name || dish.taxon_scientific_name }}</b>
             <small v-if="dish.taxon_common_name">{{ dish.taxon_scientific_name }}</small>
-            <small>{{ dish.seed_lot_code }}</small>
+            <small>原始材料编号：{{ dish.source_code || '未填写' }} · {{ dish.seed_lot_code }}</small>
           </td>
           <td>R{{ dish.replicate_no }}</td>
           <td>{{ dish.seed_count }}</td>
           <td>{{ dateTimeText(dish.sown_at) }}</td>
+          <td>{{ dish.cancelled_at ? '已取消' : dish.sown_at ? '已置床' : '待置床' }}</td>
           <td>
             <strong>{{ dish.cumulative_germinated }}</strong>
           </td>

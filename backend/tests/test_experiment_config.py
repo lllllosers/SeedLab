@@ -98,7 +98,7 @@ def test_material_add_duplicate_order_remove_and_inactive(auth_client):
     second_material = client.post(f"{path}/materials", json={"seed_lot_id": second["id"]}, headers=headers)
     assert second_material.status_code == 201
     ids = [second_material.json()["id"], created["materials"][0]["id"]]
-    assert [m["id"] for m in client.put(f"{path}/materials/order", json={"material_ids": ids}, headers=headers).json()] == ids
+    assert client.put(f"{path}/materials/order", json={"material_ids": ids}, headers=headers).status_code == 409
     assert client.get(f"{path}/configuration").json()["materials"][0]["seed_lot_id"] == second["id"]
     assert client.delete(f"{path}/materials/{ids[0]}", headers=headers).status_code == 204
     assert client.get(f"{path}/workload").json()["material_count"] == 1
@@ -143,7 +143,11 @@ def test_dynamic_dag_and_active_protection(auth_client):
     assert client.delete(f"{path}/materials/{created['materials'][0]['id']}", headers=headers).status_code == 422
     assert client.put(f"{path}/dag", json={"days": [0, 2, 8]}, headers=headers).json() == [0, 2, 8]
     assert client.patch(path, json={"status": "active"}, headers=headers).status_code == 409
-    assert client.post(f"{path}/start", json={"sown_at": "2026-10-01T08:00:00+08:00"}, headers=headers).status_code == 200
+    numbered = client.post(f"{path}/confirm-numbers", headers=headers)
+    assert numbered.status_code == 200
+    assert client.post(f"{path}/sowing/batch", headers=headers, json={
+        "sown_at": "2026-10-01T08:00:00+08:00",
+        "dish_ids": [dish["id"] for dish in numbered.json()["dishes"]]}).status_code == 200
     assert client.put(f"{path}/dag", json={"days": [3]}, headers=headers).status_code == 409
     assert client.delete(f"{path}/materials/{created['materials'][0]['id']}", headers=headers).status_code == 409
     assert client.patch(f"{path}/materials/{created['materials'][0]['id']}", json={"replicate_count_override": 2}, headers=headers).status_code == 409
@@ -166,7 +170,7 @@ def test_stage1_migration_round_trip_preserves_data(client, tmp_path):
                     ExperimentMaterial(experiment_id=experiment["id"], seed_lot_id=lot["id"], display_order=0)])
         db.commit()
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e8b62c74a901"
         assert "seeds_per_dish" in {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(experiment_protocols)")}
     engine.dispose()
     command.downgrade(config, "9456099da4fd")
@@ -180,7 +184,7 @@ def test_stage1_migration_round_trip_preserves_data(client, tmp_path):
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "a9c41e32b7d6"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e8b62c74a901"
         assert conn.execute(text("SELECT seeds_per_dish FROM experiment_protocols WHERE experiment_id=:id"), {"id": experiment["id"]}).scalar() == 12
         assert conn.execute(text("SELECT display_order FROM experiment_materials WHERE experiment_id=:id"), {"id": experiment["id"]}).scalar() == 0
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []

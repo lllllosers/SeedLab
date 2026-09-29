@@ -151,8 +151,11 @@ def test_experiment_status_actions_keep_start_as_only_active_path(auth_client):
     assert client.patch(path, headers=headers, json={"status": "draft"}).json()["status"] == "draft"
     assert client.patch(path, headers=headers, json={"status": "ready"}).json()["status"] == "ready"
     assert client.patch(path, headers=headers, json={"status": "active"}).status_code == 409
-    started = client.post(f"{path}/start", headers=headers,
-                          json={"sown_at": "2026-10-01T08:00:00+08:00"})
+    numbered = client.post(f"{path}/confirm-numbers", headers=headers)
+    assert numbered.status_code == 200
+    started = client.post(f"{path}/sowing/batch", headers=headers,
+                          json={"sown_at": "2026-10-01T08:00:00+08:00",
+                                "dish_ids": [dish["id"] for dish in numbered.json()["dishes"]]})
     assert started.status_code == 200, started.text
     assert client.get(path).json()["status"] == "active"
 
