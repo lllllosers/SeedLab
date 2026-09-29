@@ -27,7 +27,7 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0b6111724c00"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "b742b49a162e"
         timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
         sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
         assert "day_after_germination" in timepoint_columns
@@ -148,7 +148,9 @@ def test_zero_is_fact_and_null_is_missing(client: TestClient, tmp_path):
         observation = GerminationObservation(dish_id=dish.id, observed_at=datetime(2026, 9, 28, 9, tzinfo=timezone.utc), new_germinated_count=0)
         db.add_all([sample, observation])
         db.flush()
-        measurement = SeedlingMeasurement(sample_id=sample.id, timepoint_id=timepoint.id, root_length_mm=0, shoot_length_mm=None)
+        measurement = SeedlingMeasurement(sample_id=sample.id, timepoint_id=timepoint.id, root_length_mm=0,
+                                          shoot_length_mm=None, shoot_unavailable=True,
+                                          measured_at=datetime(2026, 9, 29, tzinfo=timezone.utc))
         db.add(measurement)
         db.commit()
         assert observation.new_germinated_count == 0
@@ -192,7 +194,8 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
         sample = SeedlingSample(dish_id=dish.id, sample_number=1, germinated_at=datetime(2026, 9, 28, tzinfo=timezone.utc))
         db.add(sample)
         db.flush()
-        db.add(SeedlingMeasurement(sample_id=sample.id, timepoint_id=timepoint.id, root_length_mm=0))
+        db.add(SeedlingMeasurement(sample_id=sample.id, timepoint_id=timepoint.id, root_length_mm=0,
+                                   shoot_length_mm=1, measured_at=datetime(2026, 9, 29, tzinfo=timezone.utc)))
         db.commit()
         timepoint_id = timepoint.id
     engine.dispose()
@@ -214,7 +217,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0b6111724c00"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "b742b49a162e"
         assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
         index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
         assert "uq_timepoint_experiment_dag" in index_names

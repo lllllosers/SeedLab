@@ -14,6 +14,7 @@ from app.core.auth import admin_user, current_user, hash_password, require_passw
 from app.db.session import get_db
 from app.models import AuditLog, Experiment, ImportJob, SeedLot, SessionToken, Taxon, User
 from app.services.common import commit_or_conflict, flush_or_conflict, next_code, record, require_entity
+from app.services.seedling_measurement import task_data
 
 
 router = APIRouter(tags=["system"])
@@ -27,12 +28,22 @@ def safe_user_state(user: User) -> dict:
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db), _user: User = Depends(current_user)):
     count = lambda model: db.scalar(select(func.count()).select_from(model)) or 0
+    active = list(db.scalars(select(Experiment).where(Experiment.status == "active").order_by(Experiment.created_at.desc())))
+    measurement_rows = []
+    for experiment in active:
+        summary = task_data(db, experiment.id)["summary"]
+        if summary["due_today_count"] or summary["overdue_count"]:
+            measurement_rows.append({"id": experiment.id, "code": experiment.code, "name": experiment.name,
+                                     **summary})
     return {
         "taxa": count(Taxon), "seed_lots": count(SeedLot), "experiments": count(Experiment),
         "active_experiments": db.scalar(select(func.count()).select_from(Experiment).where(Experiment.status == "active")) or 0,
         "active_experiment_ids": list(db.scalars(select(Experiment.id).where(Experiment.status == "active").order_by(Experiment.created_at.desc()))),
         "recent_experiments": [{"id": x.id, "code": x.code, "name": x.name, "status": x.status} for x in db.scalars(select(Experiment).order_by(Experiment.created_at.desc()).limit(5))],
         "recent_actions": [{"id": x.id, "action": x.action, "entity_type": x.entity_type, "created_at": x.created_at.isoformat()} for x in db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(5))],
+        "measurement": {"due_today_count": sum(row["due_today_count"] for row in measurement_rows),
+                        "overdue_count": sum(row["overdue_count"] for row in measurement_rows),
+                        "experiments": measurement_rows},
     }
 
 

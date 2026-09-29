@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     seedlab_bootstrap_token_path: str = "./data/bootstrap.token"
     seedlab_session_hours: int = 12
     seedlab_cookie_secure: bool = False
+    seedlab_timezone: str = "Asia/Shanghai"
 
 
 @lru_cache

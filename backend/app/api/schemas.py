@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -227,3 +228,29 @@ class AuditOut(ORMModel):
     before: dict | None
     after: dict | None
     created_at: datetime
+
+
+class MeasurementInput(BaseModel):
+    sample_id: str
+    timepoint_id: str
+    root_length_mm: Decimal | None = None
+    shoot_length_mm: Decimal | None = None
+    root_unavailable: bool = False
+    shoot_unavailable: bool = False
+    measured_at: AwareDatetime
+    notes: str | None = None
+
+
+class MeasurementPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    root_length_mm: Decimal | None = None
+    shoot_length_mm: Decimal | None = None
+    root_unavailable: bool | None = None
+    shoot_unavailable: bool | None = None
+    measured_at: AwareDatetime | None = None
+    notes: str | None = None
+
+
+class PositionLabelPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    position_label: str | None = Field(default=None, max_length=80)

@@ -173,8 +173,15 @@ class SeedlingMeasurement(Identity, Base):
     timepoint_id: Mapped[str] = mapped_column(ForeignKey("measurement_timepoints.id", ondelete="RESTRICT"), index=True)
     root_length_mm: Mapped[float | None] = mapped_column(Numeric(10, 2))
     shoot_length_mm: Mapped[float | None] = mapped_column(Numeric(10, 2))
-    measured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (CheckConstraint("root_length_mm IS NULL OR root_length_mm >= 0", name="ck_root_length"), CheckConstraint("shoot_length_mm IS NULL OR shoot_length_mm >= 0", name="ck_shoot_length"), UniqueConstraint("sample_id", "timepoint_id", name="uq_sample_timepoint"))
+    root_unavailable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    shoot_unavailable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        CheckConstraint("(root_length_mm IS NOT NULL AND root_length_mm >= 0 AND root_unavailable = 0) OR (root_length_mm IS NULL AND root_unavailable = 1)", name="ck_root_resolved"),
+        CheckConstraint("(shoot_length_mm IS NOT NULL AND shoot_length_mm >= 0 AND shoot_unavailable = 0) OR (shoot_length_mm IS NULL AND shoot_unavailable = 1)", name="ck_shoot_resolved"),
+        UniqueConstraint("sample_id", "timepoint_id", name="uq_sample_timepoint"),
+    )
 
 
 class AuditLog(Identity, Base):

@@ -13,17 +13,7 @@ from app.models import (Experiment, ExperimentMaterial, GerminationDish, Germina
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.experiment_config import days_for, effective, materials_for, protocol_for
 from app.services.ordering import display_number, field_number
-
-
-def utc_naive(value: datetime) -> datetime:
-    """SQLite stores UTC wall time; API accepts aware datetimes only."""
-    return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
-
-
-def iso_utc(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z") if value.tzinfo is None else value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+from app.services.local_time import iso_utc, local_date, today, utc_naive
 
 
 def dishes_for(db: Session, experiment_id: str) -> list[GerminationDish]:
@@ -229,7 +219,7 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
             samples_by_source[sample.source_observation_id] += 1
     material_rows = []
     dish_rows = []
-    local_today = datetime.now(timezone(timedelta(hours=8))).date()
+    local_today = today()
     for preview_number, material in enumerate(materials, start=1):
         lot = require_entity(db, SeedLot, material.seed_lot_id)
         taxon = require_entity(db, Taxon, lot.taxon_id)
@@ -257,8 +247,7 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
                 "replicate_no": dish.replicate_no, "label": dish.label,
                 "seed_count": dish.seed_count, "sown_at": iso_utc(dish.sown_at),
                 "cancelled_at": iso_utc(dish.cancelled_at), "cancel_reason": dish.cancel_reason,
-                "today_observed": any((utc_naive(item.observed_at).replace(tzinfo=timezone.utc)
-                                      .astimezone(timezone(timedelta(hours=8))).date() == local_today) for item in history),
+                "today_observed": any(local_date(item.observed_at) == local_today for item in history),
                 "observation_period_end_at": iso_utc(utc_naive(dish.sown_at) + timedelta(days=protocol.observation_period_days))
                   if dish.sown_at and protocol and protocol.observation_period_days else None,
                 "cumulative_germinated": germinated,

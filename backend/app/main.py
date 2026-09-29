@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
-from app.api import auth, catalog, configuration, execution, experiments, material_import, setup, system, workbook_export
+from app.api import auth, catalog, configuration, execution, experiments, material_import, measurement, setup, system, workbook_export
 from app.core.bootstrap import ensure_bootstrap_token
 from app.core.config import get_settings
 from app.db.session import make_engine
@@ -29,6 +29,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(configuration.router, prefix="/api")
 app.include_router(execution.router, prefix="/api")
+app.include_router(measurement.router, prefix="/api")
 app.include_router(experiments.router, prefix="/api")
 app.include_router(system.router, prefix="/api")
 app.include_router(material_import.router, prefix="/api")

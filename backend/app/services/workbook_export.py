@@ -12,6 +12,8 @@ from app.models import (Experiment, ExperimentMaterial, GerminationDish,
                         GerminationObservation, MeasurementTimepoint, SeedlingMeasurement,
                         SeedlingSample, SeedLot, Taxon)
 from app.services.ordering import display_number, field_number, material_key
+from app.services.local_time import local_date, local_datetime
+from app.services.seedling_measurement import scheduled_date
 from app.version import VERSION
 
 
@@ -47,11 +49,12 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                        "种子批次", "实际已置床培养皿数", "实际置床种子数", "累计发芽数", "发芽率（%）"))
     observation_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "系统培养皿编号",
                               "中文名", "学名", "实际置床时间", "巡检时间", "本次新增发芽数", "累计发芽数", "发芽率"))
-    long_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "发芽时间",
-                       "DAG", "根长", "苗长", "测定时间"))
+    long_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "位置标签",
+                       "中文名", "学名", "发芽判定时间", "DAG", "计划测定日期", "实际测定时间",
+                       "延迟天数", "根长（mm）", "根长状态", "苗长（mm）", "苗长状态", "备注"))
     all_dag = sorted(set(db.scalars(select(MeasurementTimepoint.day_after_germination)
                                     .where(MeasurementTimepoint.experiment_id.in_(experiment_ids))).all()))
-    wide_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号") +
+    wide_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "位置标签", "中文名", "学名") +
                       tuple(column for day in all_dag for column in (f"RL{day}", f"SL{day}")))
     material_ids = [item.id for item, _, _ in rows]
     dishes = list(db.scalars(select(GerminationDish).where(GerminationDish.material_id.in_(material_ids))))
@@ -109,11 +112,18 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                 for measurement, day in sorted(sample_measurements, key=lambda pair: pair[1]):
                     root = float(measurement.root_length_mm) if measurement.root_length_mm is not None else None
                     shoot = float(measurement.shoot_length_mm) if measurement.shoot_length_mm is not None else None
+                    planned = scheduled_date(sample.germinated_at, day)
                     long_sheet.append((summary_number, source_name, original_number, dish_number,
-                                       sample.sample_number, _date(sample.germinated_at), day, root, shoot,
-                                       _date(measurement.measured_at)))
-                    values[day] = (root, shoot)
-                wide_sheet.append((summary_number, source_name, original_number, dish_number, sample.sample_number) +
+                                       sample.sample_number, sample.position_label, taxon.common_name,
+                                       taxon.scientific_name, local_datetime(sample.germinated_at).isoformat() if sample.germinated_at else None, day,
+                                       _date(planned), local_datetime(measurement.measured_at).isoformat(),
+                                       (local_date(measurement.measured_at) - planned).days if planned else None,
+                                       root, "无法测量" if measurement.root_unavailable else "已测",
+                                       shoot, "无法测量" if measurement.shoot_unavailable else "已测", measurement.notes))
+                    values[day] = ("NA" if measurement.root_unavailable else root,
+                                   "NA" if measurement.shoot_unavailable else shoot)
+                wide_sheet.append((summary_number, source_name, original_number, dish_number, sample.sample_number,
+                                   sample.position_label, taxon.common_name, taxon.scientific_name) +
                                   tuple(value for day in all_dag for value in values.get(day, (None, None))))
     explanation.append(("项目", "说明"))
     notes = [
@@ -126,7 +136,9 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
         ("原实验编号", "实验内确认置床编号时固定的编号；不同实验可各自从 001 开始"),
         ("培养皿现场编号", "单重复使用实验编号，多重复在编号后加 -1、-2 等"),
         ("DAG", "Days After Germination，幼苗实际发芽后第 N 天"),
-        ("0 与缺失", "0 是已记录的事实；空白表示没有对应记录，不应当作 0"),
+        ("测定值含义", "0 是实测零值；NA 表示无法测量；空白表示尚未测定。根长、苗长单位均为 mm"),
+        ("计划测定日期", "以幼苗发芽判定时间的实验室本地日期加 DAG 自然日计算；延迟天数按实际测定日期计算"),
+        ("测定时间时区", "幼苗测定长表的发芽判定时间和实际测定时间按系统配置的实验室时区显示，并带时区偏移"),
         ("发芽率汇总", "仅以实际已置床的培养皿种子数为分母；没有实际置床种子时发芽率留空"),
         ("测定数据", "仅导出已有的正式测定记录；空表不代表测定值为 0"),
     ]

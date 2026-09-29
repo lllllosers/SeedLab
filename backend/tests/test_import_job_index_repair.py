@@ -10,6 +10,7 @@ from app.db.session import make_engine
 
 
 REPAIR_REVISION = "0b6111724c00"
+CURRENT_HEAD = "b742b49a162e"
 PREVIOUS_REVISION = "e8b62c74a901"
 INDEX_NAME = "ix_import_jobs_file_hash"
 
@@ -55,7 +56,7 @@ def test_nonunique_index_is_repaired_and_downgrade_keeps_canonical_index(migrati
     command.upgrade(config, "head")
     command.check(config)
     with engine.connect() as connection:
-        assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == REPAIR_REVISION
+        assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == CURRENT_HEAD
         assert index_unique(connection) is True
         assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
 
@@ -72,7 +73,7 @@ def test_fresh_database_enforces_unique_nonnull_hash_and_allows_multiple_nulls(m
     command.upgrade(config, "head")
     command.check(config)
     with engine.connect() as connection:
-        assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == REPAIR_REVISION
+        assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == CURRENT_HEAD
         assert index_unique(connection) is True
         assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
 

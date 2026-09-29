@@ -498,7 +498,7 @@ def test_workflow_migration_preserves_existing_records_and_constraints(tmp_path,
         command.check(config)
         engine = make_engine(f"sqlite:///{db_path.as_posix()}")
         with engine.connect() as connection:
-            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "0b6111724c00"
+            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "b742b49a162e"
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
             assert connection.exec_driver_sql("SELECT new_germinated_count FROM germination_observations WHERE id='observation'").scalar() == 0
             assert connection.exec_driver_sql("SELECT experiment_number FROM experiment_materials WHERE id='material'").scalar() is None
@@ -535,7 +535,7 @@ def test_workflow_migration_preserves_existing_records_and_constraints(tmp_path,
         command.upgrade(config, "head")
         fresh = make_engine(f"sqlite:///{fresh_path.as_posix()}")
         with fresh.connect() as connection:
-            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "0b6111724c00"
+            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "b742b49a162e"
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         fresh.dispose()
     finally:
