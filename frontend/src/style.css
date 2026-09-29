@@ -2026,3 +2026,29 @@ button {
     flex-direction: column;
   }
 }
+.measurement-workbench { display: grid; gap: 20px; }
+.measurement-toolbar { display: flex; gap: 12px; flex-wrap: wrap; }
+.measurement-toolbar .el-select { width: 190px; }
+.measurement-toolbar .el-input { min-width: 230px; flex: 1; }
+.measurement-layout { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 20px; }
+.measurement-queue, .measurement-detail, .measurement-history { background: #fff; border: 1px solid #e0e9df; border-radius: 12px; padding: 18px; }
+.measurement-queue { max-height: 660px; overflow-y: auto; }
+.measurement-queue h3, .measurement-detail h3, .measurement-history h3 { margin-top: 0; }
+.measurement-queue h3 small { color: #66776b; font-size: .8em; font-weight: normal; }
+.measurement-task { display: grid; width: 100%; text-align: left; gap: 4px; background: #fff; border: 1px solid #e3ebe3; border-radius: 8px; padding: 11px; margin: 8px 0; cursor: pointer; color: inherit; }
+.measurement-task:hover, .measurement-task.selected { border-color: #6c9d7e; background: #f0f7f0; }
+.measurement-task small { color: #66776b; }
+.measurement-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin: 20px 0; }
+.measurement-form label { display: grid; gap: 6px; min-width: 0; font-weight: 600; }
+.measurement-form label:nth-last-child(-n+2) { grid-column: 1 / -1; }
+.measurement-form input[type=datetime-local] { width: 100%; box-sizing: border-box; min-height: 34px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 5px 10px; font: inherit; }
+.measurement-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.measurement-position { margin-top: 22px; display: grid; gap: 6px; max-width: 300px; }
+.measurement-table-scroll { overflow-x: auto; }
+.measurement-history table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+.measurement-history th, .measurement-history td { border-bottom: 1px solid #e6ede7; padding: 10px; text-align: left; }
+.measurement-history tr.current, .measurement-history th.current, .measurement-history td.current { background: #eff7ef; }
+.measurement-history-link { border: 0; padding: 2px 4px; background: none; color: #32694a; cursor: pointer; font: inherit; }
+.measurement-history-link:hover { text-decoration: underline; }
+.dashboard-measurement { margin: 20px 0; }
+@media (max-width: 820px) { .measurement-layout { grid-template-columns: 1fr; } .measurement-queue { max-height: 320px; } }

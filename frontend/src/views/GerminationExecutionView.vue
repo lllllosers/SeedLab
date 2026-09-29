@@ -9,11 +9,15 @@ import GerminationQuickEntry from './GerminationExecution/GerminationQuickEntry.
 import SowingManagement from './GerminationExecution/SowingManagement.vue'
 import DishStatusTable from './GerminationExecution/DishStatusTable.vue'
 import ObservationHistory from './GerminationExecution/ObservationHistory.vue'
+import SeedlingMeasurementWorkbench from './GerminationExecution/SeedlingMeasurementWorkbench.vue'
 import PageBackButton from '../components/PageBackButton.vue'
 
 const route = useRoute()
 const execution = ref<GerminationExecution | null>(null)
 const tab = ref('overview')
+const measurementRef = ref<{ confirmDiscard: () => Promise<boolean> } | null>(null)
+async function beforeTabLeave() { return !measurementRef.value || await measurementRef.value.confirmDiscard() }
+watch(() => route.query.tab, (value) => { if (value === 'measurement') tab.value = 'measurement' }, { immediate: true })
 const overviewSearch = ref('')
 const overviewStatus = ref('all')
 const overviewPage = ref(1)
@@ -67,7 +71,7 @@ onMounted(load)
       <b>已超过计划观察期</b><span>仍可继续记录真实巡检与晚期发芽；实验不会自动完成。</span>
     </div>
     <section class="surface-panel execution-workspace">
-      <el-tabs v-model="tab"
+      <el-tabs v-model="tab" :before-leave="beforeTabLeave"
         ><el-tab-pane label="概览" name="overview">
           <p class="wizard-help">查看整个实验的执行进度，按名称或状态查找材料。具体操作请切换到置床管理、发芽巡检或培养皿状态。</p>
           <div class="execution-overview-scope">整个实验</div>
@@ -94,6 +98,7 @@ onMounted(load)
             @saved="load"
           />
           <div v-else class="wizard-empty">当前实验还不能新增发芽巡检。请先确认置床编号，并在“置床管理”登记至少一个培养皿的实际置床时间。</div></el-tab-pane
+        ><el-tab-pane label="幼苗测定" name="measurement"><SeedlingMeasurementWorkbench v-if="tab === 'measurement'" ref="measurementRef" /></el-tab-pane
         ><el-tab-pane label="培养皿状态" name="dishes"
           ><DishStatusTable :execution="execution" :material-id="selectedMaterialId" @show-all="selectedMaterialId = null" /></el-tab-pane
         ><el-tab-pane label="巡检历史" name="history"

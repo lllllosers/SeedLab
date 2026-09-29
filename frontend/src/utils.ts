@@ -42,4 +42,5 @@ export const entityLabels: Record<string, string> = {
   GerminationDish: '培养皿',
   GerminationObservation: '发芽巡检',
   SeedlingSample: '幼苗样本',
+  SeedlingMeasurement: '幼苗测定',
 }

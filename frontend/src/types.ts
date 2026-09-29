@@ -210,4 +210,34 @@ export interface Dashboard {
   active_experiment_ids: string[]
   recent_experiments: Pick<Experiment, 'id' | 'code' | 'name' | 'status'>[]
   recent_actions: Pick<Audit, 'id' | 'action' | 'entity_type' | 'created_at'>[]
+  measurement: { due_today_count: number; overdue_count: number; experiments: Array<{
+    id: string; code: string; name: string; due_today_count: number; overdue_count: number
+  }> }
+}
+
+export type MeasurementStatus = 'overdue' | 'due_today' | 'upcoming' | 'completed' | 'unschedulable'
+export interface MeasurementTask {
+  experiment_id: string; experiment_code: string; material_id: string; experiment_number: string | null
+  dish_id: string; dish_code: string; field_number: string; replicate_no: number
+  sample_id: string; sample_number: number; position_label: string | null
+  taxon_common_name: string | null; taxon_scientific_name: string; taxon_code: string
+  seed_lot_code: string; source_code: string | null; germinated_at: string | null
+  timepoint_id: string; day_after_germination: number; scheduled_date: string | null
+  status: MeasurementStatus; measurement_id: string | null
+  root_length_mm: number | null; shoot_length_mm: number | null
+  root_unavailable: boolean; shoot_unavailable: boolean; measured_at: string | null
+  notes: string | null; delay_days: number | null
+}
+export interface MeasurementTasks {
+  experiment_status: ExperimentStatus
+  dag_days: number[]
+  summary: { due_today_count: number; overdue_count: number; completed_today_count: number
+    upcoming_count: number; unschedulable_count: number }
+  tasks: MeasurementTask[]
+}
+export interface MeasurementHistory {
+  dag_days: number[]
+  samples: Array<{ sample_id: string; sample_number: number; field_number: string
+    position_label: string | null; germinated_at: string | null
+    measurements: Record<string, MeasurementTask> }>
 }
