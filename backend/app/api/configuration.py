@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.schemas import ConfiguredExperimentInput, DagInput, MaterialInput, MaterialOrderInput, MaterialPatch, ProtocolInput
 from app.core.auth import current_user
 from app.db.session import get_db
-from app.models import Experiment, SeedLot, Taxon, User
+from app.models import Experiment, ExperimentMaterial, SeedLot, Taxon, User
 from app.services import experiment_config as design
 from app.services.common import require_entity
 from app.services.ordering import material_key
@@ -15,13 +15,16 @@ router = APIRouter(prefix="/experiments", tags=["experiment configuration"])
 
 
 @router.get("/available-seed-lots")
-def available_seed_lots(q: str = "", taxon_id: str | None = None, db: Session = Depends(get_db), _user: User = Depends(current_user)):
-    query = select(SeedLot, Taxon).join(Taxon, SeedLot.taxon_id == Taxon.id).where(
+def available_seed_lots(q: str = "", taxon_id: str | None = None, unparticipated: bool = False, db: Session = Depends(get_db), _user: User = Depends(current_user)):
+    participation = select(ExperimentMaterial.id).join(Experiment,
+        ExperimentMaterial.experiment_id == Experiment.id).where(ExperimentMaterial.seed_lot_id == SeedLot.id).exists()
+    query = select(SeedLot, Taxon, participation).join(Taxon, SeedLot.taxon_id == Taxon.id).where(
         SeedLot.is_active.is_(True), Taxon.is_active.is_(True))
-    all_rows = sorted(db.execute(query.limit(500)).all(), key=lambda pair: material_key(pair[1], pair[0]))
+    all_rows = sorted(db.execute(query).all(), key=lambda pair: material_key(pair[1], pair[0]))
+    # Rank remains global, so adding items from different searches preserves numbering order.
     term = q.strip().casefold()
-    matches = [(rank, lot, taxon) for rank, (lot, taxon) in enumerate(all_rows, start=1)
-               if (not taxon_id or taxon.id == taxon_id) and
+    matches = [(rank, lot, taxon) for rank, (lot, taxon, participated) in enumerate(all_rows, start=1)
+               if (not unparticipated or not participated) and (not taxon_id or taxon.id == taxon_id) and
                (not term or any(term in str(value or "").casefold() for value in (
                    taxon.common_name, taxon.scientific_name, taxon.code,
                    lot.code, lot.source, lot.source_code)))]
