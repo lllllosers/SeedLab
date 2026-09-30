@@ -80,7 +80,7 @@ def test_start_is_atomic_uses_effective_values_and_never_decrements_lot(auth_cli
     assert start(client, headers, base).status_code == 409
     assert client.get(f"{base}/execution").json()["dish_count"] == 5
     assert all(client.get(f"/api/seed-lots/{lot['id']}").json()["quantity"] == 100 for lot in lots)
-    audit = client.get("/api/audit-logs").json()
+    audit = client.get("/api/audit-logs", params={"page_size": 100}).json()["items"]
     assert sum(row["entity_type"] == "GerminationDish" and row["action"] == "create" for row in audit) == 5
 
 
@@ -102,7 +102,7 @@ def test_start_rolls_back_dishes_status_and_audit_on_failure(auth_client, monkey
         start(client, headers, base)
     assert client.get(base).json()["status"] == "ready"
     assert client.get(f"{base}/execution").json()["dish_count"] == 0
-    assert not any(row["entity_type"] == "GerminationDish" for row in client.get("/api/audit-logs").json())
+    assert not any(row["entity_type"] == "GerminationDish" for row in client.get("/api/audit-logs", params={"page_size": 100}).json()["items"])
 
 
 def test_dish_code_and_replicate_constraints_are_enforced(auth_client, tmp_path):
@@ -170,7 +170,7 @@ def test_observation_and_samples_roll_back_together(auth_client, monkeypatch):
     assert summary["recent_observations"] == []
     assert summary["sample_count"] == 0
     assert not any(row["entity_type"] in {"GerminationObservation", "SeedlingSample"}
-                   for row in client.get("/api/audit-logs").json())
+                   for row in client.get("/api/audit-logs", params={"page_size": 100}).json()["items"])
 
 
 def test_multiple_checks_per_day_capacity_and_atomic_batch(auth_client):
@@ -268,7 +268,7 @@ def test_correction_deletion_and_audit_preserve_selected_samples(auth_client):
     assert client.patch(f"{base}/observations/{later['id']}", json={"new_germinated_count": None}, headers=headers).status_code == 422
     assert client.delete(f"{base}/observations/{later['id']}", headers=headers).status_code == 204
     assert client.get(f"{base}/execution").json()["dishes"][0]["cumulative_germinated"] == 2
-    audit = client.get("/api/audit-logs").json()
+    audit = client.get("/api/audit-logs", params={"page_size": 100}).json()["items"]
     obs_actions = [row["action"] for row in audit if row["entity_type"] == "GerminationObservation"]
     assert {"create", "update", "delete"} <= set(obs_actions)
     assert any(row["entity_type"] == "SeedlingSample" and row["action"] == "create" for row in audit)
@@ -330,7 +330,7 @@ def test_stage2_migration_preserves_existing_dish_and_sample(tmp_path, monkeypat
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "b742b49a162e"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
         assert conn.execute(text("SELECT COUNT(*) FROM germination_observations")).scalar() == 1
         assert conn.execute(text("SELECT COUNT(*) FROM seedling_samples")).scalar() == 1
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []

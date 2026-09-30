@@ -100,6 +100,7 @@ def test_field_number_keeps_replicate_suffix_before_other_dishes_have_samples(au
     observe(client, headers, base, dish, datetime.now(timezone.utc) - timedelta(days=1))
     task = client.get(f"{base}/measurement-tasks").json()["tasks"][0]
     assert task["field_number"] == "001-1"
+    assert client.get(f"{base}/measurement-worklist", params={"q": "001-1"}).json()["total_materials"] == 1
 
 
 def test_create_correct_clear_position_and_export(auth_client):
@@ -133,7 +134,7 @@ def test_create_correct_clear_position_and_export(auth_client):
     assert client.patch(f"{base}/samples/{sample['id']}/position", json={"germinated_at": now.isoformat()}, headers=headers).status_code == 422
     assert client.get(f"{base}/samples").json()[0]["germinated_at"] == sample["germinated_at"]
     assert client.get(f"{base}/measurement-tasks", params={"q": "托盘2-15"}).json()["tasks"]
-    audit = client.get("/api/audit-logs").json()
+    audit = client.get("/api/audit-logs", params={"page_size": 100}).json()["items"]
     assert sum(row["entity_type"] == "SeedlingMeasurement" and row["action"] == "update" for row in audit) == 1
     assert any(row["entity_type"] == "SeedlingSample" and row["before"] == {"position_label": None} for row in audit)
     # Workbook includes a completed zero/NA stage and an unmeasured dynamic DAG column.
@@ -145,15 +146,17 @@ def test_create_correct_clear_position_and_export(auth_client):
     book.close()
     assert client.delete(f"{base}/measurements/{item['id']}", headers=headers).status_code == 204
     assert next(row for row in client.get(f"{base}/measurement-tasks").json()["tasks"] if row["day_after_germination"] == 0)["measurement_id"] is None
-    assert any(row["entity_type"] == "SeedlingMeasurement" and row["action"] == "delete" for row in client.get("/api/audit-logs").json())
+    assert any(row["entity_type"] == "SeedlingMeasurement" and row["action"] == "delete" for row in client.get("/api/audit-logs", params={"page_size": 100}).json()["items"])
 
 
-def test_completed_allows_correction_not_creation_or_deletion(auth_client):
+def test_completed_allows_correction_not_creation_or_deletion(auth_client, tmp_path):
     client, headers = auth_client
     base, dish, _, _ = setup_experiment(client, headers, days=(0, 1))
     observe(client, headers, base, dish, datetime.now(timezone.utc) - timedelta(days=3))
     tasks = client.get(f"{base}/measurement-tasks").json()["tasks"]
     item = client.post(f"{base}/measurements", json=payload(tasks[0], datetime.now(timezone.utc)), headers=headers).json()
+    assert client.post(f"{base}/measurements", json=payload(tasks[1], datetime.now(timezone.utc)), headers=headers).status_code == 201
+    assert client.patch(f"{base}/sowing/{dish['id']}", json={"sown_at": (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()}, headers=headers).status_code == 200
     assert client.patch(base, json={"status": "completed"}, headers=headers).status_code == 200
     assert client.post(f"{base}/measurements", json=payload(tasks[1], datetime.now(timezone.utc)), headers=headers).status_code == 409
     assert client.patch(f"{base}/measurements/{item['id']}", json={"notes": "复核完成"}, headers=headers).status_code == 200
@@ -221,7 +224,7 @@ def test_database_constraints_and_migration_roundtrip(tmp_path, monkeypatch):
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "b742b49a162e"
+        assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "c6d91f28a405"
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(text("UPDATE seedling_measurements SET root_length_mm=NULL, root_unavailable=0"))

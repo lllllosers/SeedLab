@@ -27,7 +27,7 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "b742b49a162e"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
         timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
         sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
         assert "day_after_germination" in timepoint_columns
@@ -64,7 +64,7 @@ def test_taxon_crud_and_audit(auth_client):
     assert client.patch(f"/api/taxa/{item['id']}", json={"is_active": True}, headers=headers).status_code == 200
     assert client.delete(f"/api/taxa/{item['id']}", headers=headers).status_code == 204
     assert client.get(f"/api/taxa/{item['id']}").status_code == 404
-    assert [entry["action"] for entry in client.get("/api/audit-logs").json()] == ["delete", "update", "update", "create"]
+    assert [entry["action"] for entry in client.get("/api/audit-logs", params={"page_size": 100}).json()["items"]] == ["delete", "update", "update", "create"]
 
 
 def test_taxon_unique_and_seed_lot_relationship(auth_client):
@@ -123,7 +123,7 @@ def test_excel_import_and_csv_export(auth_client):
     assert client.patch(f"/api/taxa/{taxon['id']}", headers=headers, json={"is_active": False}).status_code == 200
     inactive_rows = list(csv.reader(StringIO(client.get("/api/export/taxa.csv").text.lstrip("\ufeff"))))
     assert inactive_rows[1][6] == "已停用"
-    assert any(log["action"] == "import" for log in client.get("/api/audit-logs").json())
+    assert any(log["action"] == "import" for log in client.get("/api/audit-logs", params={"page_size": 100}).json()["items"])
 
 
 def test_zero_is_fact_and_null_is_missing(client: TestClient, tmp_path):
@@ -217,7 +217,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "b742b49a162e"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
         assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
         index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
         assert "uq_timepoint_experiment_dag" in index_names
