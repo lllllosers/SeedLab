@@ -279,6 +279,11 @@ def replace_days(db: Session, experiment_id: str, days: list[int], user_id: str)
 
 
 def set_status(db: Session, experiment: Experiment, target: str) -> None:
+    if target == "completed" and target != experiment.status:
+        from app.services.experiment_lifecycle import require_complete
+        require_complete(db, experiment.id)
+    if target == "cancelled" and target != experiment.status:
+        raise HTTPException(409, "请通过“终止实验”填写原因后结束进行中的实验")
     if experiment.numbering_locked_at and target == "draft":
         raise HTTPException(409, "置床编号已确认；若尚未置床，请使用“重新调整实验”")
     allowed = {"draft": {"ready", "cancelled"}, "ready": {"draft", "cancelled"},

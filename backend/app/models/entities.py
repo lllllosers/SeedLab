@@ -73,6 +73,7 @@ class Experiment(Identity, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     numbering_locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    termination_reason: Mapped[str | None] = mapped_column(Text)
     __table_args__ = (CheckConstraint("status IN ('draft', 'ready', 'active', 'completed', 'cancelled')", name="ck_experiment_status"),)
 
 

@@ -120,6 +120,8 @@ def correct_sowing(db: Session, experiment_id: str, dish_id: str, sown_at: datet
                    user_id: str) -> dict:
     try:
         experiment = require_entity(db, Experiment, experiment_id)
+        if experiment.status not in {"active", "completed"}:
+            raise HTTPException(409, "已终止的实验只供查阅，不能修改置床记录")
         dish = _dish(db, experiment_id, dish_id)
         if not dish.sown_at or dish.cancelled_at:
             raise HTTPException(409, "只有已置床的培养皿可以修改实际置床时间")
@@ -129,11 +131,15 @@ def correct_sowing(db: Session, experiment_id: str, dish_id: str, sown_at: datet
         if earliest and actual > utc_naive(earliest):
             raise HTTPException(422, "置床时间不能晚于该培养皿最早的发芽巡检时间")
         before = iso_utc(dish.sown_at)
+        old_start = iso_utc(experiment.started_at)
         dish.sown_at = actual
         all_sown = [item.sown_at for item in dishes_for(db, experiment_id) if item.sown_at]
         experiment.started_at = min(all_sown) if all_sown else None
         record(db, user_id, "update", "GerminationDish", dish.id,
                {"sown_at": before}, {"sown_at": iso_utc(actual)})
+        if old_start != iso_utc(experiment.started_at):
+            record(db, user_id, "update", "Experiment", experiment.id,
+                   {"started_at": old_start}, {"started_at": iso_utc(experiment.started_at)})
         commit_or_conflict(db)
     except Exception:
         db.rollback()

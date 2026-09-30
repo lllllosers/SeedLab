@@ -22,7 +22,7 @@ export const statusLabels: Record<string, string> = {
   ready: '已就绪',
   active: '进行中',
   completed: '已完成',
-  cancelled: '已取消',
+  cancelled: '已终止',
 }
 export const actionLabels: Record<string, string> = {
   create: '创建',
@@ -31,6 +31,7 @@ export const actionLabels: Record<string, string> = {
   import: '导入',
 }
 export const entityLabels: Record<string, string> = {
+  ImportJob: '材料导入',
   Taxon: '物种',
   SeedLot: '种子批次',
   Experiment: '实验',

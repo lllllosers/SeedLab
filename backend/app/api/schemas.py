@@ -142,6 +142,7 @@ class ExperimentOut(ORMModel):
     started_at: datetime | None
     numbering_locked_at: datetime | None
     ended_at: datetime | None
+    termination_reason: str | None
     created_at: datetime
 
 
@@ -154,6 +155,10 @@ class ProtocolInput(BaseModel):
     sample_scope: Literal["per_dish", "per_material"] = "per_dish"
     germination_criterion: str = Field(min_length=1)
     summary: str | None = None
+
+
+class TerminateExperiment(BaseModel):
+    reason: str = Field(min_length=1)
 
 
 class MaterialInput(BaseModel):

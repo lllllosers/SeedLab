@@ -17,7 +17,11 @@ const route = useRoute()
 const router = useRouter()
 const config = ref<ExperimentConfiguration | null>(null)
 const materialList = computed(() => config.value?.materials || [])
-const { page: materialPage, pageSize: materialPageSize, pageItems: visibleMaterials } = useClientPagination(materialList)
+const {
+  page: materialPage,
+  pageSize: materialPageSize,
+  pageItems: visibleMaterials,
+} = useClientPagination(materialList)
 const item = computed(() => config.value?.experiment)
 const editable = computed(() => item.value?.status === 'draft')
 const canEditInfo = computed(() => item.value?.status === 'draft' || item.value?.status === 'ready')
@@ -106,8 +110,10 @@ async function changeStatus(target: 'ready' | 'draft') {
   } catch {
     return
   }
-  await run(() => api.patch(base.value, { status: target }),
-    preparing ? '实验已标记为已就绪' : '实验已返回草稿')
+  await run(
+    () => api.patch(base.value, { status: target }),
+    preparing ? '实验已标记为已就绪' : '实验已返回草稿',
+  )
 }
 function editProtocol() {
   Object.assign(protocol, config.value?.protocol || {})
@@ -181,28 +187,42 @@ async function removeMaterial(entry: ExperimentMaterial) {
 }
 async function confirmNumbers() {
   try {
-    await ElMessageBox.confirm('系统将先按中文名排序，再为材料和培养皿生成正式现场编号。请核对置床清单后确认。',
-      '确认置床编号', { confirmButtonText: '确认置床编号', cancelButtonText: '取消' })
-  } catch { return }
+    await ElMessageBox.confirm(
+      '系统将先按中文名排序，再为材料和培养皿生成正式现场编号。请核对置床清单后确认。',
+      '确认置床编号',
+      { confirmButtonText: '确认置床编号', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
   await run(() => api.post(`${base.value}/confirm-numbers`), '置床编号已确认')
 }
 async function reopenDesign() {
   try {
-    await ElMessageBox.confirm('解除编号确认后，当前001、002……编号方案将失效。调整完成后需要重新确认并重新打印置床清单。',
-      '重新调整实验', { confirmButtonText: '重新调整实验', cancelButtonText: '取消' })
-  } catch { return }
+    await ElMessageBox.confirm(
+      '解除编号确认后，当前001、002……编号方案将失效。调整完成后需要重新确认并重新打印置床清单。',
+      '重新调整实验',
+      { confirmButtonText: '重新调整实验', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
   await run(() => api.post(`${base.value}/reopen-design`), '已返回可调整状态')
 }
 async function downloadSowingSheet() {
   try {
-    const { data } = await api.get<Blob>(`${base.value}/sowing-sheet.xlsx`, { responseType: 'blob' })
+    const { data } = await api.get<Blob>(`${base.value}/sowing-sheet.xlsx`, {
+      responseType: 'blob',
+    })
     const url = URL.createObjectURL(data)
     const link = document.createElement('a')
     link.href = url
     link.download = 'seedlab-sowing-sheet.xlsx'
     link.click()
     URL.revokeObjectURL(url)
-  } catch (error) { ElMessage.error(errorMessage(error)) }
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  }
 }
 function editDag() {
   dagText.value = config.value?.dag_days.join(', ') || ''
@@ -220,6 +240,74 @@ function saveDag() {
     () => (dagOpen.value = false),
   )
 }
+async function deleteExperiment() {
+  try {
+    await ElMessageBox.confirm(
+      '永久删除会移除实验方案、材料、测定时间和未置床计划培养皿，无法恢复。已有真实置床或观测数据时不能删除。',
+      '永久删除实验',
+      { confirmButtonText: '永久删除', cancelButtonText: '保留实验', type: 'warning' },
+    )
+    await api.delete(base.value)
+    ElMessage.success('实验已删除')
+    await router.push('/experiments')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+  }
+}
+async function completeExperiment() {
+  try {
+    const { data } = await api.get<{
+      can_complete: boolean
+      pending_dish_count: number
+      observing_dish_count: number
+      measurement_pending_count: number
+    }>(`${base.value}/completion-check`)
+    if (!data.can_complete) {
+      await ElMessageBox.alert(
+        `待置床 ${data.pending_dish_count} 个、仍在观察期 ${data.observing_dish_count} 个、幼苗测定 ${data.measurement_pending_count} 项。如果实验决定提前结束，请使用“终止实验”。`,
+        '实验尚未完成',
+        { confirmButtonText: '继续实验' },
+      )
+      return
+    }
+    await ElMessageBox.confirm(
+      '所有观察周期和幼苗测定均已完成。完成后不能新增巡检和测定，仍可复核修改已测值。',
+      '完成实验',
+      { confirmButtonText: '确认完成', cancelButtonText: '继续实验' },
+    )
+    await run(() => api.post(`${base.value}/complete`), '实验已完成')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+  }
+}
+async function terminateExperiment() {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '终止后保留全部实验数据，所有执行页面改为只读，不能恢复执行。请填写终止原因。',
+      '终止实验',
+      {
+        confirmButtonText: '确认终止实验',
+        cancelButtonText: '继续实验',
+        inputValidator: (value) => !!value.trim() || '请填写终止原因',
+        type: 'warning',
+      },
+    )
+    await run(
+      () => api.post(`${base.value}/terminate`, { reason: value }),
+      '实验已终止，历史数据保留',
+    )
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
+  }
+}
+function moreAction(command: string) {
+  if (command === 'delete') void deleteExperiment()
+  if (command === 'draft') void changeStatus('draft')
+  if (command === 'reopen') void reopenDesign()
+  if (command === 'info') editInfo()
+  if (command === 'complete') void completeExperiment()
+  if (command === 'terminate') void terminateExperiment()
+}
 onMounted(load)
 </script>
 
@@ -229,30 +317,83 @@ onMounted(load)
     <div>
       <div class="eyebrow">实验编号 {{ item.code }}</div>
       <h1>{{ item.name }}</h1>
-      <p>核对材料和方案，确认置床编号后可分批登记实际置床时间。计划开始 {{ dateText(item.planned_start_date) }}</p>
+      <p>
+        核对材料和方案，确认置床编号后可分批登记实际置床时间。计划开始
+        {{ dateText(item.planned_start_date) }}
+      </p>
     </div>
     <div class="heading-actions">
-      <span class="experiment-current-status">当前状态：<span class="status-pill large" :class="item.status">{{ statusLabels[item.status] }}</span></span
-      ><el-button v-if="item.status === 'draft'" type="primary" @click="changeStatus('ready')">标记为已就绪</el-button
-      ><el-button v-if="item.status === 'ready' && !item.numbering_locked_at" @click="changeStatus('draft')">返回草稿</el-button
-      ><el-button v-if="item.status === 'ready' && !item.numbering_locked_at" type="primary" @click="confirmNumbers">确认置床编号</el-button
-      ><el-button v-if="item.status === 'ready' && item.numbering_locked_at" @click="reopenDesign">重新调整实验</el-button
-      ><el-button v-if="item.status === 'ready' && item.numbering_locked_at" type="primary" @click="router.push(`/experiments/${item.id}/germination`)">进入置床管理</el-button
-      ><el-button
-        v-if="item.status === 'active'"
+      <span class="experiment-current-status"
+        >当前状态：<span class="status-pill large" :class="item.status">{{
+          statusLabels[item.status]
+        }}</span></span
+      >
+      <el-button v-if="item.status === 'draft'" type="primary" @click="changeStatus('ready')"
+        >标记为已就绪</el-button
+      >
+      <el-button
+        v-else-if="item.status === 'ready' && !item.numbering_locked_at"
         type="primary"
-        plain
+        @click="confirmNumbers"
+        >确认置床编号</el-button
+      >
+      <el-button
+        v-else
+        type="primary"
         @click="router.push(`/experiments/${item.id}/germination`)"
-        >进入实验执行</el-button
-      ><el-button v-if="canEditInfo" @click="editInfo">编辑信息</el-button>
+        >{{
+          item.status === 'active'
+            ? '继续实验'
+            : item.status === 'ready'
+              ? '进入实验'
+              : '查看实验数据'
+        }}</el-button
+      >
+      <el-dropdown v-if="['draft', 'ready', 'active'].includes(item.status)" @command="moreAction"
+        ><el-button>更多操作</el-button
+        ><template #dropdown
+          ><el-dropdown-menu>
+            <el-dropdown-item v-if="canEditInfo" command="info">编辑实验信息</el-dropdown-item>
+            <el-dropdown-item
+              v-if="item.status === 'ready' && !item.numbering_locked_at"
+              command="draft"
+              >返回草稿</el-dropdown-item
+            >
+            <el-dropdown-item
+              v-if="item.status === 'ready' && item.numbering_locked_at"
+              command="reopen"
+              >返回草稿并重新调整编号</el-dropdown-item
+            >
+            <el-dropdown-item v-if="['draft', 'ready'].includes(item.status)" command="delete"
+              >永久删除实验</el-dropdown-item
+            >
+            <el-dropdown-item v-if="item.status === 'active'" command="complete"
+              >完成实验</el-dropdown-item
+            >
+            <el-dropdown-item v-if="item.status === 'active'" command="terminate"
+              >终止实验</el-dropdown-item
+            >
+          </el-dropdown-menu></template
+        ></el-dropdown
+      >
     </div>
   </div>
-  <p v-if="item" class="experiment-flow-hint">{{
-    item.status === 'draft' ? '确认材料、方案和发芽后测定时间（DAG）后，可标记为已就绪。' :
-    item.status === 'ready' ? (item.numbering_locked_at ? '置床编号已确认。可下载清单并分批置床；尚未置床时可以重新调整实验。' : '方案已就绪。请先预览置床清单，再确认置床编号。') :
-    item.status === 'active' ? '实验正在执行，进入发芽巡检页面记录数据。' :
-    '该实验目前不再接受材料和测定方案修改。'
-  }}</p>
+  <p v-if="item" class="experiment-flow-hint">
+    {{
+      item.status === 'draft'
+        ? '确认材料、方案和发芽后测定时间（DAG）后，可标记为已就绪。'
+        : item.status === 'ready'
+          ? item.numbering_locked_at
+            ? '置床编号已确认。可下载清单并分批置床；尚未置床时可以重新调整实验。'
+            : '方案已就绪。请先预览置床清单，再确认置床编号。'
+          : item.status === 'active'
+            ? '实验正在执行，进入发芽巡检页面记录数据。'
+            : '该实验目前不再接受材料和测定方案修改。'
+    }}
+  </p>
+  <p v-if="item?.termination_reason" class="execution-alert">
+    终止原因：{{ item.termination_reason }}
+  </p>
   <div v-if="config" class="surface-panel design-detail">
     <el-tabs v-model="activeTab" class="design-tabs">
       <el-tab-pane label="概览" name="overview"
@@ -338,11 +479,18 @@ onMounted(load)
           <el-button v-if="editable" type="primary" plain @click="openAdd">添加材料</el-button>
         </div>
         <div v-for="entry in visibleMaterials" :key="entry.id" class="detail-material-row">
-          <span class="experiment-number-badge">{{ entry.experiment_number ? String(entry.experiment_number).padStart(3, '0') : `预计 ${String(entry.preview_number).padStart(3, '0')}` }}</span>
+          <span class="experiment-number-badge">{{
+            entry.experiment_number
+              ? String(entry.experiment_number).padStart(3, '0')
+              : `预计 ${String(entry.preview_number).padStart(3, '0')}`
+          }}</span>
           <div class="grow">
             <b>{{ entry.taxon_common_name || entry.taxon_scientific_name }}</b>
             <small v-if="entry.taxon_common_name">{{ entry.taxon_scientific_name }}</small>
-            <small>原始材料编号：{{ entry.source_code || '未填写' }} · {{ entry.seed_lot_code }} {{ entry.label || '' }}</small>
+            <small
+              >原始材料编号：{{ entry.source_code || '未填写' }} · {{ entry.seed_lot_code }}
+              {{ entry.label || '' }}</small
+            >
           </div>
           <div class="material-metrics">
             <span
@@ -358,22 +506,65 @@ onMounted(load)
             ><el-button link type="danger" @click="removeMaterial(entry)">移除</el-button>
           </div>
         </div>
-        <el-pagination v-if="config.materials.length" v-model:current-page="materialPage" v-model:page-size="materialPageSize" class="list-pagination" :page-sizes="[25, 50, 100]" layout="total, sizes, prev, pager, next" :total="config.materials.length" />
+        <el-pagination
+          v-if="config.materials.length"
+          v-model:current-page="materialPage"
+          v-model:page-size="materialPageSize"
+          class="list-pagination"
+          :page-sizes="[25, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          :total="config.materials.length"
+        />
         <div v-if="!config.materials.length" class="wizard-empty">
           尚未加入实验材料。请先添加种子批次，再标记为已就绪。
         </div></el-tab-pane
       >
       <el-tab-pane label="置床清单" name="sowing">
-        <div class="design-section-head"><div><h3>置床清单</h3><p>先按中文名排序，再编号。确认后可下载正式清单，现场编号不会因后续置床顺序改变。</p></div>
-          <el-button v-if="item?.numbering_locked_at" @click="downloadSowingSheet">下载 Excel</el-button>
+        <div class="design-section-head">
+          <div>
+            <h3>置床清单</h3>
+            <p>先按中文名排序，再编号。确认后可下载正式清单，现场编号不会因后续置床顺序改变。</p>
+          </div>
+          <el-button v-if="item?.numbering_locked_at" @click="downloadSowingSheet"
+            >下载 Excel</el-button
+          >
         </div>
         <el-table :data="config.materials" max-height="560">
-          <el-table-column label="实验编号" width="100"><template #default="{ row }"><span class="experiment-number-badge">{{ row.experiment_number ? String(row.experiment_number).padStart(3, '0') : `预计 ${String(row.preview_number).padStart(3, '0')}` }}</span></template></el-table-column>
-          <el-table-column label="物种" min-width="180"><template #default="{ row }"><div class="sowing-name"><b>{{ row.taxon_common_name || row.taxon_scientific_name }}</b><small v-if="row.taxon_common_name"><i>{{ row.taxon_scientific_name }}</i></small></div></template></el-table-column>
-          <el-table-column label="原始材料编号" width="120"><template #default="{ row }">{{ row.source_code || '未填写' }}</template></el-table-column>
+          <el-table-column label="实验编号" width="100"
+            ><template #default="{ row }"
+              ><span class="experiment-number-badge">{{
+                row.experiment_number
+                  ? String(row.experiment_number).padStart(3, '0')
+                  : `预计 ${String(row.preview_number).padStart(3, '0')}`
+              }}</span></template
+            ></el-table-column
+          >
+          <el-table-column label="物种" min-width="180"
+            ><template #default="{ row }"
+              ><div class="sowing-name">
+                <b>{{ row.taxon_common_name || row.taxon_scientific_name }}</b
+                ><small v-if="row.taxon_common_name"
+                  ><i>{{ row.taxon_scientific_name }}</i></small
+                >
+              </div></template
+            ></el-table-column
+          >
+          <el-table-column label="原始材料编号" width="120"
+            ><template #default="{ row }">{{
+              row.source_code || '未填写'
+            }}</template></el-table-column
+          >
           <el-table-column prop="seed_lot_code" label="系统批次编号" width="145" />
-          <el-table-column label="来源" min-width="130"><template #default="{ row }"><span class="sowing-source">{{ row.source || '未填写' }}</span></template></el-table-column>
-          <el-table-column label="采集/获得日期" width="140"><template #default="{ row }">{{ row.collected_at?.slice(0, 10) || '未填写' }}</template></el-table-column>
+          <el-table-column label="来源" min-width="130"
+            ><template #default="{ row }"
+              ><span class="sowing-source">{{ row.source || '未填写' }}</span></template
+            ></el-table-column
+          >
+          <el-table-column label="采集/获得日期" width="140"
+            ><template #default="{ row }">{{
+              row.collected_at?.slice(0, 10) || '未填写'
+            }}</template></el-table-column
+          >
           <el-table-column prop="effective_replicate_count" label="重复数" width="80" />
           <el-table-column prop="effective_seeds_per_dish" label="每皿种子数" width="105" />
         </el-table>
@@ -416,7 +607,9 @@ onMounted(load)
             ><strong>{{ config.workload.estimated_measurement_count }}</strong>
           </div>
         </div>
-        <div v-else class="wizard-empty">请先填写实验方案并添加材料，再查看预计工作量。</div></el-tab-pane
+        <div v-else class="wizard-empty">
+          请先填写实验方案并添加材料，再查看预计工作量。
+        </div></el-tab-pane
       >
     </el-tabs>
   </div>
@@ -429,8 +622,7 @@ onMounted(load)
         ><el-date-picker
           v-model="info.planned_start_date"
           type="date"
-          value-format="YYYY-MM-DD" /></el-form-item
-      ></el-form
+          value-format="YYYY-MM-DD" /></el-form-item></el-form
     ><template #footer
       ><el-button @click="infoOpen = false">取消</el-button
       ><el-button type="primary" @click="saveInfo">保存实验信息</el-button></template
@@ -484,10 +676,11 @@ onMounted(load)
   >
   <el-dialog v-model="addOpen" title="添加实验材料" width="620px"
     ><div class="wizard-search-row">
-      <el-input v-model="search" placeholder="搜索中文名、学名、物种编号或批次" @keyup.enter="searchLots" /><el-button
-        @click="searchLots"
-        >搜索</el-button
-      >
+      <el-input
+        v-model="search"
+        placeholder="搜索中文名、学名、物种编号或批次"
+        @keyup.enter="searchLots"
+      /><el-button @click="searchLots">搜索</el-button>
     </div>
     <el-select v-model="selectedLot" filterable placeholder="选择可用种子批次" style="width: 100%"
       ><el-option
@@ -495,12 +688,15 @@ onMounted(load)
         :key="lot.id"
         class="taxon-select-option"
         :label="`${lot.taxon_common_name || lot.taxon_scientific_name} · ${lot.code}`"
-        :value="lot.id">
-          <div class="taxon-option">
-            <b>{{ lot.taxon_common_name || lot.taxon_scientific_name }}</b>
-            <small>{{ lot.taxon_common_name ? `${lot.taxon_scientific_name} · ${lot.code}` : lot.code }}</small>
-          </div>
-        </el-option></el-select
+        :value="lot.id"
+      >
+        <div class="taxon-option">
+          <b>{{ lot.taxon_common_name || lot.taxon_scientific_name }}</b>
+          <small>{{
+            lot.taxon_common_name ? `${lot.taxon_scientific_name} · ${lot.code}` : lot.code
+          }}</small>
+        </div>
+      </el-option></el-select
     ><template #footer
       ><el-button @click="addOpen = false">取消</el-button
       ><el-button type="primary" @click="addMaterial">加入实验材料</el-button></template

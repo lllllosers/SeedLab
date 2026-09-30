@@ -85,8 +85,14 @@ async function remove(observation: GerminationObservation) {
           <td>{{ observation.generated_sample_count }}</td>
           <td>{{ observation.notes || '—' }}</td>
           <td>
-            <el-button link type="primary" @click="edit(observation)">修正</el-button
+            <el-button
+              v-if="execution.experiment.status !== 'cancelled'"
+              link
+              type="primary"
+              @click="edit(observation)"
+              >修正</el-button
             ><el-button
+              v-if="execution.experiment.status !== 'cancelled'"
               link
               type="danger"
               :disabled="observation.generated_sample_count > 0"
@@ -98,7 +104,9 @@ async function remove(observation: GerminationObservation) {
       </tbody>
     </table>
   </div>
-  <div v-else class="wizard-empty">当前实验还没有发芽巡检记录。检查培养皿后，填写本次新增发芽数并保存。</div>
+  <div v-else class="wizard-empty">
+    当前实验还没有发芽巡检记录。检查培养皿后，填写本次新增发芽数并保存。
+  </div>
   <el-dialog v-model="editing" title="修正巡检记录" width="480px"
     ><p class="execution-dialog-copy">
       {{ form.dishCode }} · 修改新增数后会重新校验累计与已选幼苗。已有样本不会被自动删除。
