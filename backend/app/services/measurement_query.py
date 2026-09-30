@@ -122,11 +122,13 @@ def records(db: Session, experiment_id: str, q=None, material_ids=None, dag=None
     if date_from: filters.append(c.measured_date >= date_from.isoformat())
     if date_to: filters.append(c.measured_date <= date_to.isoformat())
     query = select(c).where(*filters)
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    aggregate = db.execute(select(func.count().label("total"),
+        func.count(func.distinct(c.material_id)).label("material_count")).where(*filters)).one()
+    total, material_count = aggregate
     rows = db.execute(query.order_by(c.measured_at.desc(), c.experiment_number, c.sample_number, c.day_after_germination)
                       .offset((page - 1) * page_size).limit(page_size)).mappings()
     return {"items": [task_row(row) for row in rows], "page": page, "page_size": page_size,
-            "total": total, "total_pages": (total + page_size - 1) // page_size}
+            "total": total, "material_count": material_count, "total_pages": (total + page_size - 1) // page_size}
 
 
 def dashboard(db: Session):

@@ -171,9 +171,6 @@ button {
   gap: 16px;
   margin-top: 18px;
 }
-.data-maintenance {
-  margin-top: 20px;
-}
 .group-subtitle {
   margin-left: 14px;
   color: #728779;
@@ -765,10 +762,6 @@ button {
   border-radius: 8px;
   color: #255640;
 }
-.lot-import-card {
-  margin-top: 20px;
-  max-width: 760px;
-}
 .import-error {
   white-space: pre-wrap;
   max-height: 300px;
@@ -888,18 +881,6 @@ button {
   color: #87968a;
   margin: 0 0 20px;
 }
-.data-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-.data-card {
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-height: 310px;
-}
 .data-card-icon {
   width: 44px;
   height: 44px;
@@ -909,31 +890,6 @@ button {
   place-items: center;
   border-radius: 11px;
   font-size: 22px;
-}
-.data-card-icon.green {
-  background: #e9f2e9;
-  color: #5a9272;
-}
-.data-card h3 {
-  font-size: 17px;
-  margin: 20px 0 6px;
-}
-.data-card p {
-  font-size: 13px;
-  line-height: 1.8;
-  color: #819086;
-  margin: 0 0 20px;
-}
-.data-card code {
-  background: #f2f6f1;
-  padding: 2px 4px;
-  border-radius: 4px;
-  color: #47735a;
-}
-.data-card small {
-  color: #9aa99d;
-  font-size: var(--font-meta);
-  margin-top: 14px;
 }
 .file-picker {
   margin-bottom: 15px;
@@ -1654,9 +1610,6 @@ button {
   }
   .dashboard-columns,
   .detail-grid,
-  .data-cards {
-    grid-template-columns: 1fr;
-  }
   .welcome-banner {
     padding: 25px;
   }
@@ -2091,13 +2044,6 @@ button {
 }
 .material-picker-list {
   max-height: min(50vh, 480px);
-  overflow: auto;
-}
-.selected-material-collapse {
-  margin-top: 18px;
-}
-.selected-material-list {
-  max-height: 260px;
   overflow: auto;
 }
 .material-picker-dialog .el-dialog__body {
@@ -2580,19 +2526,135 @@ textarea {
 
 .measurement-entry-context {
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(240px, 0.8fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 22px;
 }
 .measurement-current-sample > td,
 .measurement-current-dag > td {
   background: #f5faf7 !important;
 }
-@media (max-width: 1500px) {
+@media (max-width: 1699px) {
   .measurement-entry-context {
     grid-template-columns: 1fr;
   }
 }
 
-.measurement-detail, .measurement-editor, .measurement-reference { min-width: 0; }
-.measurement-primary-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.execution-table { font-size: var(--font-control); }
+.measurement-detail,
+.measurement-editor,
+.measurement-reference {
+  min-width: 0;
+}
+.measurement-primary-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.execution-table {
+  font-size: var(--font-control);
+}
+
+/* Measurement workspace: the containing grid and every nested section may shrink. */
+.measurement-workbench,
+.measurement-layout,
+.measurement-queue {
+  min-width: 0;
+}
+.measurement-current-work {
+  padding: 14px;
+  background: #f1f7f3;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.measurement-current-work h3 {
+  margin: 8px 0 4px;
+  overflow-wrap: anywhere;
+}
+.measurement-current-work p {
+  margin: 8px 0;
+}
+.measurement-current-work small {
+  display: block;
+  color: #607269;
+}
+.measurement-work-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+.measurement-task-table {
+  font-size: var(--font-meta);
+}
+.measurement-primary-fields .el-input__inner {
+  font-size: var(--font-body);
+}
+.measurement-primary-fields .el-checkbox {
+  margin-top: 6px;
+}
+.measurement-secondary-fields > label {
+  min-width: 0;
+  font-size: var(--font-meta);
+  color: #607269;
+}
+.measurement-secondary-fields input {
+  width: 100%;
+  min-width: 0;
+}
+.measurement-actions {
+  flex-wrap: wrap;
+}
+.measurement-reference .el-table {
+  width: 100%;
+}
+.measurement-history-toggle {
+  white-space: normal;
+  height: auto;
+  min-height: 36px;
+  text-align: left;
+}
+.table-subtitle {
+  display: block;
+  margin-top: 3px;
+}
+.measurement-record-filters .el-date-editor {
+  max-width: 100%;
+}
+@media (max-width: 1200px) {
+  .measurement-layout {
+    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  }
+}
+@media (max-width: 1000px) {
+  .measurement-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .measurement-primary-fields,
+  .measurement-secondary-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.selected-material-preview {
+  margin: 20px 0;
+}
+.selected-material-row small {
+  display: block;
+  margin-top: 4px;
+  color: #607269;
+}
+
+.data-workspace-cards {
+  display: grid;
+  gap: 22px;
+}
+.export-experiment-select {
+  display: block;
+  width: 100%;
+  margin: 10px 0 18px;
+}
+.data-workspace-cards .panel-heading {
+  justify-content: flex-start;
+  gap: 16px;
+  align-items: flex-start;
+}

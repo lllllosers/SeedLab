@@ -1,44 +1,57 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../../api/client'
 import type { ExperimentStatus, MeasurementTask, MeasurementWorklist, Paged } from '../../types'
+import { measurementQueryParams, normalizedDag } from '../../utils/measurementQuery'
 import MeasurementRecordsTable from './MeasurementRecordsTable.vue'
 import MeasurementEditDialog from './MeasurementEditDialog.vue'
 const props = defineProps<{ experimentId: string; status: ExperimentStatus; days: number[] }>()
 const search = ref(''),
-  dag = ref<number | null>(null),
+  dag = ref<number | string | null | undefined>(null),
   dates = ref<string[]>([]),
   materialIds = ref<string[]>([])
 const page = ref(1),
   pageSize = ref(50),
   items = ref<MeasurementTask[]>([]),
   total = ref(0),
+  materialCount = ref(0),
   loading = ref(false)
 const materials = ref<MeasurementWorklist['materials']>([]),
   editing = ref<MeasurementTask | null>(null)
 const dialog = ref<InstanceType<typeof MeasurementEditDialog> | null>(null)
+const filterDescription = computed(() =>
+  [
+    search.value.trim() ? `搜索“${search.value.trim()}”` : '',
+    materialIds.value.length ? `已选 ${materialIds.value.length} 份材料` : '',
+    normalizedDag(dag.value) !== null ? `DAG ${normalizedDag(dag.value)}` : '',
+    dates.value?.length === 2 ? dates.value.join('—') : '',
+  ]
+    .filter(Boolean)
+    .join(' · '),
+)
 let sequence = 0
 async function load() {
-  const current = ++sequence,
-    params = new URLSearchParams({ page: String(page.value), page_size: String(pageSize.value) })
-  if (search.value.trim()) params.set('q', search.value.trim())
-  if (dag.value !== null) params.set('dag', String(dag.value))
-  materialIds.value.forEach((id) => params.append('material_ids', id))
-  if (dates.value?.length === 2) {
-    params.set('date_from', dates.value[0]!)
-    params.set('date_to', dates.value[1]!)
-  }
+  const current = ++sequence
+  const params = measurementQueryParams({
+    search: search.value,
+    dag: dag.value,
+    dates: dates.value,
+    materialIds: materialIds.value,
+    page: page.value,
+    pageSize: pageSize.value,
+  })
   loading.value = true
   try {
     const result = (
-      await api.get<Paged<MeasurementTask>>(
+      await api.get<Paged<MeasurementTask> & { material_count: number }>(
         `/experiments/${props.experimentId}/measurement-records?${params}`,
       )
     ).data
     if (current === sequence) {
       items.value = result.items
       total.value = result.total
+      materialCount.value = result.material_count
     }
   } catch (error) {
     ElMessage.error(errorMessage(error))
@@ -85,6 +98,7 @@ defineExpose({
     <el-select
       v-model="materialIds"
       multiple
+      clearable
       filterable
       collapse-tags
       collapse-tags-tooltip
@@ -106,6 +120,11 @@ defineExpose({
       end-placeholder="测定结束日期"
     />
   </div>
+  <p class="measurement-result-feedback">
+    共 {{ total }} 条记录 · 涉及 {{ materialCount }} 份材料<span v-if="filterDescription">
+      · 当前：{{ filterDescription }}</span
+    >
+  </p>
   <MeasurementRecordsTable
     v-loading="loading"
     :items="items"

@@ -10,12 +10,14 @@ import type {
   MeasurementWorklist,
 } from '../../types'
 import { measurementStatusLabels, measurementValue, nextPendingTask } from '../../utils/measurement'
+import { normalizedDag } from '../../utils/measurementQuery'
 import MeasurementEditor from './MeasurementEditor.vue'
 import MeasurementRecords from './MeasurementRecords.vue'
 import MeasurementRecordsTable from './MeasurementRecordsTable.vue'
 import MeasurementEditDialog from './MeasurementEditDialog.vue'
 const route = useRoute(),
   base = computed(() => `/experiments/${route.params.id}`)
+const historyOpen = ref(false)
 const tab = ref('worklist'),
   search = ref(''),
   status = ref('pending'),
@@ -39,6 +41,12 @@ const measured = computed(() => tasks.value.filter((t) => !!t.measurement_id))
 const reference = computed(() =>
   measured.value.filter((t) => t.day_after_germination === selected.value?.day_after_germination),
 )
+function taskRowClass({ row }: { row: MeasurementTask }) {
+  return row.sample_id === selected.value?.sample_id &&
+    row.timepoint_id === selected.value?.timepoint_id
+    ? 'measurement-current-row'
+    : ''
+}
 const due = computed(() => tasks.value.filter((t) => t.status === 'due_today').length),
   overdue = computed(() => tasks.value.filter((t) => t.status === 'overdue').length)
 let sequence = 0
@@ -85,6 +93,7 @@ defineExpose({ confirmDiscard })
 async function chooseMaterial(material: MeasurementMaterial, automatic = false) {
   if (!automatic && !(await confirmDiscard())) return
   try {
+    historyOpen.value = false
     current.value = material
     await loadTasks()
     if (current.value?.material_id !== material.material_id) return
@@ -104,9 +113,9 @@ async function changeFilter(value: string) {
   page.value = 1
   await load()
 }
-async function changeDag(value: number | null) {
+async function changeDag(value: number | string | null | undefined) {
   if (!(await confirmDiscard())) return
-  dag.value = value ?? null
+  dag.value = normalizedDag(value)
   selected.value = nextPendingTask(tasks.value, dag.value) || pending.value[0] || null
   page.value = 1
   await load()
@@ -272,13 +281,32 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
       </aside>
       <div class="measurement-detail">
         <template v-if="current"
-          ><h3>
-            {{ current.experiment_number }} · {{ current.common_name || current.scientific_name }}
-          </h3>
-          <p v-if="current.common_name">{{ current.scientific_name }}</p>
-          <p>今日待测 {{ due }} · 已逾期 {{ overdue }}</p>
-          <el-table :data="pending" max-height="280" highlight-current-row @row-click="chooseTask"
-            ><el-table-column label="培养皿 / 幼苗" min-width="160"
+          ><section class="measurement-current-work">
+            <strong>当前工作</strong>
+            <h3>
+              {{ current.experiment_number }} · {{ current.common_name || current.scientific_name }}
+            </h3>
+            <small v-if="current.common_name">{{ current.scientific_name }}</small>
+            <div class="measurement-work-status">
+              <el-tag v-if="selected">DAG {{ selected.day_after_germination }}</el-tag
+              ><span
+                >今日剩余 {{ due }} 株<span v-if="overdue"> · 逾期 {{ overdue }} 株</span></span
+              >
+            </div>
+            <p v-if="selected">
+              当前：{{ selected.field_number }} · 幼苗{{
+                String(selected.sample_number).padStart(2, '0')
+              }}
+            </p>
+            <small>完成本材料后将自动进入下一份待测材料。</small>
+          </section>
+          <el-table
+            class="measurement-task-table"
+            :data="pending"
+            max-height="220"
+            :row-class-name="taskRowClass"
+            @row-click="chooseTask"
+            ><el-table-column label="培养皿 / 幼苗" min-width="145"
               ><template #default="{ row }"
                 >{{ row.field_number }} · 幼苗{{
                   String(row.sample_number).padStart(2, '0')
@@ -287,8 +315,8 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
             ><el-table-column label="DAG" prop="day_after_germination" width="65" /><el-table-column
               label="计划日期"
               prop="scheduled_date"
-              width="115"
-            /><el-table-column label="状态" width="110"
+              min-width="110"
+            /><el-table-column label="状态" min-width="95"
               ><template #default="{ row }">{{
                 measurementStatusLabels[row.status as keyof typeof measurementStatusLabels]
               }}</template></el-table-column
@@ -308,8 +336,8 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
               该材料当前没有待处理测定。可查看下方已测历史，或选择另一份材料。
             </p>
             <section v-if="selected" class="measurement-reference">
-              <h3>同材料 DAG {{ selected.day_after_germination }} 已测原始值</h3>
-              <p>供核对录入数量级；仅显示原始测定值。</p>
+              <h3>同材料 DAG {{ selected.day_after_germination }} 已测参考</h3>
+              <p>用于录入时核对数量级，仅显示原始测定值。</p>
               <el-table :data="reference" max-height="240"
                 ><el-table-column label="培养皿 / 幼苗" min-width="170"
                   ><template #default="{ row }"
@@ -334,16 +362,23 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
       </div>
     </div>
     <section v-if="current" class="measurement-history">
-      <h3>当前材料完整测定历史</h3>
-      <p>根长和苗长独立显示；点击“修改”可更正实测值、时间和备注。0 为真实零值，NA 为无法测量。</p>
-      <MeasurementRecordsTable
-        :items="measured"
-        :readonly="data.experiment_status === 'cancelled'"
-        :current-id="selected?.measurement_id || undefined"
-        :current-sample="selected?.sample_id"
-        :current-dag="selected?.day_after_germination"
-        @edit="edit"
-      />
+      <el-button
+        class="measurement-history-toggle"
+        :aria-expanded="historyOpen"
+        @click="historyOpen = !historyOpen"
+        >{{ historyOpen ? '收起' : '展开' }}本材料完整测定记录（{{ measured.length }}条）</el-button
+      >
+      <template v-if="historyOpen">
+        <p>根长和苗长独立显示；点击“修改”可更正实测值、时间和备注。0 为真实零值，NA 为无法测量。</p>
+        <MeasurementRecordsTable
+          :items="measured"
+          :readonly="data.experiment_status === 'cancelled'"
+          :current-id="selected?.measurement_id || undefined"
+          :current-sample="selected?.sample_id"
+          :current-dag="selected?.day_after_germination"
+          @edit="edit"
+        />
+      </template>
     </section>
     <MeasurementEditDialog
       ref="dialog"
