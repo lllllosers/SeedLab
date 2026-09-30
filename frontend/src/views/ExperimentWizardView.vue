@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import { useAuth } from '../stores/auth'
 import type {
@@ -17,10 +17,14 @@ import SamplingStep from './ExperimentWizard/SamplingStep.vue'
 import TimepointsStep from './ExperimentWizard/TimepointsStep.vue'
 import OverridesStep from './ExperimentWizard/OverridesStep.vue'
 import PageBackButton from '../components/PageBackButton.vue'
+import {
+  readMaterialPrefill,
+  resolveMaterialPrefill,
+  clearMaterialPrefill,
+} from '../utils/materialPrefill'
 import { effectiveMaterial } from '../utils/effectiveMaterial'
 
 const router = useRouter()
-const route = useRoute()
 const auth = useAuth()
 const step = ref(0)
 const saving = ref(false)
@@ -37,9 +41,13 @@ const steps = [
 const form = reactive({ name: '', description: '', planned_start_date: '' })
 const lots = ref<AvailableLot[]>([])
 const materials = ref<ExperimentMaterialInput[]>([])
-const reviewMaterials = computed(() => materials.value.map((entry, index) => ({
-  entry, lot: lots.value[index], values: effectiveMaterial(entry, protocol.value),
-})))
+const reviewMaterials = computed(() =>
+  materials.value.map((entry, index) => ({
+    entry,
+    lot: lots.value[index],
+    values: effectiveMaterial(entry, protocol.value),
+  })),
+)
 const dagDays = ref<number[]>([3, 7, 14])
 const protocol = ref<ExperimentProtocol>({
   seeds_per_dish: 20,
@@ -64,19 +72,35 @@ watch(lots, (current) => {
       },
   )
 })
+const prefillSource = ref('')
+const created = ref(false)
 onMounted(async () => {
-  if (route.query.from_import !== '1') return
+  const prefill = readMaterialPrefill(sessionStorage)
+  if (!prefill) return
   try {
-    const ids = JSON.parse(sessionStorage.getItem('seedlab-import-lots') || '[]') as string[]
     const available = (await api.get<AvailableLot[]>('/experiments/available-seed-lots')).data
-    const wanted = new Set(ids)
-    lots.value = available.filter((lot) => wanted.has(lot.id))
-    if (lots.value.length) {
-      step.value = 0
-      ElMessage.success(`已带入本次导入的 ${lots.value.length} 份材料`)
-    }
-    sessionStorage.removeItem('seedlab-import-lots')
-  } catch (error) { ElMessage.error(errorMessage(error)) }
+    const resolved = resolveMaterialPrefill(prefill, available)
+    lots.value = resolved.lots
+    prefillSource.value = prefill.source
+    if (resolved.excluded)
+      ElMessage.warning(`有 ${resolved.excluded} 份材料当前不可用于实验，已从预选中移除。`)
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  }
+})
+onBeforeRouteLeave(async () => {
+  if (created.value || !readMaterialPrefill(sessionStorage)) return true
+  try {
+    await ElMessageBox.confirm(
+      '离开后将清除本次导入带入的预选材料。是否退出创建实验？',
+      '退出并清除预选材料',
+      { confirmButtonText: '退出并清除', cancelButtonText: '继续创建', type: 'warning' },
+    )
+    clearMaterialPrefill(sessionStorage)
+    return true
+  } catch {
+    return false
+  }
 })
 function payload() {
   return {
@@ -127,6 +151,8 @@ async function create() {
   saving.value = true
   try {
     const { data } = await api.post<ExperimentConfiguration>('/experiments/configured', payload())
+    created.value = true
+    clearMaterialPrefill(sessionStorage)
     ElMessage.success('完整实验方案已保存')
     router.push(`/experiments/${data.experiment.id}`)
   } catch (error) {
@@ -157,6 +183,10 @@ async function create() {
     :stroke-width="5"
     class="wizard-bar"
   />
+  <p v-if="prefillSource" class="wizard-help">
+    已预选{{ prefillSource }}的 {{ lots.length }} 份材料。请按 7
+    步逐项确认，可在实验材料步骤移除或补加。
+  </p>
   <div class="wizard-layout">
     <aside class="wizard-nav surface-panel">
       <button
@@ -246,16 +276,21 @@ async function create() {
         </div>
         <div class="review-section">
           <h3>材料与发芽后测定时间（DAG）</h3>
-          <div v-for="item in reviewMaterials" :key="item.entry.seed_lot_id" class="review-material">
+          <div
+            v-for="item in reviewMaterials"
+            :key="item.entry.seed_lot_id"
+            class="review-material"
+          >
             <div>
               <b>{{ item.lot?.taxon_common_name || item.lot?.taxon_scientific_name }}</b>
-              <small v-if="item.lot?.taxon_common_name">{{ item.lot?.taxon_scientific_name }}</small>
+              <small v-if="item.lot?.taxon_common_name">{{
+                item.lot?.taxon_scientific_name
+              }}</small>
               <small>{{ item.lot?.code }}</small>
             </div>
             <span
-              >每皿 {{ item.values.seedsPerDish }} 粒 · 重复
-              {{ item.values.replicateCount }} 次 · 取样
-              {{ item.values.sampleCount }} 株</span
+              >每皿 {{ item.values.seedsPerDish }} 粒 · 重复 {{ item.values.replicateCount }} 次 ·
+              取样 {{ item.values.sampleCount }} 株</span
             >
           </div>
           <div class="dag-chips">

@@ -92,7 +92,8 @@ def test_complete_list_incremental_import_and_hash(auth_client, tmp_path):
     imported = confirm(client, headers, full)
     assert imported.status_code == 200, imported.text
     assert imported.json()["new_lots"] == 20
-    assert len(imported.json()["selected_lot_ids"]) == 20
+    assert len(imported.json()["all_seed_lot_ids"]) == 30
+    assert len(imported.json()["created_seed_lot_ids"]) == 20
     assert len(client.get("/api/seed-lots").json()) == 30
     engine = make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     with engine.connect() as connection:
@@ -145,7 +146,7 @@ def test_import_ambiguous_and_duplicate_rows_need_decision(auth_client):
     response = confirm(client, headers, content, {"2": "reuse", "3": "reuse"})
     assert response.status_code == 200, response.text
     assert response.json()["new_lots"] == 0
-    assert lot["id"] in response.json()["selected_lot_ids"]
+    assert lot["id"] in response.json()["all_seed_lot_ids"]
 
 
 def test_import_multiple_possible_lots_requires_specific_choice(auth_client):
@@ -163,7 +164,7 @@ def test_import_multiple_possible_lots_requires_specific_choice(auth_client):
     assert confirm(client, headers, content, {"2": 12}).status_code == 422
     chosen = confirm(client, headers, content, {"2": f"reuse:{lots[1]['id']}"})
     assert chosen.status_code == 200, chosen.text
-    assert chosen.json()["selected_lot_ids"] == [lots[1]["id"]]
+    assert chosen.json()["all_seed_lot_ids"] == [lots[1]["id"]]
 
 
 def test_catalog_deletion_respects_experiment_history(auth_client):
@@ -417,7 +418,7 @@ def test_rate_summary_zero_germination_excludes_unplaced_and_cancelled_dishes(au
     workbook.close()
 
 
-def test_partial_daily_observation_keeps_other_dishes_pending(auth_client):
+def test_partial_daily_observation_keeps_other_dishes_pending(auth_client, monkeypatch):
     client, headers = auth_client
     taxon = client.post("/api/taxa", headers=headers,
                         json={"scientific_name": "Setaria viridis", "common_name": "狗尾草"}).json()
@@ -431,6 +432,11 @@ def test_partial_daily_observation_keeps_other_dishes_pending(auth_client):
     assert response.status_code == 200, response.text
     assert response.json()["today_pending_count"] == 100
     observed_at = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    # Fix the tested inspection day: subtracting two hours may cross local midnight.
+    from app.services import germination_execution
+    from app.services.local_time import local_date
+    inspection_day = local_date(datetime.fromisoformat(observed_at))
+    monkeypatch.setattr(germination_execution, 'today', lambda: inspection_day)
     entries = [{"dish_id": dish["id"], "new_germinated_count": 0 if index == 0 else 2}
                for index, dish in enumerate(dishes[:26])]
     saved = client.post(f"/api/experiments/{experiment_id}/observations/batch", headers=headers,

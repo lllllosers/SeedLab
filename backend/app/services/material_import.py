@@ -242,7 +242,7 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
     by_code = {item.code: item for item in db.scalars(select(Taxon))}
     by_name = {_same_name(item.scientific_name): item for item in by_code.values()}
     created_by_line = {}
-    selected = []
+    all_ids, created_ids, updated_ids = set(), set(), set()
     new_taxa = new_lots = 0
     taxon_next = int(next_code(db, Taxon, "SP-").removeprefix("SP-"))
     lot_prefix = f"LOT-{datetime.now().year}-"
@@ -251,6 +251,7 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
         for row, result in zip(rows, report["rows"]):
             line = row["line"]
             taxon = by_code.get(row["系统物种编号"]) if row["系统物种编号"] else by_name.get(_same_name(row["学名"]))
+            taxon_updated = False
             if taxon is None:
                 taxon = Taxon(code=f"SP-{taxon_next:04d}", scientific_name=row["学名"],
                               **{field: row[label] for label, field in TAXON_FIELDS.items()})
@@ -270,6 +271,7 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                         setattr(taxon, field, value)
                         after[field] = value
                 if after:
+                    taxon_updated = True
                     record(db, user_id, "update", "Taxon", taxon.id, before, after)
             decision = decisions.get(str(line))
             lot = db.get(SeedLot, result["candidate_lot_id"]) if result["candidate_lot_id"] else None
@@ -288,7 +290,7 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                 db.add(lot)
                 flush_or_conflict(db)
                 new_lots += 1
-                selected.append(lot.id)
+                created_ids.add(lot.id)
                 record(db, user_id, "import", "SeedLot", lot.id, None, {"code": lot.code, "line": line})
             elif lot is not None:
                 before, after = {}, {}
@@ -298,12 +300,13 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                         before[field] = None
                         setattr(lot, field, value)
                         after[field] = value.isoformat() if isinstance(value, datetime) else value
+                if after or taxon_updated:
+                    updated_ids.add(lot.id)
                 if after:
                     record(db, user_id, "update", "SeedLot", lot.id, before, after)
-                if result["status"] == "confirm":
-                    selected.append(lot.id)
             else:
                 raise HTTPException(422, f"第 {line} 行找不到可复用材料，请改选新增")
+            all_ids.add(lot.id)
             created_by_line[line] = lot
         job = ImportJob(user_id=user_id, filename=filename[:255], status="completed",
                         total_rows=len(rows), successful_rows=len(rows), file_hash=report["file_hash"])
@@ -316,4 +319,7 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
         db.rollback()
         raise
     return {"job_id": job.id, "total": len(rows), "new_taxa": new_taxa,
-            "new_lots": new_lots, "selected_lot_ids": list(dict.fromkeys(selected))}
+            "new_lots": new_lots,
+            "all_seed_lot_ids": sorted(all_ids), "created_seed_lot_ids": sorted(created_ids),
+            "total_material_count": len(all_ids), "existing_material_count": len(all_ids - created_ids),
+            "created_material_count": len(created_ids), "updated_material_count": len(updated_ids - created_ids)}
