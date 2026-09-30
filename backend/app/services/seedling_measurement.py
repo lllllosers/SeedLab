@@ -4,26 +4,14 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.schemas import MeasurementInput, MeasurementPatch
 from app.models import (Experiment, ExperimentMaterial, GerminationDish, MeasurementTimepoint,
-                        SeedlingMeasurement, SeedlingSample, SeedLot, Taxon)
+                        SeedlingMeasurement, SeedlingSample)
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.local_time import iso_utc, local_date, today, utc_naive
-from app.services.ordering import display_number, field_number
-
-
-def _rows(db: Session, experiment_id: str):
-    return db.execute(select(SeedlingSample, GerminationDish, ExperimentMaterial, SeedLot, Taxon)
-                      .join(GerminationDish, SeedlingSample.dish_id == GerminationDish.id)
-                      .join(ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id)
-                      .join(SeedLot, ExperimentMaterial.seed_lot_id == SeedLot.id)
-                      .join(Taxon, SeedLot.taxon_id == Taxon.id)
-                      .where(ExperimentMaterial.experiment_id == experiment_id)
-                      .order_by(ExperimentMaterial.display_order, GerminationDish.replicate_no,
-                                SeedlingSample.sample_number)).all()
 
 
 def _measurement_state(item: SeedlingMeasurement) -> dict:
@@ -39,84 +27,34 @@ def scheduled_date(germinated_at, dag: int):
 
 
 def task_data(db: Session, experiment_id: str, status: str | None = None,
-              dag: int | None = None, q: str | None = None) -> dict:
+              dag: int | None = None, q: str | None = None, material_id: str | None = None) -> dict:
+    from app.services.measurement_query import slots, summary, search, task_row
+    from sqlalchemy import case
     experiment = require_entity(db, Experiment, experiment_id)
     if status not in {None, "pending", "due_today", "overdue", "upcoming", "completed", "unschedulable"}:
         raise HTTPException(422, "请选择有效的测定任务状态")
-    days = list(db.scalars(select(MeasurementTimepoint).where(MeasurementTimepoint.experiment_id == experiment_id)
-                           .order_by(MeasurementTimepoint.day_after_germination)))
-    if dag is not None and dag not in {point.day_after_germination for point in days}:
+    days = list(db.scalars(select(MeasurementTimepoint.day_after_germination).where(
+        MeasurementTimepoint.experiment_id == experiment_id).order_by(MeasurementTimepoint.day_after_germination)))
+    if dag is not None and dag not in days:
         raise HTTPException(422, "该实验没有所选的发芽后测定时间")
-    rows = _rows(db, experiment_id)
-    counts = dict(db.execute(select(GerminationDish.material_id, func.max(GerminationDish.replicate_no))
-                             .join(ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id)
-                             .where(ExperimentMaterial.experiment_id == experiment_id)
-                             .group_by(GerminationDish.material_id)).all())
-    sample_ids = [sample.id for sample, *_ in rows]
-    measurements = { (item.sample_id, item.timepoint_id): item for item in db.scalars(
-        select(SeedlingMeasurement).where(SeedlingMeasurement.sample_id.in_(sample_ids)))} if sample_ids else {}
-    local_today = today()
-    summary = {"due_today_count": 0, "overdue_count": 0, "completed_today_count": 0,
-               "upcoming_count": 0, "unschedulable_count": 0}
-    tasks = []
-    needle = (q or "").strip().casefold()
-    for sample, dish, material, lot, taxon in rows:
-        number = display_number(material.experiment_number) if material.experiment_number else None
-        field = field_number(material, counts[material.id], dish.replicate_no) if number else dish.code
-        haystack = (number, field, dish.code, taxon.common_name, taxon.scientific_name,
-                    taxon.code, lot.code, lot.source_code, str(sample.sample_number),
-                    f"幼苗 {sample.sample_number:02d}", sample.position_label)
-        for point in days:
-            measurement = measurements.get((sample.id, point.id))
-            planned = scheduled_date(sample.germinated_at, point.day_after_germination)
-            if measurement:
-                state = "completed"
-                if local_date(measurement.measured_at) == local_today:
-                    summary["completed_today_count"] += 1
-            elif planned is None:
-                state = "unschedulable"
-                summary["unschedulable_count"] += 1
-            elif planned < local_today:
-                state = "overdue"
-                summary["overdue_count"] += 1
-            elif planned == local_today:
-                state = "due_today"
-                summary["due_today_count"] += 1
-            else:
-                state = "upcoming"
-                summary["upcoming_count"] += 1
-            if status == "pending" and state not in {"overdue", "due_today"}:
-                continue
-            if status not in {None, "pending"} and state != status:
-                continue
-            if dag is not None and point.day_after_germination != dag:
-                continue
-            if needle and not any(needle in str(value).casefold() for value in haystack if value is not None):
-                continue
-            tasks.append({"experiment_id": experiment.id, "experiment_code": experiment.code,
-                          "material_id": material.id, "experiment_number": number,
-                          "dish_id": dish.id, "dish_code": dish.code, "field_number": field,
-                          "replicate_no": dish.replicate_no, "sample_id": sample.id,
-                          "sample_number": sample.sample_number, "position_label": sample.position_label,
-                          "taxon_common_name": taxon.common_name, "taxon_scientific_name": taxon.scientific_name,
-                          "taxon_code": taxon.code, "seed_lot_code": lot.code, "source_code": lot.source_code,
-                          "germinated_at": iso_utc(sample.germinated_at), "timepoint_id": point.id,
-                          "day_after_germination": point.day_after_germination,
-                          "scheduled_date": planned.isoformat() if planned else None, "status": state,
-                          "measurement_id": measurement.id if measurement else None,
-                          "root_length_mm": float(measurement.root_length_mm) if measurement and measurement.root_length_mm is not None else None,
-                          "shoot_length_mm": float(measurement.shoot_length_mm) if measurement and measurement.shoot_length_mm is not None else None,
-                          "root_unavailable": measurement.root_unavailable if measurement else False,
-                          "shoot_unavailable": measurement.shoot_unavailable if measurement else False,
-                          "measured_at": iso_utc(measurement.measured_at) if measurement else None,
-                          "notes": measurement.notes if measurement else None,
-                          "delay_days": (local_date(measurement.measured_at) - planned).days if measurement and planned else None})
-    priority = {"overdue": 0, "due_today": 1, "upcoming": 2, "unschedulable": 3, "completed": 4}
-    tasks.sort(key=lambda item: (priority[item["status"]], item["scheduled_date"] or "",
-                                 item["experiment_number"] or "", item["replicate_no"],
-                                 item["sample_number"], item["day_after_germination"]))
-    return {"experiment_status": experiment.status, "dag_days": [point.day_after_germination for point in days],
-            "summary": summary, "tasks": tasks}
+    c = slots().c
+    query = select(c).where(c.experiment_id == experiment_id)
+    if material_id:
+        query = query.where(c.material_id == material_id)
+    if status == "pending":
+        query = query.where(c.status.in_(["overdue", "due_today"]))
+    elif status:
+        query = query.where(c.status == status)
+    if dag is not None:
+        query = query.where(c.day_after_germination == dag)
+    if q and q.strip():
+        query = query.where(search(c, q))
+    priority = case((c.status == "overdue", 0), (c.status == "due_today", 1),
+                    (c.status == "upcoming", 2), (c.status == "unschedulable", 3), else_=4)
+    rows = db.execute(query.order_by(priority, c.scheduled_date, c.experiment_number,
+                                    c.replicate_no, c.sample_number, c.day_after_germination)).mappings()
+    return {"experiment_status": experiment.status, "dag_days": days,
+            "summary": summary(db, experiment_id), "tasks": [task_row(row) for row in rows]}
 
 
 def history(db: Session, experiment_id: str, material_id: str) -> dict:
@@ -124,7 +62,7 @@ def history(db: Session, experiment_id: str, material_id: str) -> dict:
     material = require_entity(db, ExperimentMaterial, material_id)
     if material.experiment_id != experiment_id:
         raise HTTPException(404, "该实验没有所选材料")
-    derived = task_data(db, experiment_id)
+    derived = task_data(db, experiment_id, material_id=material_id)
     tasks = [item for item in derived["tasks"] if item["material_id"] == material_id]
     samples = {}
     for task in tasks:

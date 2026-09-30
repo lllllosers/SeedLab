@@ -17,6 +17,10 @@ def make_engine(url: str):
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute("PRAGMA busy_timeout=30000")
+            from datetime import datetime
+            from app.services.local_time import local_date
+            dbapi_connection.create_function("seedlab_local_date", 1,
+                lambda value: local_date(datetime.fromisoformat(value)).isoformat() if value else None)
             if ":memory:" not in url:
                 cursor.execute("PRAGMA journal_mode=WAL")
             cursor.close()

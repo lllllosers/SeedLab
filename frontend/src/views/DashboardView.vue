@@ -23,9 +23,11 @@ const greeting = computed(() => {
   const hour = new Date().getHours()
   return hour < 11 ? '早上好' : hour < 18 ? '下午好' : '晚上好'
 })
-const activeTarget = computed(() => data.value?.active_experiments === 1
-  ? `/experiments/${data.value.active_experiment_ids[0]}/germination`
-  : '/experiments?status=active')
+const activeTarget = computed(() =>
+  data.value?.active_experiments === 1
+    ? `/experiments/${data.value.active_experiment_ids[0]}/germination`
+    : '/experiments?status=active',
+)
 onMounted(async () => {
   try {
     data.value = (await api.get<Dashboard>('/dashboard')).data
@@ -47,11 +49,23 @@ onMounted(async () => {
     <div>
       <div class="banner-kicker">种子试验记录</div>
       <h2>{{ greeting }}，{{ auth.user?.display_name || '研究伙伴' }}</h2>
-      <p>{{ data?.active_experiments ? `当前有 ${data.active_experiments} 个实验正在进行。` : '目前暂无进行中的实验。' }}从可靠记录开始，继续今天的研究工作。</p>
+      <p>
+        {{
+          data?.active_experiments
+            ? `当前有 ${data.active_experiments} 个实验正在进行。`
+            : '目前暂无进行中的实验。'
+        }}从可靠记录开始，继续今天的研究工作。
+      </p>
       <div class="dashboard-quick-actions">
-        <router-link v-if="data?.active_experiments" :to="activeTarget">继续实验 <el-icon><ArrowRight /></el-icon></router-link>
-        <router-link to="/experiments/new">创建实验 <el-icon><ArrowRight /></el-icon></router-link>
-        <router-link to="/data">导入种子材料 <el-icon><ArrowRight /></el-icon></router-link>
+        <router-link v-if="data?.active_experiments" :to="activeTarget"
+          >继续实验 <el-icon><ArrowRight /></el-icon
+        ></router-link>
+        <router-link to="/experiments/new"
+          >创建实验 <el-icon><ArrowRight /></el-icon
+        ></router-link>
+        <router-link to="/data"
+          >导入种子材料 <el-icon><ArrowRight /></el-icon
+        ></router-link>
       </div>
     </div>
     <div class="banner-art">
@@ -100,14 +114,41 @@ onMounted(async () => {
       <div class="stat-label">进行中实验</div>
       <div class="stat-value">{{ data?.active_experiments ?? '—' }}</div>
       <span v-if="!data?.active_experiments">暂无进行中实验</span>
-      <router-link v-else :to="activeTarget">{{ data?.active_experiments === 1 ? '继续实验' : '查看进行中实验' }} <el-icon><ArrowRight /></el-icon></router-link>
+      <router-link v-else :to="activeTarget"
+        >{{ data?.active_experiments === 1 ? '继续实验' : '查看进行中实验' }}
+        <el-icon><ArrowRight /></el-icon
+      ></router-link>
     </div>
   </div>
   <section v-if="data" class="surface-panel dashboard-measurement">
-    <div class="panel-heading"><div><h3>今日幼苗测定</h3><p>按发芽判定日期安排的根长、苗长任务</p></div></div>
-    <p>今日待测 {{ data.measurement.due_today_count }} 项 · 已逾期 {{ data.measurement.overdue_count }} 项</p>
-    <div v-if="!data.measurement.experiments.length" class="empty-inline">目前没有需要处理的幼苗测定。可先完成发芽巡检，选出幼苗后再查看。</div>
-    <router-link v-for="item in data.measurement.experiments" :key="item.id" class="activity-row" :to="`/experiments/${item.id}/germination?tab=measurement`"><span class="activity-main"><b>{{ item.name }}</b><small>{{ item.code }} · 今日待测 {{ item.due_today_count }} · 已逾期 {{ item.overdue_count }}</small></span><span>进入测定 →</span></router-link>
+    <div class="dashboard-measurement-header">
+      <div>
+        <h3>今日幼苗测定</h3>
+        <p>按发芽判定日期安排的根长、苗长任务</p>
+      </div>
+    </div>
+    <div class="dashboard-measurement-body">
+      <p>
+        今日待测 {{ data.measurement.due_today_count }} 项 · 已逾期
+        {{ data.measurement.overdue_count }} 项
+      </p>
+      <div v-if="!data.measurement.experiments.length" class="empty-inline">
+        目前没有需要处理的幼苗测定。可先完成发芽巡检，选出幼苗后再查看。
+      </div>
+      <router-link
+        v-for="item in data.measurement.experiments"
+        :key="item.id"
+        class="activity-row"
+        :to="`/experiments/${item.id}/germination?tab=measurement`"
+        ><span class="activity-main"
+          ><b>{{ item.name }}</b
+          ><small
+            >{{ item.code }} · 今日待测 {{ item.due_today_count }} · 已逾期
+            {{ item.overdue_count }} · 涉及材料 {{ item.material_count }}</small
+          ></span
+        ><span>进入测定 →</span></router-link
+      >
+    </div>
   </section>
   <div class="dashboard-columns">
     <section class="surface-panel">
