@@ -309,6 +309,8 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                         total_rows=len(rows), successful_rows=len(rows), file_hash=report["file_hash"])
         db.add(job)
         flush_or_conflict(db)
+        record(db, user_id, "import", "ImportJob", job.id, None,
+               {"filename": job.filename, "total_rows": len(rows), "new_taxa": new_taxa, "new_lots": new_lots})
         commit_or_conflict(db)
     except Exception:
         db.rollback()
