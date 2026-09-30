@@ -83,8 +83,8 @@ async function toggle(item: Taxon) {
   try {
     await ElMessageBox.confirm(
       item.is_active
-        ? `确定停用“${item.common_name || item.scientific_name}”吗？停用后不会出现在常用物种列表或种子批次导入模板中；已有记录仍保留。`
-        : `确定启用“${item.common_name || item.scientific_name}”吗？启用后可再次在物种列表和种子批次导入模板中选择。`,
+        ? `确定停用“${item.common_name || item.scientific_name}”吗？停用后不会出现在常用物种列表或实验材料选择中；已有记录仍保留。`
+        : `确定启用“${item.common_name || item.scientific_name}”吗？启用后可再次在物种列表和实验材料选择中选择。`,
       item.is_active ? '停用物种' : '启用物种',
       { type: 'warning' },
     )
