@@ -119,10 +119,10 @@ async function save() {
         <tr>
           <th>培养皿 / 材料</th>
           <th>重复</th>
-          <th>置床</th>
-          <th>当前累计</th>
+          <th>置床粒数</th>
+          <th>累计发芽</th>
           <th>发芽率</th>
-          <th>剩余</th>
+          <th>未发芽</th>
           <th>取样进度</th>
           <th>本次新增</th>
           <th>备注</th>

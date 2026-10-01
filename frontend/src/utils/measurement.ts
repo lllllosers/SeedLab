@@ -94,3 +94,33 @@ export function taskSearchMatches(task: MeasurementTask, search: string) {
     )
   )
 }
+
+/** Keep each seedling's configured days together within its actual dish. */
+export function materialProgressTasks(tasks: MeasurementTask[]): MeasurementTask[] {
+  return [...tasks].sort(
+    (a, b) =>
+      a.field_number.localeCompare(b.field_number, 'en', { numeric: true }) ||
+      a.replicate_no - b.replicate_no ||
+      a.sample_number - b.sample_number ||
+      a.day_after_germination - b.day_after_germination ||
+      a.sample_id.localeCompare(b.sample_id),
+  )
+}
+export const measurementProgressLabels: Record<MeasurementStatus, string> = {
+  ...measurementStatusLabels,
+  completed: '已测',
+}
+export const measurementProgressTagTypes = {
+  completed: 'success',
+  due_today: 'primary',
+  overdue: 'warning',
+  upcoming: 'info',
+  unschedulable: 'warning',
+} as const
+export function progressStatusText(task: MeasurementTask): string {
+  const label = measurementProgressLabels[task.status]
+  // Delay describes an actual measurement; an unmeasured task has no measured date.
+  return task.measurement_id && task.delay_days !== null
+    ? `${label} · ${task.delay_days > 0 ? '延迟 ' : ''}${task.delay_days}天`
+    : label
+}

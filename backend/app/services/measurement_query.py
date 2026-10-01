@@ -125,7 +125,8 @@ def records(db: Session, experiment_id: str, q=None, material_ids=None, dag=None
     aggregate = db.execute(select(func.count().label("total"),
         func.count(func.distinct(c.material_id)).label("material_count")).where(*filters)).one()
     total, material_count = aggregate
-    rows = db.execute(query.order_by(c.measured_at.desc(), c.experiment_number, c.sample_number, c.day_after_germination)
+    rows = db.execute(query.order_by(cast(c.experiment_number, Integer), c.replicate_no, c.sample_number,
+        c.day_after_germination, c.measured_at, c.measurement_id)
                       .offset((page - 1) * page_size).limit(page_size)).mappings()
     return {"items": [task_row(row) for row in rows], "page": page, "page_size": page_size,
             "total": total, "material_count": material_count, "total_pages": (total + page_size - 1) // page_size}

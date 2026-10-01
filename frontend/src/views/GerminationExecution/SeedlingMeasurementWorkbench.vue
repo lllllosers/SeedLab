@@ -9,7 +9,12 @@ import type {
   MeasurementTasks,
   MeasurementWorklist,
 } from '../../types'
-import { measurementStatusLabels, measurementValue, nextPendingTask } from '../../utils/measurement'
+import {
+  measurementStatusLabels,
+  measurementValue,
+  nextPendingTask,
+  materialProgressTasks,
+} from '../../utils/measurement'
 import { normalizedDag } from '../../utils/measurementQuery'
 import MeasurementEditor from './MeasurementEditor.vue'
 import MeasurementRecords from './MeasurementRecords.vue'
@@ -38,6 +43,7 @@ const pending = computed(() =>
   ),
 )
 const measured = computed(() => tasks.value.filter((t) => !!t.measurement_id))
+const progressTasks = computed(() => materialProgressTasks(tasks.value))
 const reference = computed(() =>
   measured.value.filter((t) => t.day_after_germination === selected.value?.day_after_germination),
 )
@@ -366,12 +372,17 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
         class="measurement-history-toggle"
         :aria-expanded="historyOpen"
         @click="historyOpen = !historyOpen"
-        >{{ historyOpen ? '收起' : '展开' }}本材料完整测定记录（{{ measured.length }}条）</el-button
+        >{{ historyOpen ? '收起' : '展开' }}本材料测定进度与记录（已完成 {{ measured.length }} /
+        {{ tasks.length }}）</el-button
       >
       <template v-if="historyOpen">
-        <p>根长和苗长独立显示；点击“修改”可更正实测值、时间和备注。0 为真实零值，NA 为无法测量。</p>
+        <p>
+          按培养皿、幼苗和发芽后测定时间（DAG）查看全部任务。0 为真实零值，NA 为无法测量，—
+          为未测；只有已测记录可修改。
+        </p>
         <MeasurementRecordsTable
-          :items="measured"
+          :items="progressTasks"
+          compact
           :readonly="data.experiment_status === 'cancelled'"
           :current-id="selected?.measurement_id || undefined"
           :current-sample="selected?.sample_id"
