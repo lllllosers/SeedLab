@@ -19,6 +19,8 @@ from .operations import Operations
 from .config_store import ConfigError
 from .network_service import MODE_LABELS
 from .widgets.operations_panels import NetworkPanel, BackupPanel, SettingsPanel, copy_text
+from .startup import StartupManager
+from .widgets.startup_panel import StartupPanel
 
 
 NAVIGATION = ("概览", "运行管理", "网络访问", "数据与备份", "日志与诊断", "设置与关于")
@@ -35,10 +37,11 @@ def button(text, slot, primary=False):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, manager: ServerProcessManager | None = None):
+    def __init__(self, manager: ServerProcessManager | None = None, *, startup_manager=None):
         super().__init__()
         self.manager = manager or ServerProcessManager(parent=self)
         self.operations = Operations(self.manager, parent=self)
+        self.startup_manager = startup_manager or StartupManager(self.manager.paths)
         self._allow_exit = False
         self._exit_after_stop = False
         self._hidden_notice = False
@@ -259,6 +262,8 @@ class MainWindow(QMainWindow):
         self.settings_panel = SettingsPanel(self.manager)
         self.settings_panel.save_requested.connect(self.save_backup_settings)
         page.addWidget(self.settings_panel)
+        self.startup_panel = StartupPanel(self.startup_manager)
+        page.addWidget(self.startup_panel)
         card.box.addWidget(label("SeedLab", "cardTitle"))
         card.box.addWidget(label(f"应用版本：v{VERSION}\n默认端口：8848\n数据库结构版本：c6d91f28a405", None, True))
         paths = self.manager.paths
@@ -476,7 +481,8 @@ class MainWindow(QMainWindow):
                         from dataclasses import replace
                         backup = self.settings_panel.candidate()
                         candidate = replace(candidate, auto_backup_enabled=backup.auto_backup_enabled,
-                                            auto_backup_retention=backup.auto_backup_retention)
+                                            auto_backup_retention=backup.auto_backup_retention,
+                                            auto_start_server=backup.auto_start_server)
                     if not self.save_network(candidate, exiting=True):
                         return
                     self.settings_panel.load()

@@ -53,6 +53,7 @@ class DeploymentSettings:
     remote_url: str | None = None
     auto_backup_enabled: bool = True
     auto_backup_retention: int = 14
+    auto_start_server: bool = False
 
     def __post_init__(self):
         if type(self.schema_version) is not int or self.schema_version != 1:
@@ -74,6 +75,8 @@ class DeploymentSettings:
             raise ConfigError("请先填写远程 HTTPS 地址。")
         if type(self.auto_backup_enabled) is not bool:
             raise ConfigError("请选择是否启用自动备份。")
+        if type(self.auto_start_server) is not bool:
+            raise ConfigError("请选择是否在打开控制中心后自动启动 SeedLab。")
         if type(self.auto_backup_retention) is not int or not 1 <= self.auto_backup_retention <= 90:
             raise ConfigError("自动备份保留份数必须在 1～90 之间。")
 

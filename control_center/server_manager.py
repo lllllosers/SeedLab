@@ -242,7 +242,7 @@ class ServerProcessManager(QObject):
             self._set_state(State.ERROR, "当前没有可用的局域网地址，请连接网络或改用仅本机使用。")
             return
         if not self.paths.launcher_available:
-            self._set_state(State.ERROR, "运行环境缺失，请先安装项目的 Python 依赖。")
+            self._set_state(State.ERROR, "运行文件缺失，请检查 SeedLab 程序目录或重新安装后再启动。")
             return
         if not (self.paths.web_root / "index.html").is_file():
             self._set_state(State.ERROR, "前端生产文件缺失，请先构建前端后重试。")

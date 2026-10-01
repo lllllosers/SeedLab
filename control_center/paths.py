@@ -23,12 +23,14 @@ class RuntimePaths:
     data_root: Path | None = None
     layout: str = "development"
     migration_root: Path | None = None
+    resource_root: Path | None = None
 
     def __post_init__(self):
         if self.layout not in ("development", "portable"):
             raise ValueError("Unknown runtime layout")
         program = Path(self.program_root).resolve()
         object.__setattr__(self, "program_root", program)
+        object.__setattr__(self, "resource_root", Path(self.resource_root or program).resolve())
         resource = program / ("app" if self.layout == "portable" else "backend")
         if self.web_root is None:
             object.__setattr__(self, "web_root", program / ("app/web" if self.layout == "portable" else "frontend/dist"))
@@ -64,7 +66,11 @@ class RuntimePaths:
 
     @property
     def server_executable(self):
-        return self.program_root / "app/SeedLabServer.exe"
+        return self.program_root / "SeedLabServer.exe"
+
+    @property
+    def control_executable(self):
+        return self.program_root / "SeedLab Control Center.exe"
 
     @property
     def launcher_available(self):
@@ -77,8 +83,9 @@ class RuntimePaths:
         packaged = getattr(sys, "frozen", False)
         layout = layout or ("portable" if packaged else "development")
         program = Path(program_root or (Path(sys.executable).parent if packaged else ROOT)).resolve()
+        resources = Path(getattr(sys, "_MEIPASS", program)) if packaged else program
         if data_root is not None or layout == "portable":
-            return cls(program, data_root=data_root, layout=layout)
+            return cls(program, data_root=data_root, layout=layout, resource_root=resources)
         settings = Settings()
         backend = program / "backend"
         url = make_url(settings.seedlab_database_url)

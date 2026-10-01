@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8,<10", "httpx>=0.27,<1"]
 control = ["PySide6>=6.8.3,<6.9"]
+packaging = ["PyInstaller>=6,<7"]
 
 [tool.setuptools.dynamic]
 version = {attr = "app.version.VERSION"}

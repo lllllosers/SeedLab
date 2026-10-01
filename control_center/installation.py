@@ -135,6 +135,10 @@ def inspect_data_root(paths, *, allow_temporary=False):
 
 def initialize_data_root(paths, settings, installation, *, reuse=False, progress=lambda message: None):
     progress("正在检查数据目录…")
+    try:
+        probe_writable(installation.path.parent)
+    except InstallationError as error:
+        raise InstallationError("当前程序目录不可写，请将 SeedLab 文件夹移动到有写入权限的位置后重试。") from error
     inspection = inspect_data_root(paths, allow_temporary=installation.allow_temporary)
     if inspection.existing and not reuse:
         raise InstallationError("发现已有 SeedLab 数据目录，请明确选择使用现有数据。")

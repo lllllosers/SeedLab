@@ -221,27 +221,31 @@ class SettingsPanel(Card):
         row.addWidget(self.retention)
         row.addStretch()
         self.box.addLayout(row)
+        self.auto_start = QCheckBox("启动控制中心后自动启动 SeedLab")
+        self.box.addWidget(self.auto_start)
         self.dirty_label = label("", "muted")
         self.box.addWidget(self.dirty_label)
-        self.save_button = action("保存备份设置", lambda: self.save_requested.emit(self.candidate()))
+        self.save_button = action("保存运行设置", lambda: self.save_requested.emit(self.candidate()))
         self.box.addWidget(ActionRow((self.save_button,)))
         self.enabled.toggled.connect(self.refresh)
         self.retention.valueChanged.connect(self.refresh)
+        self.auto_start.toggled.connect(self.refresh)
         self.load()
 
     def candidate(self):
         return replace(self.manager.config, auto_backup_enabled=self.enabled.isChecked(),
-                       auto_backup_retention=self.retention.value())
+                       auto_backup_retention=self.retention.value(), auto_start_server=self.auto_start.isChecked())
 
     @property
     def dirty(self):
-        return (self.enabled.isChecked(), self.retention.value()) != self._baseline
+        return (self.enabled.isChecked(), self.retention.value(), self.auto_start.isChecked()) != self._baseline
 
     def load(self):
         config = self.manager.config
-        self._baseline = config.auto_backup_enabled, config.auto_backup_retention
+        self._baseline = config.auto_backup_enabled, config.auto_backup_retention, config.auto_start_server
         self.enabled.setChecked(config.auto_backup_enabled)
         self.retention.setValue(config.auto_backup_retention)
+        self.auto_start.setChecked(config.auto_start_server)
         self.refresh()
 
     def refresh(self, *_):

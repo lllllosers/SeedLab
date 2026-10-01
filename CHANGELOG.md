@@ -14,7 +14,11 @@ SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来�
 - 增加浅色五步首次部署向导，校验保存位置、访问方式与自动备份，通过完整 Alembic 历史创建新空库，检查成功后最后提交安装位置；已有数据需明确同意并检查配置、完整性、外键及迁移版本，不覆盖账号或运行设置。
 - 生产 runner 与首次部署共用进程内 Alembic API，增加稳定服务器入口及 development/portable 命令抽象，支持独立程序目录无 `.venv` 的隔离验证；保留原有开发流程，不自动移动开发数据或历史备份。
 - 外部服务只使用已确认的本机地址，明确提示实际访问方式未知；设置中只读显示程序和数据目录。自动备份份数保留原生 QSpinBox，隐藏上下按钮，仍支持键盘、滚轮及 1～90 份。
-- 应用版本仍为 0.4.0，无新迁移；便携包、恢复、升级、开机启动、防火墙管理与 Stage 4 尚未实现。
+- Phase 4B：增加 PyInstaller 6.x 可选依赖、薄打包入口及共享 COLLECT 的双 EXE onedir spec，程序根目录共享 _internal，前端和迁移历史保留在 app/web、app/migrations。
+- 增加只清理自有构建目录的 portable 构建脚本、目录/ZIP 安全门、候选包体积报告和普通用户使用说明；输出均在 build/dist，候选 ZIP 不作为正式发布。
+- 增加用户会话单实例与激活已有窗口，--startup 已部署时进入托盘，首次部署仍显示向导；auto_start_server 默认关闭并兼容旧 schema 1，首次完成部署仍自动启动一次。
+- 增加便携版 Windows 登录启动设置，仅管理当前用户的 SeedLabControlCenter 注册表值，正确引用含空格/中文的程序位置，旧位置提示但不自动修改；开发模式禁止设置。
+- 应用版本仍为 0.4.0，无新迁移；恢复、升级、防火墙管理与 Stage 4 尚未实现，portable 候选包仍需人工验收。
 
 ## 0.4.0 — Seedling Measurement Workflow（2026-10-01）
 

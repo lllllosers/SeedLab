@@ -100,7 +100,8 @@ class FirstRunWizard(QWidget):
         access.addWidget(self.network_panel)
         backups = self.page("自动备份", "每天第一次由控制中心成功启动 SeedLab 时创建备份；手工备份不会自动删除。")
         self.settings_panel = SettingsPanel(self.draft)
-        for item in (self.settings_panel.save_button, self.settings_panel.dirty_label, self.settings_panel.mode_label):
+        for item in (self.settings_panel.save_button, self.settings_panel.dirty_label, self.settings_panel.mode_label,
+                     self.settings_panel.auto_start):
             item.hide()
         backups.addWidget(self.settings_panel)
         summary = self.page("确认并初始化", "请核对以下设置。初始化完成后会进入控制中心并启动 SeedLab，随后在网页设置首位管理员。")
