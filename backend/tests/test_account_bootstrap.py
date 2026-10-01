@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.auth import check_password
 from app.core.config import get_settings
 from app.db.session import get_db, make_engine
-from app.main import app
+from app.main import create_app
 from app.models import AuditLog, SessionToken, User
 
 
@@ -33,6 +33,7 @@ def empty_client(tmp_path, monkeypatch):
         with local() as db:
             yield db
 
+    app = create_app()
     app.dependency_overrides[get_db] = override_db
     with TestClient(app) as client:
         yield client, local, token_file
@@ -91,7 +92,7 @@ def test_member_forced_change_blocks_business_then_clears_all_sessions(auth_clie
                                                 "password": "initial8"}, headers=admin_headers)
     assert response.status_code == 201, response.text
     assert response.json()["must_change_password"] is True
-    with TestClient(app) as member:
+    with TestClient(client.app) as member:
         login = member.post("/api/auth/login", json={"username": "member", "password": "initial8"})
         assert login.status_code == 200
         headers = {"X-CSRF-Token": login.json()["csrf_token"]}
@@ -102,7 +103,7 @@ def test_member_forced_change_blocks_business_then_clears_all_sessions(auth_clie
                            "new_password": "newpass8", "confirm_password": "newpass8"}, headers=headers).status_code == 403
         assert member.post("/api/auth/change-password", json={"current_password": "initial8",
                            "new_password": "initial8", "confirm_password": "initial8"}, headers=headers).status_code == 422
-        with TestClient(app) as other_device:
+        with TestClient(client.app) as other_device:
             assert other_device.post("/api/auth/login", json={"username": "member", "password": "initial8"}).status_code == 200
             changed = member.post("/api/auth/change-password", json={"current_password": "initial8",
                                   "new_password": "newpass8", "confirm_password": "newpass8"}, headers=headers)
@@ -124,7 +125,7 @@ def test_admin_edit_reset_disable_and_safe_audit(auth_client):
     created = client.post("/api/users", json={"username": "member", "display_name": "成员",
                                                 "password": "initial8"}, headers=admin_headers)
     member_id = created.json()["id"]
-    with TestClient(app) as member:
+    with TestClient(client.app) as member:
         login = member.post("/api/auth/login", json={"username": "member", "password": "initial8"})
         assert login.status_code == 200
         edited = client.patch(f"/api/users/{member_id}", json={"display_name": "新姓名", "is_admin": True},
@@ -162,7 +163,7 @@ def test_password_boundaries_and_non_admin_cannot_manage_users(auth_client):
     response = client.post("/api/users", json={"username": "member", "display_name": "成员",
                                                 "password": "12345678"}, headers=headers)
     assert response.status_code == 201
-    with TestClient(app) as member:
+    with TestClient(client.app) as member:
         assert member.post("/api/auth/login", json={"username": "member", "password": "12345678"}).status_code == 200
         assert member.get("/api/users").status_code == 403
         assert member.post("/api/users", json={"username": "another", "display_name": "其他人",

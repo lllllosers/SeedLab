@@ -11,19 +11,19 @@ from app.db.session import make_engine
 from app.version import VERSION
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    engine = make_engine(get_settings().seedlab_database_url)
-    try:
-        with Session(engine) as db:
-            ensure_bootstrap_token(db)
-    finally:
-        engine.dispose()
-    yield
-
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        engine = make_engine(settings.seedlab_database_url)
+        try:
+            with Session(engine) as db:
+                ensure_bootstrap_token(db, settings)
+        finally:
+            engine.dispose()
+        yield
+
     development = settings.seedlab_env == "development"
     application = FastAPI(
         title="SeedLab API", version=VERSION,

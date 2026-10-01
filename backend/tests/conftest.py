@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.auth import hash_password
 from app.core.config import get_settings
 from app.db.session import get_db, make_engine
-from app.main import app
+from app.main import create_app
 from app.models import User
 
 
@@ -33,6 +33,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
         with local() as db:
             yield db
 
+    app = create_app()
     app.dependency_overrides[get_db] = override_db
     with TestClient(app) as test_client:
         yield test_client
