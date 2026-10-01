@@ -4,9 +4,10 @@ SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来�
 
 ## 未发布 — Stage 3.5 单端口生产运行基础
 
-- 新增单端口生产入口、预构建 Vue 静态文件服务和限定页面的 history 回退；未知 API 与缺失资源保持 404。
+- 新增单端口生产入口、预构建 Vue 静态文件服务和普通无扩展名页面的 history 回退；Vue Router 是页面唯一路由源，未知 API 与缺失资源保持 404。
 - 新增 `SEEDLAB_WEB_ROOT`、生产启动及独立构建脚本，保留开发双服务、初始化和 Cookie 配置。
-- 应用版本仍为 0.4.0，无新迁移；Control Center、便携包与正式运维机制未实现，Stage 4 尚未开始。
+- 新增 PySide6 可选依赖及浅色控制中心六页骨架、系统托盘、隐藏服务进程、健康检查、停止信号与优雅停止/重启、首次初始化提示及轮换脱敏日志；等待人工 UI 验收。
+- 应用版本仍为 0.4.0，无新迁移；局域网切换、便携包与正式备份等运维机制未实现，Stage 4 尚未开始。
 
 ## 0.4.0 — Seedling Measurement Workflow（2026-10-01）
 

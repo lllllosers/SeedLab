@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 import os
+import asyncio
+from contextlib import suppress
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
@@ -14,10 +16,30 @@ def parse_args(arguments=None):
     parser.add_argument("--host", default="127.0.0.1", help="默认仅本机访问；局域网可指定 0.0.0.0")
     parser.add_argument("--port", type=int, default=8848)
     parser.add_argument("--web-root", type=Path, help="已构建前端目录；相对路径以项目根目录为基准")
+    parser.add_argument("--stop-file", type=Path, help="本机控制中心的临时停止信号文件")
     args = parser.parse_args(arguments)
     if not 1 <= args.port <= 65535:
         parser.error("端口须为 1 至 65535。")
     return args
+
+
+async def watch_stop_file(server, stop_file: Path, interval: float = 0.25):
+    while not server.should_exit:
+        if stop_file.is_file():
+            server.should_exit = True
+            return
+        await asyncio.sleep(interval)
+
+
+async def serve_with_stop_file(server, stop_file: Path):
+    watcher = asyncio.create_task(watch_stop_file(server, stop_file))
+    try:
+        await server.serve()
+    finally:
+        watcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await watcher
+        stop_file.unlink(missing_ok=True)
 
 
 def main(arguments=None) -> int:
@@ -54,17 +76,26 @@ def main(arguments=None) -> int:
     if not (web_root / "index.html").is_file():
         print(f"前端生产文件缺失：{web_root / 'index.html'}。请先运行 scripts/build_production.ps1。", flush=True)
         return 1
+    stop_file = args.stop_file.resolve() if args.stop_file else None
+    if stop_file and stop_file.exists():
+        print("停止信号已存在，服务未启动。请重新从控制中心启动。", flush=True)
+        return 1
     # Relative database/token paths retain the same backend cwd as run_dev.
     os.chdir(ROOT / "backend")
     print(f"前端目录：{web_root}\n正在检查并升级数据库……", flush=True)
     try:
-        migration = subprocess.run([str(PYTHON), "-m", "alembic", "upgrade", "head"], check=False)
+        migration = subprocess.run([str(PYTHON), "-m", "alembic", "upgrade", "head"], check=False,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if stop_file and os.name == "nt" else 0)
         if migration.returncode:
             print("数据库升级失败，服务未启动。请检查上方错误并保留现有数据库。", flush=True)
             return migration.returncode
         url_host = "127.0.0.1" if args.host == "0.0.0.0" else args.host
         print(f"SeedLab 地址：http://{url_host}:{args.port}\n监听：{args.host}:{args.port}\n按 Ctrl+C 停止服务。", flush=True)
-        uvicorn.run("app.main:app", host=args.host, port=args.port, reload=False, workers=1)
+        if stop_file:
+            server = uvicorn.Server(uvicorn.Config("app.main:app", host=args.host, port=args.port, workers=1))
+            asyncio.run(serve_with_stop_file(server, stop_file))
+        else:
+            uvicorn.run("app.main:app", host=args.host, port=args.port, reload=False, workers=1)
     except KeyboardInterrupt:
         print("SeedLab 已停止。", flush=True)
     return 0
