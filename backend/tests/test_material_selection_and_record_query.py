@@ -5,9 +5,9 @@ import pytest
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 from app.models import Experiment, SeedLot, Taxon
-from test_stage31_closeout import fixture_engine, populate
+from test_measurement_workflow_and_lifecycle import fixture_engine, populate
 from test_seedling_measurement import payload
-from test_manual_workflow_round2 import material_file, row, confirm, config, ready
+from test_material_import_and_execution import material_file, row, confirm, config, ready
 from app.services.catalog_export import TAXON_HEADERS, LOT_HEADERS
 
 

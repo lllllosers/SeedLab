@@ -11,7 +11,7 @@ from app.api.schemas import MeasurementInput, MeasurementPatch
 from app.models import (Experiment, ExperimentMaterial, GerminationDish, MeasurementTimepoint,
                         SeedlingMeasurement, SeedlingSample)
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
-from app.services.local_time import iso_utc, local_date, today, utc_naive
+from app.services.local_time import iso_utc, local_date, utc_naive
 
 
 def _measurement_state(item: SeedlingMeasurement) -> dict:

@@ -1,6 +1,6 @@
 """Preview and atomically import a complete material inventory."""
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time
 from hashlib import sha256
 from io import BytesIO
 

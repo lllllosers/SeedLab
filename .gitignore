@@ -7,6 +7,13 @@ __pycache__/
 .test-temp*/
 .tmp-*/
 .ruff_cache/
+.coverage
+.coverage.*
+/htmlcov/
+/backend/htmlcov/
+/frontend/coverage/
+/frontend/playwright-report/
+/frontend/test-results/
 *.db
 *.db-*
 data/

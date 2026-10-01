@@ -224,17 +224,6 @@ class ObservationPatch(BaseModel):
     notes: str | None = None
 
 
-class AuditOut(ORMModel):
-    id: str
-    user_id: str | None
-    action: str
-    entity_type: str
-    entity_id: str
-    before: dict | None
-    after: dict | None
-    created_at: datetime
-
-
 class MeasurementInput(BaseModel):
     sample_id: str
     timepoint_id: str

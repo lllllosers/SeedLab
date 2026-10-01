@@ -10,7 +10,7 @@ from app.models import Experiment, ExperimentMaterial, GerminationDish, Germinat
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.experiment_config import days_for, effective, materials_for, protocol_for, validate_all
 from app.services.germination_execution import dishes_for, execution_summary, iso_utc, utc_naive
-from app.services.ordering import display_number, field_number
+from app.services.ordering import field_number
 
 
 def confirm_numbers(db: Session, experiment_id: str, user_id: str) -> dict:

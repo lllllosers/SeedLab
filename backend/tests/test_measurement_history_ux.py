@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.models import (Experiment, ExperimentMaterial, ExperimentProtocol, GerminationDish,
     MeasurementTimepoint, SeedlingSample, SeedlingMeasurement, SeedLot, Taxon)
-from test_stage31_closeout import fixture_engine
+from test_measurement_workflow_and_lifecycle import fixture_engine
 
 
 def seed_history(tmp_path):

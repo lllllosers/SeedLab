@@ -1,4 +1,4 @@
-"""Stage 3.1 material paging, lifecycle guards, reset isolation and migration safety."""
+"""Material measurement paging, lifecycle guards, reset isolation and migration safety."""
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4

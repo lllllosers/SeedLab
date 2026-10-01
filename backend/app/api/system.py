@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import AuditOut, PasswordReset, UserCreate, UserOut, UserPatch
+from app.api.schemas import PasswordReset, UserCreate, UserOut, UserPatch
 from app.core.auth import admin_user, current_user, hash_password, require_password
 from app.db.session import get_db
 from app.models import AuditLog, Experiment, SeedLot, SessionToken, Taxon, User

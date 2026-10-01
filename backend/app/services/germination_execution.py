@@ -12,7 +12,7 @@ from app.models import (Experiment, ExperimentMaterial, GerminationDish, Germina
                         SeedlingSample, SeedLot, Taxon)
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.experiment_config import days_for, effective, materials_for, protocol_for
-from app.services.ordering import display_number, field_number
+from app.services.ordering import field_number
 from app.services.local_time import iso_utc, local_date, today, utc_naive
 
 
