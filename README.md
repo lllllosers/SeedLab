@@ -6,6 +6,8 @@ Stage 3 已随 v0.4.0 正式发布，包含幼苗测定、实验生命周期、�
 
 ## 技术栈
 
+Stage 3.5 正在开发生产部署基础：已增加预构建 Vue 与 API 共用 `127.0.0.1:8848` 的生产入口，Control Center 尚未完成。版本保持 0.4.0，Stage 4 尚未开始。设计见[生产部署与控制中心设计](docs/10_生产部署与控制中心设计.md)。
+
 - 后端：Python 3.12+、FastAPI、SQLAlchemy 2、Alembic、Pydantic 2、SQLite WAL、Argon2、pytest、openpyxl。
 - 前端：Vue 3、TypeScript、Vite、Element Plus、Pinia、Vue Router、Axios。
 
@@ -34,6 +36,8 @@ cd ..
 浏览器访问 <http://localhost:5173>；开发 API 文档位于 <http://localhost:8000/docs>。`run_dev.bat` 会检查依赖、执行迁移并同时启动两个开发服务。可在同一局域网内通过主机 IP 和 5173 端口访问；对外访问前请参照[运行说明](docs/04_开发与运行说明.md)配置 HTTPS 和 Cookie。
 
 运行测试：`run_tests.bat`。前端构建：在 `frontend` 目录执行 `npm run build`。
+
+生产基础测试：先运行 `scripts/build_production.ps1`（或 `npm run build`），再运行 `run_prod.bat`，访问 <http://127.0.0.1:8848>。生产启动检查前端并执行迁移，不启动 Vite，不需要 Node.js 常驻，关闭 `/docs`。默认仅本机访问；局域网可显式运行 `python scripts/run_prod.py --host 0.0.0.0`。详见[运行说明](docs/04_开发与运行说明.md)。
 
 ## 材料导入与实验执行
 

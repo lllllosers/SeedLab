@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     seedlab_session_hours: int = 12
     seedlab_cookie_secure: bool = False
     seedlab_timezone: str = "Asia/Shanghai"
+    seedlab_web_root: Path = Path("frontend/dist")
+
+    @property
+    def web_root(self) -> Path:
+        """Relative web paths are anchored to the repository, not the shell cwd."""
+        return (ROOT / self.seedlab_web_root).resolve()
 
 
 @lru_cache

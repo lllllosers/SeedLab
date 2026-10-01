@@ -2,6 +2,12 @@
 
 SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2` 和 `v0.4.0`。
 
+## 未发布 — Stage 3.5 单端口生产运行基础
+
+- 新增单端口生产入口、预构建 Vue 静态文件服务和限定页面的 history 回退；未知 API 与缺失资源保持 404。
+- 新增 `SEEDLAB_WEB_ROOT`、生产启动及独立构建脚本，保留开发双服务、初始化和 Cookie 配置。
+- 应用版本仍为 0.4.0，无新迁移；Control Center、便携包与正式运维机制未实现，Stage 4 尚未开始。
+
 ## 0.4.0 — Seedling Measurement Workflow（2026-10-01）
 
 Stage 3 幼苗测定闭环正式发布。Stage 4 尚未开始。
