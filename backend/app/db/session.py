@@ -3,9 +3,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
-
-from app.core.config import get_settings
-
+from fastapi import Request
 
 def make_engine(url: str):
     if url.startswith("sqlite:///") and ":memory:" not in url:
@@ -27,10 +25,13 @@ def make_engine(url: str):
     return engine
 
 
-engine = make_engine(get_settings().seedlab_database_url)
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+# Standalone CLI binds this only when a command is invoked. Importing models or
+# the desktop wizard must not create a default database directory in Program Root.
+SessionLocal = sessionmaker(expire_on_commit=False)
 
 
-def get_db() -> Iterator[Session]:
-    with SessionLocal() as session:
+def get_db(request: Request) -> Iterator[Session]:
+    # SessionLocal remains the standalone CLI's default. HTTP requests must
+    # use the database owned by this application's lifespan, never that global.
+    with request.app.state.session_factory() as session:
         yield session

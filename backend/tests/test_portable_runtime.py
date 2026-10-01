@@ -21,7 +21,10 @@ from control_center.installation import (InstallationStore, InstallationError, i
 
 
 @pytest.fixture
-def runtime(tmp_path):
+def runtime(tmp_path, monkeypatch):
+    # These tests exercise filesystem initialization, not a real global port.
+    import control_center.installation as installation
+    monkeypatch.setattr(installation, "ensure_port_available", lambda settings: None)
     program = tmp_path / "program"
     migrations = program / "backend/alembic"
     shutil.copytree(ROOT / "backend/alembic", migrations, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -229,13 +232,14 @@ def test_external_confirms_only_localhost_despite_saved_mode(runtime, qt_app, mo
     ConfigStore(runtime.config_file).save(DeploymentSettings(access_mode=mode, lan_address="192.168.1.4", remote_url="https://example.org", port=8851))
     manager = ServerProcessManager(runtime, polling=False)
     manager.accept_health({"status":"ok", "version":VERSION})
-    assert manager.state == State.EXTERNAL and manager.user_url == "http://127.0.0.1:8851"
-    manager.apply_settings(replace(manager.config, port=8852))
-    assert manager.health_url == manager.user_url == "http://127.0.0.1:8851"
+    assert manager.state == State.OTHER and manager.user_url is None
+    assert not manager.can_stop and not manager.can_open and manager.initialized is None
     window = MainWindow(manager)
-    assert "无法判断" in window.network_panel.current.text()
-    assert window.access_card.value.text() == "外部服务"
-    assert "未知" in window.management_grid.values["host"].text()
+    assert "不接管" in window.network_panel.current.text()
+    assert "其他部署" in window.access_card.value.text()
+    assert "不接管" in window.management_grid.values["host"].text()
+    manager.apply_settings(replace(manager.config, port=8852))
+    assert manager.state == State.STOPPED and manager.health_url == "http://127.0.0.1:8852"
     window.ui_timer.stop();window.tray.hide();window.deleteLater();manager.stop_checks()
 
 

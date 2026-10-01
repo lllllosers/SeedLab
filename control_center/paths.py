@@ -57,6 +57,10 @@ class RuntimePaths:
         return self.config_override or self.program_root / "config/seedlab.json"
 
     @property
+    def instance_root(self):
+        return self.data_root or self.config_file.parent.parent
+
+    @property
     def installation_file(self):
         return self.program_root / "config/installation.json"
 
@@ -108,6 +112,7 @@ class RuntimePaths:
             command += ["--database", str(self.database)]
         if self.bootstrap_token is not None:
             command += ["--bootstrap-token", str(self.bootstrap_token)]
+        command += ["--data-root", str(self.instance_root), "--access-mode", settings.access_mode]
         return command + ["--stop-file", str(stop_file)]
 
     def database_info(self):

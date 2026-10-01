@@ -42,11 +42,11 @@ def check_password(hash_value: str, password: str) -> bool:
         return False
 
 
-def create_session(db: Session, user: User, *, commit: bool = True) -> tuple[str, str]:
+def create_session(db: Session, user: User, *, commit: bool = True, settings=None) -> tuple[str, str]:
     raw = secrets.token_urlsafe(32)
     csrf = secrets.token_urlsafe(32)
     db.add(SessionToken(user_id=user.id, token_hash=hashlib.sha256(raw.encode()).hexdigest(), csrf_token=csrf,
-                        expires_at=now_utc() + timedelta(hours=get_settings().seedlab_session_hours)))
+                        expires_at=now_utc() + timedelta(hours=(settings or get_settings()).seedlab_session_hours)))
     if commit:
         db.commit()
     else:

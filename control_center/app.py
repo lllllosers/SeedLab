@@ -12,7 +12,8 @@ from .installation import InstallationStore, validate_location
 from .main_window import MainWindow
 from .paths import RuntimePaths
 from .server_manager import ServerProcessManager
-from .single_instance import SingleInstance
+from .single_instance import SingleInstance, instance_name
+from .brand import PRODUCT_TITLE, product_icon, configure_windows_brand
 
 
 def parse_args(arguments=None):
@@ -26,12 +27,15 @@ def parse_args(arguments=None):
 
 
 class ApplicationController(QObject):
-    def __init__(self, paths, installation, *, skip_first_run=False, explicit_data=False, startup=False):
+    def __init__(self, paths, installation, *, skip_first_run=False, explicit_data=False, startup=False,
+                 claim_data_root=None):
         super().__init__()
         self.paths, self.installation = paths, installation
         self.window = None
         self.wizard = None
         self.startup = startup
+        self.claim_data_root = claim_data_root or (lambda paths: True)
+        self.activation_redirected = False
         if explicit_data:
             validate_location(paths.data_root, paths, allow_temporary=True)
             self.show_main(paths)
@@ -49,6 +53,10 @@ class ApplicationController(QObject):
                 self.wizard.show()
 
     def show_main(self, paths, *, auto_start=False):
+        if not self.claim_data_root(paths):
+            self.activation_redirected = True
+            QTimer.singleShot(0, QApplication.instance().quit)
+            return
         self.paths = paths
         manager = ServerProcessManager(paths)
         self.window = MainWindow(manager)
@@ -73,13 +81,30 @@ class ApplicationController(QObject):
 
 def main(arguments=None):
     args = parse_args(arguments)
+    paths = RuntimePaths.discover(program_root=args.program_root, data_root=args.data_root, layout=args.layout)
+    configure_windows_brand(paths)
     app = QApplication.instance() or QApplication(sys.argv)
-    app.setApplicationName("SeedLab")
+    app.setApplicationName(PRODUCT_TITLE)
+    app.setApplicationDisplayName(PRODUCT_TITLE)
+    app.setWindowIcon(product_icon())
     app.setQuitOnLastWindowClosed(False)
     app.setFont(QFont("Microsoft YaHei UI", 10))
-    paths = RuntimePaths.discover(program_root=args.program_root, data_root=args.data_root, layout=args.layout)
     installation = InstallationStore(paths, allow_temporary=args.data_root is not None)
     controller = None
+    instances = []
+    def close_instances():
+        for item in instances:
+            item.close()
+    def activate_existing():
+        if controller is not None:
+            controller.activate()
+    def claim_data_root(selected):
+        item = SingleInstance(instance_name(selected, scope="data"), parent=app)
+        if not item.acquire():
+            return False
+        instances.append(item)
+        item.activated.connect(activate_existing)
+        return True
     def exception_hook(kind, value, traceback):
         if controller is not None and controller.window is not None:
             controller.window.manager.control_log.error("控制中心发生异常", exc_info=(kind, value, traceback))
@@ -88,18 +113,22 @@ def main(arguments=None):
         QMessageBox.critical(None, "运行遇到问题", "控制中心遇到运行问题。请保留数据文件并检查程序或数据目录；若服务仍在运行，请正常停止后再退出。")
     sys.excepthook = exception_hook
     try:
-        instance = SingleInstance(parent=app)
+        instance = SingleInstance(instance_name(paths), parent=app)
         if not instance.acquire():
             return 0
-        app.aboutToQuit.connect(instance.close)
+        instances.append(instance)
+        app.aboutToQuit.connect(close_instances)
+        instance.activated.connect(activate_existing)
         if args.data_root is not None:
             validate_location(args.data_root, paths, allow_temporary=True)
         controller = ApplicationController(paths, installation, skip_first_run=args.skip_first_run,
-                                           explicit_data=args.data_root is not None, startup=args.startup)
-        instance.activated.connect(controller.activate)
+                                           explicit_data=args.data_root is not None, startup=args.startup,
+                                           claim_data_root=claim_data_root)
+        if controller.activation_redirected:
+            close_instances()
+            return 0
     except Exception:
-        if 'instance' in locals():
-            instance.close()
+        close_instances()
         exception_hook(*sys.exc_info())
         return 1
     return app.exec()

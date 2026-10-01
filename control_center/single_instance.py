@@ -7,8 +7,11 @@ from PySide6.QtCore import QObject, Signal, QEventLoop, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 
-def instance_name():
+def instance_name(paths=None, *, scope="program"):
     identity = "|".join((getpass.getuser(), os.environ.get("USERDOMAIN", ""), os.environ.get("SESSIONNAME", "")))
+    if paths is not None:
+        root = paths.program_root if scope == "program" else paths.instance_root
+        identity += "|" + scope + "|" + (str(root.resolve()).casefold() if os.name == "nt" else str(root.resolve()))
     return "SeedLab-Control-" + hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 

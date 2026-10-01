@@ -49,6 +49,15 @@ class NetworkPanel(Card):
             self.modes[mode] = radio
             radio.toggled.connect(self.draft_changed)
         self.box.addLayout(modes)
+        ports = QHBoxLayout()
+        ports.addWidget(label("访问端口", "fieldLabel"))
+        self.port_edit = QSpinBox()
+        self.port_edit.setRange(1, 65535)
+        self.port_edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        ports.addWidget(self.port_edit)
+        ports.addStretch()
+        self.box.addLayout(ports)
+        self.port_edit.valueChanged.connect(self.draft_changed)
         self.lan_label = label("选择当前网络地址", "fieldLabel")
         self.box.addWidget(self.lan_label)
         self.lan_combo = QComboBox()
@@ -98,7 +107,7 @@ class NetworkPanel(Card):
         return next((key for key, item in self.modes.items() if item.isChecked()), "local")
 
     def candidate(self):
-        return replace(self.manager.config, access_mode=self.mode,
+        return replace(self.manager.config, access_mode=self.mode, port=self.port_edit.value(),
                        lan_address=self.lan_combo.currentData() if self.mode == "lan" else self.manager.config.lan_address,
                        remote_url=self.remote_edit.text().strip() or None)
 
@@ -107,7 +116,7 @@ class NetworkPanel(Card):
         try:
             value = self.candidate()
             return any(getattr(value, key) != getattr(self._baseline, key)
-                       for key in ("access_mode", "lan_address", "remote_url"))
+                       for key in ("access_mode", "port", "lan_address", "remote_url"))
         except ConfigError:
             return True
 
@@ -115,6 +124,7 @@ class NetworkPanel(Card):
         self._loading = True
         self._baseline = self.manager.config
         self.modes[self._baseline.access_mode].setChecked(True)
+        self.port_edit.setValue(self._baseline.port)
         self.remote_edit.setText(self._baseline.remote_url or "")
         self.refresh_addresses()
         self._loading = False
@@ -170,7 +180,7 @@ class NetworkPanel(Card):
             QMessageBox.warning(self, "请检查远程地址", str(error))
 
     def auto_check(self):
-        if self.manager.state != State.EXTERNAL and self.manager.can_open and self.manager.active_config.access_mode == "remote":
+        if self.manager.state not in {State.EXTERNAL, State.OTHER} and self.manager.can_open and self.manager.active_config.access_mode == "remote":
             self.checker.check(self.manager.user_url, manual=False)
 
     def copy_address(self):
@@ -189,10 +199,10 @@ class NetworkPanel(Card):
         self.remote_status.setText(self.checker.message)
         self.check_button.setEnabled(self.checker.reply is None)
         self.open_button.setEnabled(manager.can_open)
-        self.current.setText((f"检测到由其他入口启动的 SeedLab。\n本机确认地址：{manager.confirmed_url}\n"
-            f"已保存访问设置：{MODE_LABELS[manager.config.access_mode]}\n"
-            "控制中心无法判断外部服务实际采用的访问方式；已保存设置将在下次由控制中心启动时生效。") if manager.state == State.EXTERNAL else
-            f"{'当前运行方式' if manager.process or manager.pending_start else '下次启动方式'}：{MODE_LABELS[manager.active_config.access_mode]}\n访问地址：{manager.user_url or '尚未配置'}")
+        self.current.setText(("检测到另一份 SeedLab；当前控制中心不接管，也不读取其账号状态。\n"
+            if manager.state == State.OTHER else
+            f"{'当前运行方式' if manager.process or manager.state == State.EXTERNAL else '下次启动方式'}：{manager.mode_label}\n"
+            f"访问地址：{manager.user_url or '尚未配置'}\n") + manager.configuration_status)
         _, warning = resolve_lan(self._baseline, self._addresses)
         message = manager.config_store.warning or manager.network_warning or (warning if self.mode == "lan" else "")
         self.warning_label.setText(message)
@@ -251,7 +261,7 @@ class SettingsPanel(Card):
     def refresh(self, *_):
         self.warning.setText(self.manager.config_store.warning)
         self.warning.setVisible(bool(self.manager.config_store.warning))
-        self.mode_label.setText(f"已保存访问方式：{MODE_LABELS[self.manager.config.access_mode]}\n服务端口：{self.manager.config.port}（当前不可修改）")
+        self.mode_label.setText(f"已保存访问方式：{MODE_LABELS[self.manager.config.access_mode]}\n访问端口：{self.manager.config.port}（可在网络访问页修改）")
         self.dirty_label.setText("有未保存的设置" if self.dirty else "设置已保存")
 
 

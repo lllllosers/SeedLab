@@ -21,6 +21,7 @@ from .network_service import MODE_LABELS
 from .widgets.operations_panels import NetworkPanel, BackupPanel, SettingsPanel, copy_text
 from .startup import StartupManager
 from .widgets.startup_panel import StartupPanel
+from .brand import PRODUCT_TITLE, product_icon
 
 
 NAVIGATION = ("概览", "运行管理", "网络访问", "数据与备份", "日志与诊断", "设置与关于")
@@ -46,7 +47,7 @@ class MainWindow(QMainWindow):
         self._exit_after_stop = False
         self._hidden_notice = False
         self._token_revealed = False
-        self.icon = QIcon(str(Path(__file__).parent / "assets/seedlab.svg"))
+        self.icon = product_icon()
         self.setWindowIcon(self.icon)
         self.setWindowTitle("SeedLab 运行控制中心")
         self.setStyleSheet(QSS)
@@ -315,7 +316,7 @@ class MainWindow(QMainWindow):
             item.style().unpolish(item)
             item.style().polish(item)
         self.hero_message.setText(manager.message)
-        display_host = "由原入口管理，未知" if manager.state == State.EXTERNAL else manager.bind_host
+        display_host = "其他部署，不接管" if manager.state == State.OTHER else manager.bind_host
         self.hero_details.setText(f"运行时间 {self.elapsed()}   ·   版本 v{VERSION}   ·   监听 {display_host}   ·   端口 {manager.port}")
         self.overview_primary.setText("打开 SeedLab" if manager.can_open else "启动 SeedLab")
         self.overview_primary.setEnabled(manager.can_open or manager.can_start)
@@ -331,8 +332,8 @@ class MainWindow(QMainWindow):
         name, path, size = manager.paths.database_info()
         self.database_card.value.setText(name)
         self.database_card.detail.setText(size)
-        self.access_card.value.setText("外部服务" if manager.state == State.EXTERNAL else MODE_LABELS[manager.active_config.access_mode])
-        self.access_card.detail.setText(manager.user_url or "请先配置访问地址")
+        self.access_card.value.setText(manager.mode_label)
+        self.access_card.detail.setText((manager.user_url or "请检查访问设置") + "\n" + manager.configuration_status)
         self.network_panel.refresh()
         self.settings_panel.refresh()
         self.backup_panel.refresh()
@@ -344,12 +345,12 @@ class MainWindow(QMainWindow):
                   "started": started, "elapsed": self.elapsed(), "version": f"v{VERSION}", "health": health}
         for key, value in fields.items():
             self.management_grid.values[key].setText(value)
-        self.management_message.setText(manager.message)
+        self.management_message.setText(manager.message + "\n" + manager.configuration_status)
         self.log_state.setText("当前状态：" + manager.label)
         for action, enabled in ((self.tray_start, manager.can_start), (self.tray_stop, manager.can_stop),
                                 (self.tray_restart, manager.can_stop), (self.tray_open, manager.can_open)):
             action.setEnabled(enabled)
-        self.tray.setToolTip("SeedLab · " + manager.label)
+        self.tray.setToolTip(PRODUCT_TITLE + " · " + manager.label)
         self.check_bootstrap()
         self.recent_events.setText("\n".join(format_event(when, message, overview=True)
                                             for when, message in self.events)
@@ -384,7 +385,7 @@ class MainWindow(QMainWindow):
             self.bootstrap_hint.setText("无法写入剪贴板。请显示初始化码后手动复制。")
 
     def add_event(self, message):
-        if not any(term in message for term in ("启动成功", "已停止", "失败", "恢复", "缺失", "被占用", "未通过", "意外退出", "备份完成", "模式已更新", "远程访问", "数据库检查")):
+        if not any(term in message for term in ("启动成功", "已停止", "失败", "恢复", "缺失", "被占用", "未通过", "意外退出", "备份完成", "访问设置已保存", "远程访问", "数据库检查")):
             return
         self.events.insert(0, (datetime.now(), message))
         del self.events[3:]
@@ -424,7 +425,7 @@ class MainWindow(QMainWindow):
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.hide()
             if not self._hidden_notice:
-                self.tray.showMessage("SeedLab", "SeedLab 控制中心已最小化到系统托盘。", QSystemTrayIcon.MessageIcon.Information, 3000)
+                self.tray.showMessage(PRODUCT_TITLE, "SeedLab 控制中心已最小化到系统托盘。", self.icon, 3000)
                 self._hidden_notice = True
         else:
             self.showMinimized()

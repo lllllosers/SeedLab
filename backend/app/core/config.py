@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     seedlab_cookie_secure: bool = False
     seedlab_timezone: str = "Asia/Shanghai"
     seedlab_web_root: Path = Path("frontend/dist")
+    seedlab_runtime_info: dict | None = None
 
     @property
     def web_root(self) -> Path:

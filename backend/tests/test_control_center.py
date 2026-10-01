@@ -70,9 +70,9 @@ def test_command_defaults_and_unique_temp_control_path(paths):
     assert command[-2:] == ["--stop-file", str(one)]
 
 
-def test_external_health_is_not_owned_and_disappears(manager, monkeypatch):
+def test_external_health_is_not_owned_and_disappears(manager, monkeypatch, runtime_health):
     monkeypatch.setattr(manager, "_port_free", lambda: True)
-    manager.accept_health({"status": "ok", "version": VERSION})
+    manager.accept_health(runtime_health(manager))
     assert manager.state == State.EXTERNAL
     assert manager.can_open and not manager.can_start and not manager.can_stop
     manager.stop()
@@ -143,7 +143,7 @@ def test_start_is_single_and_requires_production_files(manager, monkeypatch):
     assert manager.state == State.ERROR and "前端生产文件缺失" in manager.message
 
 
-def test_hidden_launch_then_restart_waits_for_exit(manager, monkeypatch, qt_app):
+def test_hidden_launch_then_restart_waits_for_exit(manager, monkeypatch, qt_app, runtime_health):
     import os
     import control_center.server_manager as module
     launches = []
@@ -161,7 +161,7 @@ def test_hidden_launch_then_restart_waits_for_exit(manager, monkeypatch, qt_app)
     manager.accept_health(None)
     assert len(launches) == 1
     assert launches[0][1]["creationflags"] == (module.subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
-    manager.accept_health({"status": "ok", "version": VERSION})
+    manager.accept_health(runtime_health(manager))
     assert manager.state == State.RUNNING
     manager.restart()
     assert len(launches) == 1 and manager.state == State.STOPPING
@@ -211,7 +211,7 @@ def test_utf8_rotating_logs_redact_secrets_and_show_event_summary(paths):
             logger.removeHandler(handler)
 
 
-def test_window_six_pages_tray_close_and_bootstrap(manager, qt_app, monkeypatch):
+def test_window_six_pages_tray_close_and_bootstrap(manager, qt_app, monkeypatch, runtime_health):
     monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", lambda: True)
     manager.paths.bootstrap_token.write_text("isolated-token-secret", encoding="utf-8")
     window = MainWindow(manager)
@@ -224,7 +224,7 @@ def test_window_six_pages_tray_close_and_bootstrap(manager, qt_app, monkeypatch)
         assert window.pages.currentIndex() == index and nav.isChecked()
         assert sum(item.isChecked() for item in window.nav_buttons) == 1
     window.select_page(0)
-    manager.accept_health({"status": "ok", "version": VERSION})
+    manager.accept_health(runtime_health(manager))
     window.refresh()
     assert window.bootstrap.isVisible()
     assert window.token_edit.echoMode() == QLineEdit.EchoMode.Password

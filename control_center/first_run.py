@@ -17,6 +17,8 @@ from .server_manager import State
 from .theme import QSS, window_dimensions
 from .widgets.status_card import Card, label
 from .widgets.operations_panels import NetworkPanel, SettingsPanel
+from .brand import product_icon
+from . import installation as deployment
 
 
 class WizardDraft(QObject):
@@ -41,6 +43,14 @@ class WizardDraft(QObject):
     def user_url(self):
         return self.config.user_url
 
+    @property
+    def mode_label(self):
+        return MODE_LABELS[self.config.access_mode]
+
+    @property
+    def configuration_status(self):
+        return "请确认访问方式和端口。"
+
     def _event(self, message):
         self.control_log.info(message)
 
@@ -62,6 +72,7 @@ class FirstRunWizard(QWidget):
         self.pool.setMaxThreadCount(1)
         self.draft = WizardDraft()
         self.setWindowTitle("SeedLab · 首次部署")
+        self.setWindowIcon(product_icon())
         self.setObjectName("page")
         self.setStyleSheet(QSS)
         area = QApplication.primaryScreen().availableGeometry()
@@ -190,7 +201,7 @@ class FirstRunWizard(QWidget):
                 self.begin("inspect", lambda: inspect_data_root(self.paths, allow_temporary=self.installation.allow_temporary))
                 return
             if index == 2:
-                self.settings()
+                deployment.ensure_port_available(self.settings())
             if index == 3:
                 settings = self.settings()
                 self.summary.setText(f"数据目录：{self.paths.data_root}\n访问方式：{MODE_LABELS[settings.access_mode]}\n"

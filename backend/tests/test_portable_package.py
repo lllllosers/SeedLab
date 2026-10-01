@@ -27,7 +27,9 @@ def qt_app():
 
 
 @pytest.fixture
-def runtime(tmp_path):
+def runtime(tmp_path, monkeypatch):
+    import control_center.installation as installation
+    monkeypatch.setattr(installation, "ensure_port_available", lambda settings: None)
     program = tmp_path / "种子试验 Program"
     web = program / "frontend/dist"
     web.mkdir(parents=True)
@@ -167,7 +169,7 @@ def test_program_root_write_failure_precedes_data_changes(runtime,monkeypatch):
 def test_candidate_scan_rejects_data_and_developer_assets():
     spec=importlib.util.spec_from_file_location("candidate_gate",ROOT/"scripts/check_portable.py")
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    for name in ("data/seedlab.db","app/seedlab.db-wal","bootstrap.token","config/installation.json",
+    for name in ("data/seedlab.db","app/seedlab.db-wal","bootstrap.token","config/installation.json","config/instance.json",
                  ".env","backups/snapshot","_internal/tests/test.py","frontend/src/a.ts",".venv/python.exe"):
         assert module.forbidden(name)
     assert not module.forbidden("_internal/tzdata/zoneinfo/Asia/Shanghai")

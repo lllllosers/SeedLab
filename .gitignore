@@ -27,3 +27,4 @@ frontend/dist/
 *.egg-info/
 /build/
 /dist/
+**/config/instance.json

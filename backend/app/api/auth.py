@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.api.schemas import ChangePassword, Login, UserOut
 from app.core.auth import COOKIE_NAME, authenticated_user, check_password, create_session, hash_password, require_password, session_for_request
-from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import SessionToken, User
 from app.services.common import record
@@ -14,13 +13,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login")
-def login(data: Login, response: Response, db: Session = Depends(get_db)):
+def login(data: Login, request: Request, response: Response, db: Session = Depends(get_db)):
+    settings = request.app.state.settings
     user = db.scalar(select(User).where(User.username == data.username))
     if user is None or not user.is_active or not check_password(user.password_hash, data.password):
         raise HTTPException(401, "用户名或密码错误")
-    raw, csrf = create_session(db, user)
-    response.set_cookie(COOKIE_NAME, raw, httponly=True, secure=get_settings().seedlab_cookie_secure,
-                        samesite="lax", max_age=get_settings().seedlab_session_hours * 3600, path="/")
+    raw, csrf = create_session(db, user, settings=settings)
+    response.set_cookie(COOKIE_NAME, raw, httponly=True, secure=settings.seedlab_cookie_secure,
+                        samesite="lax", max_age=settings.seedlab_session_hours * 3600, path="/")
     return {"user": UserOut.model_validate(user), "csrf_token": csrf}
 
 

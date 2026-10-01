@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
+import socket
 
 from alembic.script import ScriptDirectory
 from alembic.util import CommandError
@@ -13,6 +14,7 @@ from alembic.util import CommandError
 from app.services.migrations import migration_config, upgrade_database
 from app.services.sqlite_backup import check_database, ordinary_path
 from .config_store import ConfigStore, DeploymentSettings
+from app.services.runtime_identity import deployment_identity
 
 
 class InstallationError(ValueError):
@@ -107,6 +109,17 @@ def probe_writable(path):
         raise InstallationError("所选目录无法写入，请选择有写入权限的位置。") from error
 
 
+def ensure_port_available(settings):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if os.name == "nt":
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            probe.bind((settings.bind_host, settings.port))
+    except OSError as error:
+        raise InstallationError(f"访问端口 {settings.port} 已被占用。请返回访问方式步骤修改端口，"
+                                "或退出向导后在原入口停止占用服务；不会使用另一份服务。") from error
+
+
 def inspect_data_root(paths, *, allow_temporary=False):
     root = validate_location(paths.data_root, paths, allow_temporary=allow_temporary)
     probe_writable(root)
@@ -146,7 +159,8 @@ def initialize_data_root(paths, settings, installation, *, reuse=False, progress
         raise InstallationError("所选目录已发生变化，请重新检查后再继续。")
     if inspection.existing:
         settings = inspection.settings  # Preserve the existing deployment configuration.
-    else:
+    ensure_port_available(settings)  # Before any persistent data/config writes.
+    if not inspection.existing:
         progress("正在准备数据、备份与日志目录…")
         for relative in ("data", "config", "logs", "backups/auto", "backups/manual", "backups/before-upgrade"):
             (paths.data_root / relative).mkdir(parents=True, exist_ok=True)
@@ -158,6 +172,18 @@ def initialize_data_root(paths, settings, installation, *, reuse=False, progress
     progress("正在检查数据库…")
     if not check_database(paths.database).valid:
         raise InstallationError("数据库检查未通过，部署未完成。请保留当前文件并检查日志。")
+    from app.core.config import Settings
+    from app.core.bootstrap import ensure_bootstrap_token
+    from app.db.session import make_engine
+    from sqlalchemy.orm import Session
+    deployment_identity(paths.instance_root)
+    engine = make_engine("sqlite:///" + paths.database.as_posix())
+    try:
+        with Session(engine) as db:
+            ensure_bootstrap_token(db, Settings(_env_file=None,
+                seedlab_bootstrap_token_path=str(paths.bootstrap_token)), announce=False)
+    finally:
+        engine.dispose()
     progress("正在确认部署位置…")
     installation.save(paths.data_root)  # The only deployment-complete marker, always last.
     return paths

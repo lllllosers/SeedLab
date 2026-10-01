@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from contextlib import suppress
 import os
+import json
 from pathlib import Path
 
 def upgrade_database(*args, **kwargs):
@@ -20,6 +21,8 @@ def parse_args(arguments=None):
     parser.add_argument("--stop-file", type=Path)
     parser.add_argument("--cookie-secure", choices=("true", "false"))
     parser.add_argument("--migration-root", type=Path)
+    parser.add_argument("--data-root", type=Path)
+    parser.add_argument("--access-mode", choices=("local", "lan", "remote"))
     args = parser.parse_args(arguments)
     if not 1 <= args.port <= 65535:
         parser.error("端口须为 1 至 65535。")
@@ -58,6 +61,11 @@ def main(arguments=None):
         database = (ROOT / "backend" / legacy).resolve()
         database_url = "sqlite:///" + database.as_posix()
     token = (args.bootstrap_token or ROOT / "backend" / defaults.seedlab_bootstrap_token_path).resolve()
+    data_root = args.data_root.resolve() if args.data_root else (database.parent.parent if database else None)
+    if args.data_root and (args.database is None or args.bootstrap_token is None
+                          or not database.is_relative_to(data_root) or not token.is_relative_to(data_root)):
+        print("数据目录与数据库、初始化码位置不一致，服务未启动。请从控制中心检查部署位置。", flush=True)
+        return 1
     web = (args.web_root if args.web_root is not None else defaults.web_root)
     web = (ROOT / web).resolve()
     migration_root = args.migration_root.resolve() if args.migration_root else ROOT / "backend/alembic"
@@ -82,15 +90,33 @@ def main(arguments=None):
         traceback.print_exc()
         print("数据库升级失败，服务未启动。请检查日志并保留现有数据库。", flush=True)
         return 1
+    from app.services.runtime_identity import deployment_identity, IdentityError
+    mode = args.access_mode or ("lan" if args.host == "0.0.0.0" else
+                                "remote" if args.cookie_secure == "true" else "local")
+    if args.host != ("0.0.0.0" if mode == "lan" else "127.0.0.1"):
+        print("访问方式与监听地址不一致，服务未启动。请检查访问设置。", flush=True)
+        return 1
+    try:
+        identity = deployment_identity(data_root) if data_root else None
+    except IdentityError as error:
+        print(str(error), flush=True)
+        return 1
+    runtime = ({"instance_id": identity.instance_id, "data_root": str(identity.data_root),
+                "probe_token": identity.probe_token, "port": args.port,
+                "access_mode": mode, "bind_host": args.host, "pid": os.getpid()} if identity else None)
+    os.environ["SEEDLAB_RUNTIME_INFO"] = json.dumps(runtime)
+    get_settings.cache_clear()
     import uvicorn
+    from app.main import create_app
+    application = create_app(get_settings())
     host = "127.0.0.1" if args.host == "0.0.0.0" else args.host
     print(f"SeedLab 地址：http://{host}:{args.port}\n监听：{args.host}:{args.port}\n按 Ctrl+C 停止服务。", flush=True)
     try:
         if stop:
-            server = uvicorn.Server(uvicorn.Config("app.main:app", host=args.host, port=args.port, workers=1))
+            server = uvicorn.Server(uvicorn.Config(application, host=args.host, port=args.port, workers=1))
             asyncio.run(serve_with_stop_file(server, stop))
         else:
-            uvicorn.run("app.main:app", host=args.host, port=args.port, reload=False, workers=1)
+            uvicorn.run(application, host=args.host, port=args.port, reload=False, workers=1)
     except KeyboardInterrupt:
         print("SeedLab 已停止。", flush=True)
     return 0

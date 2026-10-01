@@ -7,7 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.auth import hash_password, password_error
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, make_engine
+from app.core.config import get_settings
 from app.models import User
 from app.services import dev_reset
 from app.services.common import record
@@ -23,6 +24,7 @@ def main() -> None:
     reset.add_argument("--dry-run", action="store_true", help="只查看删除范围和数量")
     reset.add_argument("--yes", action="store_true", help="明确确认删除全部开发业务数据")
     args = parser.parse_args()
+    SessionLocal.configure(bind=make_engine(get_settings().seedlab_database_url))
     if args.command == "reset-dev-data":
         try:
             engine = SessionLocal.kw["bind"]

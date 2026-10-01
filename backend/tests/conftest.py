@@ -15,6 +15,20 @@ from app.models import User
 
 
 @pytest.fixture
+def runtime_health():
+    from app.version import VERSION
+    def payload(manager, **changes):
+        config = manager.active_config
+        result = {"status": "ok", "version": VERSION,
+                  "instance_id": manager.identity.instance_id, "data_root": str(manager.identity.data_root),
+                  "port": config.port, "access_mode": config.access_mode, "bind_host": config.bind_host,
+                  "pid": manager.process.pid if manager.process is not None else 99}
+        result.update(changes)
+        return result
+    return payload
+
+
+@pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
     monkeypatch.setenv("SEEDLAB_DATABASE_URL", url)

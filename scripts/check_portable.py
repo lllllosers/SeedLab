@@ -7,7 +7,7 @@ import zipfile
 
 FORBIDDEN_DIRS = {".git", ".github", ".venv", "node_modules", "tests", "__pycache__", ".pytest_cache",
                   "backups", "data", "coverage", "frontend", "backend"}
-FORBIDDEN_FILES = {"bootstrap.token", "seedlab.json", "installation.json", ".env", "browser-input.json"}
+FORBIDDEN_FILES = {"bootstrap.token", "seedlab.json", "installation.json", "instance.json", ".env", "browser-input.json"}
 REQUIRED = {"SeedLab Control Center.exe", "SeedLabServer.exe", "app/web/index.html", "app/migrations/env.py", "LICENSE", "AUTHORS.md", "使用说明.txt"}
 
 

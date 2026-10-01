@@ -1,6 +1,9 @@
 # Builds an internal candidate only. Dependencies must already be installed.
 [CmdletBinding()]
-param()
+param(
+    [ValidatePattern('^portable(?:-[a-z0-9]+)*$')]
+    [string]$OutputName = 'portable'
+)
 $ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $taskPython = Join-Path $taskRoot '.venv\Scripts\python.exe'
@@ -24,7 +27,7 @@ function Initialize-OwnedDirectory([string]$taskPath) {
         # Reject descendant redirects before recursive removal.
         foreach ($taskChild in Get-ChildItem -LiteralPath $taskResolved -Recurse -Force) {
             if ($taskChild.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Redirected build artifact preserved: $($taskChild.FullName)" }
-            if ($taskChild.Name -in @('installation.json','seedlab.json','bootstrap.token','.env') -or
+            if ($taskChild.Name -in @('installation.json','instance.json','seedlab.json','bootstrap.token','.env') -or
                 ($taskChild.PSIsContainer -and $taskChild.Name -in @('data','backups','logs')) -or
                 $taskChild.Name -match '\.db(?:-(?:wal|shm|journal))?$') {
                 throw "Runtime data found in build output; preserved: $($taskChild.FullName). Move this deployed copy out of build output before rebuilding."
@@ -39,7 +42,7 @@ function Initialize-OwnedDirectory([string]$taskPath) {
 
 $taskWork = Join-Path $taskRoot 'build\portable-pyinstaller'
 $taskCache = Join-Path $taskRoot 'build\portable-cache'
-$taskDist = Join-Path $taskRoot 'dist\portable'
+$taskDist = Join-Path $taskRoot "dist\$OutputName"
 foreach ($taskOwned in @($taskWork,$taskCache,$taskDist)) { Initialize-OwnedDirectory $taskOwned }
 $taskOldCache = $env:PYINSTALLER_CONFIG_DIR
 $taskOldUtf8 = $env:PYTHONUTF8

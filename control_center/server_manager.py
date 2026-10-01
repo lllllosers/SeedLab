@@ -1,5 +1,6 @@
 """Process ownership, asynchronous health checks and graceful lifecycle."""
 from datetime import datetime
+from dataclasses import replace
 from enum import Enum
 import json
 import os
@@ -16,6 +17,7 @@ from .log_utils import make_logger
 from .paths import RuntimePaths
 from .config_store import ConfigStore, ConfigError
 from .network_service import lan_addresses, resolve_lan, MODE_LABELS
+from app.services.runtime_identity import deployment_identity
 
 
 class State(str, Enum):
@@ -25,10 +27,12 @@ class State(str, Enum):
     STOPPING = "stopping"
     ERROR = "error"
     EXTERNAL = "external"
+    OTHER = "other-instance"
 
 
 STATE_LABELS = {State.STOPPED: "已停止", State.STARTING: "正在启动", State.RUNNING: "正在运行",
-                State.STOPPING: "正在停止", State.ERROR: "启动失败", State.EXTERNAL: "检测到 SeedLab 已在运行"}
+                State.STOPPING: "正在停止", State.ERROR: "启动失败", State.EXTERNAL: "当前数据的服务由其他入口运行",
+                State.OTHER: "检测到另一份 SeedLab 正在运行"}
 
 
 class ServerProcessManager(QObject):
@@ -52,6 +56,9 @@ class ServerProcessManager(QObject):
         self._reply = None
         self._setup_reply = None
         self.initialized = None
+        self.identity = deployment_identity(self.paths.instance_root)
+        self.runtime_info = None
+        self._setup_identity = None
         self._started_clock = 0.0
         self._stop_clock = None
         self._timeout_notified = False
@@ -95,19 +102,58 @@ class ServerProcessManager(QObject):
 
     @property
     def bind_host(self):
+        if self.state == State.EXTERNAL and self.runtime_info:
+            return self.runtime_info["bind_host"]
         return self.active_config.bind_host
 
     @property
     def port(self):
-        return self.external_port if self.state == State.EXTERNAL else self.active_config.port
+        return self.external_port if self.state in {State.EXTERNAL, State.OTHER} else self.active_config.port
 
     @property
     def health_url(self):
-        return self.confirmed_url if self.state == State.EXTERNAL else self.active_config.health_url
+        return self.confirmed_url if self.state in {State.EXTERNAL, State.OTHER} else self.active_config.health_url
 
     @property
     def user_url(self):
-        return self.confirmed_url if self.state == State.EXTERNAL else self.active_config.user_url
+        if self.state == State.OTHER:
+            return None
+        if self.state == State.EXTERNAL:
+            return (replace(self.config, port=self.external_port).user_url
+                    if self.runtime_info and self.runtime_info["access_mode"] == self.config.access_mode
+                    else self.confirmed_url)
+        return self.active_config.user_url
+
+    @property
+    def mode_label(self):
+        if self.state == State.OTHER:
+            return "其他部署，当前控制中心不接管"
+        mode = self.runtime_info["access_mode"] if self.runtime_info else self.active_config.access_mode
+        return MODE_LABELS[mode]
+
+    @property
+    def configuration_status(self):
+        if self.state == State.OTHER:
+            return "请修改当前部署的访问端口，或在原入口停止另一份服务。"
+        if self.process is not None or self.state == State.EXTERNAL:
+            actual = self.runtime_info or {"access_mode": self.active_config.access_mode,
+                                          "port": self.active_config.port, "bind_host": self.active_config.bind_host}
+            mismatch = (actual["access_mode"] != self.config.access_mode or actual["port"] != self.config.port
+                        or actual["bind_host"] != self.config.bind_host or self.network_settings_changed(self.config))
+            return (f"当前运行配置与已保存配置不同；已保存：{MODE_LABELS[self.config.access_mode]}，"
+                    f"端口 {self.config.port}。请重启 SeedLab 应用设置。" if mismatch else "当前运行配置与已保存配置一致。")
+        return f"下次启动：{MODE_LABELS[self.config.access_mode]}，端口 {self.config.port}。"
+
+    def _clear_observation(self):
+        self.initialized = None
+        self.runtime_info = None
+        self.health_ok = False
+        self._setup_identity = None
+        for name in ("_reply", "_setup_reply"):
+            reply = getattr(self, name)
+            setattr(self, name, None)
+            if reply is not None:
+                reply.abort()
 
     def apply_settings(self, settings, *, restart=False, exiting=False):
         if self.pending_start or self.state in {State.STARTING, State.STOPPING}:
@@ -119,9 +165,17 @@ class ServerProcessManager(QObject):
             raise ConfigError("访问方式变更需要重启 SeedLab，请选择保存并重启。")
         self.config_store.save(settings)
         self.network_warning = "设置将在下次由控制中心启动时生效。" if self.state == State.EXTERNAL else ""
-        self._event("运行设置已保存。" if not network_changed else "访问模式已更新：" + MODE_LABELS[settings.access_mode] + "。")
+        self._event("运行设置已保存。" if not network_changed else "访问设置已保存：" + MODE_LABELS[settings.access_mode] + "。")
         if self.process is not None and requires_restart and restart:
             self.restart()
+        elif self.process is None and network_changed and (self.state not in {State.EXTERNAL, State.OTHER}
+                                                          or settings.port != self.external_port):
+            self._clear_observation()
+            self.external_port = self.confirmed_url = None
+            self.start_config = None
+            self._set_state(State.STOPPED, "访问设置已保存，请启动当前部署的 SeedLab。")
+            if self.polling:
+                self.poll_health()
         self.changed.emit()
 
     def network_settings_changed(self, settings):
@@ -171,6 +225,9 @@ class ServerProcessManager(QObject):
         if self._reply is not None:
             return
         request = QNetworkRequest(QUrl(self.url + "/api/health"))
+        request.setRawHeader(b"X-SeedLab-Control", self.identity.probe_token.encode())
+        request.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,
+                             QNetworkRequest.RedirectPolicy.ManualRedirectPolicy)
         request.setTransferTimeout(1200)
         self._reply = self.network.get(request)
 
@@ -179,7 +236,9 @@ class ServerProcessManager(QObject):
             self._setup_reply = None
             try:
                 payload = json.loads(bytes(reply.readAll())) if reply.error() == QNetworkReply.NetworkError.NoError else None
-                self.initialized = payload.get("initialized") if isinstance(payload, dict) else None
+                self.initialized = (payload.get("initialized") if isinstance(payload, dict)
+                    and self.state in {State.RUNNING, State.EXTERNAL} and self.runtime_info
+                    and self._setup_identity == self.runtime_info else None)
             except (ValueError, UnicodeDecodeError):
                 self.initialized = None
             reply.deleteLater()
@@ -189,6 +248,9 @@ class ServerProcessManager(QObject):
             reply.deleteLater()
             return
         self._reply = None
+        if reply.request().url().toString() != self.url + "/api/health":
+            reply.deleteLater()
+            return
         try:
             payload = json.loads(bytes(reply.readAll())) if reply.error() == QNetworkReply.NetworkError.NoError else None
         except (ValueError, UnicodeDecodeError):
@@ -197,26 +259,44 @@ class ServerProcessManager(QObject):
         self.accept_health(payload)
 
     def accept_health(self, payload):
-        healthy = isinstance(payload, dict) and payload.get("status") == "ok" and payload.get("version") == VERSION
+        seedlab = isinstance(payload, dict) and payload.get("status") == "ok" and payload.get("version") == VERSION
+        matches = (seedlab and self.identity.matches(payload)
+                   and type(payload.get("port")) is int and payload.get("port") == self.port
+                   and type(payload.get("pid")) is int and payload["pid"] > 0
+                   and payload.get("access_mode") in MODE_LABELS
+                   and payload.get("bind_host") == ("0.0.0.0" if payload.get("access_mode") == "lan" else "127.0.0.1"))
+        own_process = (matches and self.process is not None and payload.get("pid") == self.process.pid
+                       and payload["access_mode"] == self.active_config.access_mode
+                       and payload["bind_host"] == self.active_config.bind_host)
+        healthy = bool(matches if self.process is None else own_process)
         was_healthy = self.health_ok
         self.health_ok = healthy
-        if healthy and self.polling and self._setup_reply is None:
-            request = QNetworkRequest(QUrl(self.url + "/api/setup/status"))
-            request.setTransferTimeout(1200)
-            self._setup_reply = self.network.get(request)
+        self.runtime_info = {key: payload[key] for key in ("instance_id", "data_root", "port", "access_mode", "bind_host", "pid")} if matches and type(payload.get("pid")) is int else None
+        if not healthy:
+            self.initialized = None
+            self._setup_identity = None
+            if self._setup_reply is not None:
+                self._setup_reply.abort()
         if self.process is None:
-            if healthy:
+            if seedlab and not healthy:
+                self.pending_start = False
+                self.external_port = self.active_config.port
+                self.confirmed_url = self.active_config.health_url
+                self.start_config = None
+                self._set_state(State.OTHER, "检测到另一份 SeedLab 正在运行。当前控制中心不接管该实例，"
+                                "不会读取其账号状态；请修改访问端口，或在原入口停止该服务后重试。")
+            elif healthy:
                 self.pending_start = False
                 if self.state != State.EXTERNAL:
                     self.external_port = self.active_config.port
                     self.confirmed_url = self.active_config.health_url
                     self.start_config = None
-                    self._event("检测到 SeedLab 已在运行，当前服务由其他入口启动。")
-                self._set_state(State.EXTERNAL, "可打开 SeedLab；请在原启动入口停止服务。")
+                    self._event("当前数据目录的 SeedLab 已由其他入口启动。")
+                self._set_state(State.EXTERNAL, "已核对为当前数据目录；可打开网页，但停止和重启须在原入口操作。")
             elif self.pending_start:
                 self.pending_start = False
                 self._spawn()
-            elif self.state == State.EXTERNAL:
+            elif self.state in {State.EXTERNAL, State.OTHER} and self._port_free():
                 self.external_port = self.confirmed_url = None
                 self.initialized = None
                 self._set_state(State.STOPPED, "外部服务已停止，可从此处启动。")
@@ -231,6 +311,14 @@ class ServerProcessManager(QObject):
             elif not was_healthy:
                 self._event("健康检查已恢复。")
             self._set_state(State.RUNNING, "SeedLab 正常运行，可打开浏览器开始实验工作。")
+        elif seedlab and not healthy and self.process is not None and self.state not in {State.STOPPING, State.ERROR}:
+            self._set_state(State.ERROR, "当前端口返回的部署身份或运行方式与本次启动不一致。"
+                            "当前服务未通过确认；请检查访问设置并停止本次启动后重试。")
+        if healthy and self.state in {State.RUNNING, State.EXTERNAL} and self.polling and self._setup_reply is None:
+            request = QNetworkRequest(QUrl(self.url + "/api/setup/status"))
+            request.setTransferTimeout(1200)
+            self._setup_identity = self.runtime_info.copy()
+            self._setup_reply = self.network.get(request)
         self.changed.emit()
 
     def start(self):
@@ -299,7 +387,7 @@ class ServerProcessManager(QObject):
         if self.process is None:
             self.pending_start = False
             self.start_config = None
-            if self.state != State.EXTERNAL:
+            if self.state not in {State.EXTERNAL, State.OTHER}:
                 self._set_state(State.STOPPED, "服务已停止。")
             return
         if self.state == State.STOPPING:
@@ -311,6 +399,7 @@ class ServerProcessManager(QObject):
             self._set_state(State.ERROR, "无法发送停止请求，请查看日志并检查临时目录权限。")
             return
         self._stop_clock = time.monotonic()
+        self.initialized = None
         self._timeout_notified = False
         self._set_state(State.STOPPING, "正在完成当前请求并关闭服务，请稍候。")
         self._event("已请求正常停止 SeedLab。")
@@ -343,7 +432,7 @@ class ServerProcessManager(QObject):
                 restart = self.restart_pending and stopped
                 self.process = None
                 self.running_config = None
-                self.health_ok = False
+                self._clear_observation()
                 self.started_at = None
                 self.initialized = None
                 if self.stop_file:

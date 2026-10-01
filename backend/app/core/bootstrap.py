@@ -26,7 +26,7 @@ def retire_token(settings: Settings | None = None) -> None:
     token_path(settings).unlink(missing_ok=True)
 
 
-def ensure_bootstrap_token(db: Session, settings: Settings | None = None) -> None:
+def ensure_bootstrap_token(db: Session, settings: Settings | None = None, *, announce=True) -> None:
     if db.scalar(select(User.id).limit(1)) is not None:
         retire_token(settings)
         return
@@ -42,5 +42,6 @@ def ensure_bootstrap_token(db: Session, settings: Settings | None = None) -> Non
         token = secrets.token_urlsafe(32)
         with os.fdopen(descriptor, "w", encoding="utf-8") as output:
             output.write(token + "\n")
-    print("SeedLab 尚未初始化。请访问 /setup，并使用本机终端显示的一次性初始化码。", flush=True)
-    print(f"SeedLab Bootstrap Token: {token}", flush=True)
+    if announce:
+        print("SeedLab 尚未初始化。请访问 /setup，并使用本机终端显示的一次性初始化码。", flush=True)
+        print(f"SeedLab Bootstrap Token: {token}", flush=True)

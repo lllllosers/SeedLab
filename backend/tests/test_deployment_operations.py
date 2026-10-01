@@ -210,11 +210,12 @@ def wait_job(app, operations):
     assert not operations.busy
 
 
-def test_manager_snapshot_external_and_owned_settings(desktop):
+def test_manager_snapshot_external_and_owned_settings(desktop, runtime_health, monkeypatch):
     from control_center.server_manager import State
     from app.version import VERSION
     app, manager = desktop
-    manager.accept_health({"status":"ok", "version":VERSION})
+    monkeypatch.setattr(manager, "_port_free", lambda: True)
+    manager.accept_health(runtime_health(manager))
     manager.apply_settings(DeploymentSettings(access_mode="remote", remote_url="https://example.org"))
     assert manager.state == State.EXTERNAL and manager.user_url == "http://127.0.0.1:8848"
     assert manager.config.access_mode == "remote" and not manager.can_stop
@@ -230,7 +231,7 @@ def test_manager_snapshot_external_and_owned_settings(desktop):
     manager.process = None
 
 
-def test_network_launch_environment_and_missing_lan(desktop, monkeypatch):
+def test_network_launch_environment_and_missing_lan(desktop, monkeypatch, runtime_health):
     from io import StringIO
     import control_center.server_manager as module
     from control_center.network_service import LanAddress
@@ -259,7 +260,7 @@ def test_network_launch_environment_and_missing_lan(desktop, monkeypatch):
         assert parameters["env"]["SEEDLAB_DATABASE_URL"].endswith("database.db")
         if mode == "lan":
             assert manager.config.lan_address is None and manager.active_config.lan_address == "192.168.1.4"
-            manager.accept_health({"status": "ok", "version": module.VERSION})
+            manager.accept_health(runtime_health(manager))
             manager.apply_settings(replace(manager.config, auto_backup_retention=7))
             assert manager.config.auto_backup_retention == 7
         manager.process = None
@@ -379,7 +380,7 @@ def test_dirty_exit_saves_both_panels_and_corrupt_config_warning_clears(desktop,
     from PySide6.QtWidgets import QMessageBox
     from control_center.main_window import MainWindow
     app, manager = desktop
-    manager.paths.config_file.parent.mkdir()
+    manager.paths.config_file.parent.mkdir(exist_ok=True)
     manager.paths.config_file.write_text("broken")
     manager.config_store.load()
     window = MainWindow(manager)
