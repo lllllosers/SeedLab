@@ -6,7 +6,11 @@ Stage 3 已随 v0.4.0 正式发布，包含幼苗测定、实验生命周期、�
 
 ## 技术栈
 
-Stage 3.5 正在开发生产部署基础：Vue 与 API 共用 `127.0.0.1:8848`，浅色 Control Center 已具备托盘、隐藏启动、健康检查、正常停止/重启、首次管理员提示，以及本机/局域网/远程模式、持久化运行设置、SQLite 在线手工备份与每日自动备份（默认保留 14 份）和数据库健康检查，等待人工验收。SakuraFrp 仍由独立客户端管理；恢复、升级、开机启动、防火墙管理及便携打包尚未实现。版本保持 0.4.0，Stage 4 尚未开始。安装 `backend[test,control]` 可选依赖后运行 `run_control_center.bat`；详见[生产部署与控制中心设计](docs/10_生产部署与控制中心设计.md)。
+Stage 3.5 已进入 portable-ready 阶段：Vue 与 API 共用 `127.0.0.1:8848`，浅色 Control Center 提供托盘、隐藏启动、健康检查、正常停止/重启、首次管理员提示，本机/局域网/远程访问、SQLite 在线备份（自动备份默认保留 14 份）和数据库检查。Phase 4A 增加独立程序目录与数据目录、五步首次部署向导、安装位置记录及可复用的进程内迁移和服务器入口，等待人工验收。最终 portable ZIP 尚未发布；SakuraFrp 由独立客户端管理，恢复、升级、开机启动及防火墙管理尚未实现。VERSION 保持 0.4.0，Stage 4 尚未开始。安装 `backend[test,control]` 可选依赖后运行 `run_control_center.bat`；详见[生产部署与控制中心设计](docs/10_生产部署与控制中心设计.md)。
+
+控制中心首次正式部署会引导选择独立数据目录（推荐程序目录同级的 `SeedLabData`），依次设置访问方式、自动备份并初始化空库。实验数据库、运行设置、日志和备份均保存于所选位置；最后写入程序目录的 `config/installation.json`，以后启动复用同一数据目录。首位管理员继续在网页 `/setup` 创建。不会自动搬动、复制或导入开发库及历史实验。
+
+开发者需要明确使用现有 `.env` / `backend/data` 时，可运行 `run_control_center.bat --skip-first-run`；隔离验证可用 `--data-root <绝对路径>`。普通首次部署拒绝 TEMP 数据位置，显式测试路径允许临时目录。`run_dev.bat` 的 5173/8000 开发流程保持原样。
 
 - 后端：Python 3.12+、FastAPI、SQLAlchemy 2、Alembic、Pydantic 2、SQLite WAL、Argon2、pytest、openpyxl。
 - 前端：Vue 3、TypeScript、Vite、Element Plus、Pinia、Vue Router、Axios。

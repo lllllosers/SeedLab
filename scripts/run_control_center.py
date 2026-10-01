@@ -13,7 +13,7 @@ def main():
         print('请先创建 .venv，再安装：pip install -e "./backend[control]"')
         return 1
     if Path(sys.executable).resolve() != PYTHON.resolve():
-        return subprocess.call([str(PYTHON), str(Path(__file__).resolve())], cwd=ROOT)
+        return subprocess.call([str(PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]], cwd=ROOT)
     sys.path.insert(0, str(ROOT))
     try:
         import PySide6  # noqa: F401

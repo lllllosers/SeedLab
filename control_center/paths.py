@@ -1,6 +1,8 @@
+"""Explicit program resources and production data roots; cwd is never a locator."""
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import sys
 import tempfile
 from uuid import uuid4
 
@@ -10,42 +12,96 @@ from sqlalchemy.engine import make_url
 
 @dataclass(frozen=True)
 class RuntimePaths:
-    root: Path
-    python: Path
-    web_root: Path
-    database: Path | None
-    bootstrap_token: Path
-    logs: Path
+    program_root: Path
+    python: Path | None = None
+    web_root: Path | None = None
+    database: Path | None = None
+    bootstrap_token: Path | None = None
+    logs: Path | None = None
     config_override: Path | None = None
     backups_override: Path | None = None
+    data_root: Path | None = None
+    layout: str = "development"
+    migration_root: Path | None = None
+
+    def __post_init__(self):
+        if self.layout not in ("development", "portable"):
+            raise ValueError("Unknown runtime layout")
+        program = Path(self.program_root).resolve()
+        object.__setattr__(self, "program_root", program)
+        resource = program / ("app" if self.layout == "portable" else "backend")
+        if self.web_root is None:
+            object.__setattr__(self, "web_root", program / ("app/web" if self.layout == "portable" else "frontend/dist"))
+        if self.migration_root is None:
+            object.__setattr__(self, "migration_root", resource / ("migrations" if self.layout == "portable" else "alembic"))
+        if self.python is None and self.layout == "development":
+            object.__setattr__(self, "python", Path(sys.executable))
+        if self.data_root is not None:
+            data = Path(self.data_root).resolve()
+            object.__setattr__(self, "data_root", data)
+            for name, relative in (("database", "data/seedlab.db"), ("bootstrap_token", "data/bootstrap.token"),
+                                   ("logs", "logs"), ("config_override", "config/seedlab.json"),
+                                   ("backups_override", "backups")):
+                object.__setattr__(self, name, data / relative)
+        elif self.logs is None:
+            object.__setattr__(self, "logs", program / "logs")
+
+    @property
+    def root(self):
+        return self.program_root
 
     @property
     def config_file(self):
-        return self.config_override or self.root / "config" / "seedlab.json"
+        return self.config_override or self.program_root / "config/seedlab.json"
+
+    @property
+    def installation_file(self):
+        return self.program_root / "config/installation.json"
 
     @property
     def backups(self):
-        return self.backups_override or self.root / "backups"
+        return self.backups_override or self.program_root / "backups"
+
+    @property
+    def server_executable(self):
+        return self.program_root / "app/SeedLabServer.exe"
+
+    @property
+    def launcher_available(self):
+        if self.layout == "portable":
+            return self.server_executable.is_file()
+        return self.python.is_file() and (self.program_root / "scripts/run_prod.py").is_file()
 
     @classmethod
-    def discover(cls):
+    def discover(cls, *, program_root=None, data_root=None, layout=None):
+        packaged = getattr(sys, "frozen", False)
+        layout = layout or ("portable" if packaged else "development")
+        program = Path(program_root or (Path(sys.executable).parent if packaged else ROOT)).resolve()
+        if data_root is not None or layout == "portable":
+            return cls(program, data_root=data_root, layout=layout)
         settings = Settings()
-        backend = ROOT / "backend"
+        backend = program / "backend"
         url = make_url(settings.seedlab_database_url)
         database = None
         if url.get_backend_name() == "sqlite" and url.database and url.database != ":memory:":
             database = (backend / url.database).resolve()
-        return cls(ROOT, ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python"),
-                   settings.web_root, database, (backend / settings.seedlab_bootstrap_token_path).resolve(), ROOT / "logs")
+        return cls(program, program / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python"),
+                   settings.web_root, database, (backend / settings.seedlab_bootstrap_token_path).resolve(), program / "logs")
 
-    def new_stop_file(self) -> Path:
-        directory = Path(tempfile.gettempdir()) / "SeedLab" / "control"
+    def new_stop_file(self):
+        directory = self.data_root / "data/control" if self.data_root is not None else Path(tempfile.gettempdir()) / "SeedLab/control"
         directory.mkdir(parents=True, exist_ok=True)
         return directory / f"{uuid4().hex}.stop"
 
-    def command(self, stop_file: Path, host="127.0.0.1", port=8848):
-        return [str(self.python), "-u", str(self.root / "scripts/run_prod.py"), "--host", host,
-                "--port", str(port), "--web-root", str(self.web_root), "--stop-file", str(stop_file)]
+    def server_command(self, stop_file, settings):
+        command = [str(self.server_executable)] if self.layout == "portable" else [str(self.python), "-u", str(self.program_root / "scripts/run_prod.py")]
+        command += ["--host", settings.bind_host, "--port", str(settings.port), "--web-root", str(self.web_root),
+                    "--migration-root", str(self.migration_root), "--cookie-secure", str(settings.cookie_secure).lower()]
+        if self.database is not None:
+            command += ["--database", str(self.database)]
+        if self.bootstrap_token is not None:
+            command += ["--bootstrap-token", str(self.bootstrap_token)]
+        return command + ["--stop-file", str(stop_file)]
 
     def database_info(self):
         if self.database is None:

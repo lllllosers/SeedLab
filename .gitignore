@@ -1,5 +1,6 @@
 .env
 /config/seedlab.json
+/config/installation.json
 bootstrap.token
 .venv/
 __pycache__/

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from app.version import VERSION
 from control_center.paths import RuntimePaths
+from control_center.config_store import DeploymentSettings
 from control_center.server_manager import ServerProcessManager, State
 from control_center.main_window import MainWindow
 from control_center.log_utils import make_logger, user_log_tail, format_event
@@ -63,7 +64,7 @@ def test_command_defaults_and_unique_temp_control_path(paths):
     one, two = paths.new_stop_file(), paths.new_stop_file()
     assert one != two and not one.exists()
     assert one.is_relative_to(Path(tempfile.gettempdir()))
-    command = paths.command(one)
+    command = paths.server_command(one, DeploymentSettings())
     assert command[:3] == [str(paths.python), "-u", str(ROOT / "scripts/run_prod.py")]
     assert command[3:7] == ["--host", "127.0.0.1", "--port", "8848"]
     assert command[-2:] == ["--stop-file", str(one)]

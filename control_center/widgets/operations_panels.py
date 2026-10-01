@@ -4,7 +4,7 @@ from dataclasses import replace
 from PySide6.QtCore import QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QRadioButton, QComboBox,
-    QLineEdit, QPushButton, QCheckBox, QSpinBox, QHBoxLayout, QMessageBox)
+    QLineEdit, QPushButton, QCheckBox, QSpinBox, QAbstractSpinBox, QHBoxLayout, QMessageBox)
 
 from ..config_store import ConfigError, normalize_remote_url
 from ..network_service import MODE_LABELS, RemoteChecker, lan_addresses, resolve_lan
@@ -170,7 +170,7 @@ class NetworkPanel(Card):
             QMessageBox.warning(self, "请检查远程地址", str(error))
 
     def auto_check(self):
-        if self.manager.can_open and self.manager.active_config.access_mode == "remote":
+        if self.manager.state != State.EXTERNAL and self.manager.can_open and self.manager.active_config.access_mode == "remote":
             self.checker.check(self.manager.user_url, manual=False)
 
     def copy_address(self):
@@ -189,7 +189,9 @@ class NetworkPanel(Card):
         self.remote_status.setText(self.checker.message)
         self.check_button.setEnabled(self.checker.reply is None)
         self.open_button.setEnabled(manager.can_open)
-        self.current.setText("当前服务：由其他入口启动；已保存设置将在下次由控制中心启动时生效。" if manager.state == State.EXTERNAL else
+        self.current.setText((f"检测到由其他入口启动的 SeedLab。\n本机确认地址：{manager.confirmed_url}\n"
+            f"已保存访问设置：{MODE_LABELS[manager.config.access_mode]}\n"
+            "控制中心无法判断外部服务实际采用的访问方式；已保存设置将在下次由控制中心启动时生效。") if manager.state == State.EXTERNAL else
             f"{'当前运行方式' if manager.process or manager.pending_start else '下次启动方式'}：{MODE_LABELS[manager.active_config.access_mode]}\n访问地址：{manager.user_url or '尚未配置'}")
         _, warning = resolve_lan(self._baseline, self._addresses)
         message = manager.config_store.warning or manager.network_warning or (warning if self.mode == "lan" else "")
@@ -214,6 +216,7 @@ class SettingsPanel(Card):
         row.addWidget(label("保留最近的自动备份", "fieldLabel"))
         self.retention = QSpinBox()
         self.retention.setRange(1, 90)
+        self.retention.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.retention.setSuffix(" 份")
         row.addWidget(self.retention)
         row.addStretch()

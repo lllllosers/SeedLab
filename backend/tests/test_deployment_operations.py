@@ -191,6 +191,8 @@ def desktop(tmp_path):
     (web / "index.html").write_text("test")
     paths = RuntimePaths(tmp_path, Path(sys.executable), web, tmp_path / "database.db",
                          tmp_path / "bootstrap.token", tmp_path / "logs")
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts/run_prod.py").write_text("# Isolated mock launcher")
     manager = ServerProcessManager(paths, polling=False)
     yield app, manager
     manager.stop_checks()

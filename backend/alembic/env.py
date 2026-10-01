@@ -8,9 +8,10 @@ import app.models  # noqa: F401 - register model metadata
 
 
 config = context.config
-if config.config_file_name:
+if config.config_file_name and not config.attributes.get("skip_logging_config"):
     fileConfig(config.config_file_name)
-config.set_main_option("sqlalchemy.url", get_settings().seedlab_database_url.replace("%", "%%"))
+database_url = config.attributes.get("database_url") or get_settings().seedlab_database_url
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
@@ -21,8 +22,14 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    supplied = config.attributes.get("connection")
+    if supplied is not None:
+        context.configure(connection=supplied, target_metadata=target_metadata, render_as_batch=True)
+        with context.begin_transaction():
+            context.run_migrations()
+        return
     from app.db.session import make_engine
-    engine = make_engine(get_settings().seedlab_database_url)
+    engine = make_engine(database_url)
     with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
         with context.begin_transaction():

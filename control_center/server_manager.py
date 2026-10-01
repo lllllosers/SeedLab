@@ -63,7 +63,8 @@ class ServerProcessManager(QObject):
         self.config_store = config_store or ConfigStore(self.paths.config_file, self.control_log)
         self.config_store.load()
         self.running_config = None
-        self.external_config = None
+        self.confirmed_url = None
+        self.external_port = None
         self.start_config = None
         self.network_warning = self.config_store.warning
         self._output_error.connect(self._remember_error)
@@ -90,7 +91,7 @@ class ServerProcessManager(QObject):
 
     @property
     def active_config(self):
-        return self.running_config or self.external_config or self.start_config or self.config
+        return self.running_config or self.start_config or self.config
 
     @property
     def bind_host(self):
@@ -98,15 +99,15 @@ class ServerProcessManager(QObject):
 
     @property
     def port(self):
-        return self.active_config.port
+        return self.external_port if self.state == State.EXTERNAL else self.active_config.port
 
     @property
     def health_url(self):
-        return self.active_config.health_url
+        return self.confirmed_url if self.state == State.EXTERNAL else self.active_config.health_url
 
     @property
     def user_url(self):
-        return self.active_config.user_url
+        return self.confirmed_url if self.state == State.EXTERNAL else self.active_config.user_url
 
     def apply_settings(self, settings, *, restart=False, exiting=False):
         if self.pending_start or self.state in {State.STARTING, State.STOPPING}:
@@ -207,7 +208,8 @@ class ServerProcessManager(QObject):
             if healthy:
                 self.pending_start = False
                 if self.state != State.EXTERNAL:
-                    self.external_config = self.active_config
+                    self.external_port = self.active_config.port
+                    self.confirmed_url = self.active_config.health_url
                     self.start_config = None
                     self._event("检测到 SeedLab 已在运行，当前服务由其他入口启动。")
                 self._set_state(State.EXTERNAL, "可打开 SeedLab；请在原启动入口停止服务。")
@@ -215,7 +217,7 @@ class ServerProcessManager(QObject):
                 self.pending_start = False
                 self._spawn()
             elif self.state == State.EXTERNAL:
-                self.external_config = None
+                self.external_port = self.confirmed_url = None
                 self.initialized = None
                 self._set_state(State.STOPPED, "外部服务已停止，可从此处启动。")
             elif not self._port_free():
@@ -239,7 +241,7 @@ class ServerProcessManager(QObject):
             self.start_config = None
             self._set_state(State.ERROR, "当前没有可用的局域网地址，请连接网络或改用仅本机使用。")
             return
-        if not self.paths.python.is_file():
+        if not self.paths.launcher_available:
             self._set_state(State.ERROR, "运行环境缺失，请先安装项目的 Python 依赖。")
             return
         if not (self.paths.web_root / "index.html").is_file():
@@ -263,7 +265,7 @@ class ServerProcessManager(QObject):
             if self.paths.database is not None:
                 environment["SEEDLAB_DATABASE_URL"] = "sqlite:///" + self.paths.database.resolve().as_posix()
             environment["SEEDLAB_BOOTSTRAP_TOKEN_PATH"] = str(self.paths.bootstrap_token)
-            self.process = subprocess.Popen(self.paths.command(self.stop_file, self.bind_host, self.port),
+            self.process = subprocess.Popen(self.paths.server_command(self.stop_file, self.active_config),
                 cwd=self.paths.root, env=environment, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)

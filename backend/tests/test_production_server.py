@@ -155,21 +155,23 @@ def runner(monkeypatch):
 
 
 def test_runner_checks_frontend_before_migrating(runner, tmp_path, monkeypatch, capsys):
+    import app.server_entry as entry
     monkeypatch.setattr(runner, "PYTHON", Path(sys.executable))
     def unexpected_migration(*args, **kwargs):
         pytest.fail("Missing frontend must not migrate the database")
-    monkeypatch.setattr(runner.subprocess, "run", unexpected_migration)
+    monkeypatch.setattr(entry, "upgrade_database", unexpected_migration)
     assert runner.main(["--web-root", str(tmp_path)]) == 1
     assert "前端生产文件缺失" in capsys.readouterr().out
 
 
 def test_runner_migration_failure_blocks_server(runner, web_root, monkeypatch, capsys):
+    import app.server_entry as entry
     import uvicorn
     monkeypatch.setattr(runner, "PYTHON", Path(sys.executable))
-    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 1))
+    monkeypatch.setattr(entry, "upgrade_database", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("isolated migration failure")))
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: pytest.fail("Migration failed; server must not start"))
     monkeypatch.chdir(ROOT)  # Restores cwd after runner changes it.
-    assert runner.main(["--web-root", str(web_root)]) == 1
+    assert runner.main(["--web-root", str(web_root), "--database", str(web_root.parent / "failed.db")]) == 1
     assert "数据库升级失败" in capsys.readouterr().out
 
 

@@ -261,6 +261,11 @@ class MainWindow(QMainWindow):
         page.addWidget(self.settings_panel)
         card.box.addWidget(label("SeedLab", "cardTitle"))
         card.box.addWidget(label(f"应用版本：v{VERSION}\n默认端口：8848\n数据库结构版本：c6d91f28a405", None, True))
+        paths = self.manager.paths
+        data_root = paths.data_root or (paths.database.parent if paths.database is not None else None)
+        card.box.addWidget(label(f"数据目录：{data_root or '未使用本地数据目录'}\n运行目录：{paths.program_root}", "muted", True))
+        if data_root is not None:
+            card.box.addWidget(ActionRow((button("打开数据目录", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(data_root)))),)))
         card.box.addWidget(label("作者：Steven_Chen / SS_Zhong\n许可：MIT License", "muted", True))
         card.box.addWidget(label("统计分析阶段（Stage 4）尚未开始。", "muted", True))
         page.addWidget(card)
@@ -305,7 +310,8 @@ class MainWindow(QMainWindow):
             item.style().unpolish(item)
             item.style().polish(item)
         self.hero_message.setText(manager.message)
-        self.hero_details.setText(f"运行时间 {self.elapsed()}   ·   版本 v{VERSION}   ·   监听 {manager.bind_host}   ·   端口 {manager.port}")
+        display_host = "由原入口管理，未知" if manager.state == State.EXTERNAL else manager.bind_host
+        self.hero_details.setText(f"运行时间 {self.elapsed()}   ·   版本 v{VERSION}   ·   监听 {display_host}   ·   端口 {manager.port}")
         self.overview_primary.setText("打开 SeedLab" if manager.can_open else "启动 SeedLab")
         self.overview_primary.setEnabled(manager.can_open or manager.can_start)
         self.overview_restart.setEnabled(manager.can_stop)
@@ -329,7 +335,7 @@ class MainWindow(QMainWindow):
         self.database_path.setText(path)
         pid = str(manager.process.pid) if manager.process else "—"
         started = manager.started_at.strftime("%Y-%m-%d %H:%M:%S") if manager.started_at else "—"
-        fields = {"status": manager.label, "pid": pid, "host": manager.bind_host, "port": str(manager.port),
+        fields = {"status": manager.label, "pid": pid, "host": display_host, "port": str(manager.port),
                   "started": started, "elapsed": self.elapsed(), "version": f"v{VERSION}", "health": health}
         for key, value in fields.items():
             self.management_grid.values[key].setText(value)
