@@ -1,10 +1,10 @@
 # Changelog
 
-SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1` 和 `v0.3.2`。
+SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2` 和 `v0.4.0`。
 
-## 未发布 — Stage 3 幼苗测定闭环
+## 0.4.0 — Seedling Measurement Workflow（2026-10-01）
 
-Stage 3 功能开发和人工 UX 验收已完成，当前等待发布收口。应用版本仍为 0.3.2，v0.4.0 尚未发布；Stage 4 尚未开始。
+Stage 3 幼苗测定闭环正式发布。Stage 4 尚未开始。
 
 ### 幼苗测定与 DAG
 
@@ -23,7 +23,7 @@ Stage 3 功能开发和人工 UX 验收已完成，当前等待发布收口。�
 ### 实验生命周期
 
 - 补齐未执行实验永久删除、完成检查与必填原因的终止入口；终止保留事实且执行只读，已完成实验仅可修改已有测定。
-- 迁移 `c6d91f28a405` 保存终止原因，所有既有迁移保持原样，本轮项目卫生不新增 migration。
+- 迁移 `c6d91f28a405` 保存终止原因，所有既有迁移保持原样，当前 Alembic head 为 `c6d91f28a405`，发布收口不新增 migration。
 
 ### 材料导入衔接
 
