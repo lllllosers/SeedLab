@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices, QIcon
+from PySide6.QtGui import QDesktopServices, QIcon, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxLayout,
     QLabel, QPushButton, QStackedWidget, QScrollArea, QLineEdit, QPlainTextEdit,
     QSystemTrayIcon, QMenu, QMessageBox, QSizePolicy)
@@ -10,11 +10,15 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QFrame, QHBox
 from app.version import VERSION
 from .server_manager import ServerProcessManager, State
 from .theme import QSS, window_dimensions
-from .log_utils import user_log_tail
-from .widgets.status_card import Card, StatusCard, label
+from .log_utils import user_log_tail, format_event
+from .widgets.status_card import Card, StatusCard, StatusCardRow, label
+from .widgets.nav_button import NavButton
+from .widgets.info_grid import InfoGrid
+from .widgets.action_row import ActionRow
 
 
 NAVIGATION = ("概览", "运行管理", "网络访问", "数据与备份", "日志与诊断", "设置与关于")
+NAV_ICONS = ("nav-overview", "nav-power", "nav-network", "nav-database", "nav-log", "nav-settings")
 
 
 def button(text, slot, primary=False):
@@ -52,16 +56,17 @@ class MainWindow(QMainWindow):
         header.setObjectName("header")
         header.setFixedHeight(80)
         top = QHBoxLayout(header)
-        top.setContentsMargins(26, 12, 28, 12)
+        top.setContentsMargins(26, 10, 28, 10)
         logo = QLabel()
         logo.setPixmap(self.icon.pixmap(42, 42))
         top.addWidget(logo)
         branding = QVBoxLayout()
         branding.setSpacing(3)
         branding.addWidget(label("SeedLab", "brand"))
-        branding.addWidget(label("种子试验管理系统 · 运行控制中心", "muted"))
-        top.addLayout(branding)
-        top.addStretch()
+        subtitle = label("种子试验管理系统 · 运行控制中心", "muted", True)
+        subtitle.setMinimumHeight(30)
+        branding.addWidget(subtitle)
+        top.addLayout(branding, 1)
         top.addWidget(label(f"v{VERSION}", "muted"))
         top.addSpacing(16)
         self.header_state = label("● 已停止", "state")
@@ -72,20 +77,23 @@ class MainWindow(QMainWindow):
         body.setSpacing(0)
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(202)
         navigation = QVBoxLayout(sidebar)
         navigation.setContentsMargins(14, 24, 14, 22)
         navigation.setSpacing(7)
         self.nav_buttons = []
         for index, text in enumerate(NAVIGATION):
-            nav = button(text, lambda checked=False, i=index: self.select_page(i))
-            nav.setObjectName("nav")
-            nav.setCheckable(True)
+            nav = NavButton(text, NAV_ICONS[index], lambda checked=False, i=index: self.select_page(i))
             self.nav_buttons.append(nav)
             navigation.addWidget(nav)
         navigation.addStretch()
         navigation.addWidget(label("仅本机运行\n实验数据留在此设备", "muted", True))
-        body.addWidget(sidebar)
+        sidebar_scroll = QScrollArea()
+        sidebar_scroll.setObjectName("navScroll")
+        sidebar_scroll.setFixedWidth(202)
+        sidebar_scroll.setWidgetResizable(True)
+        sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        sidebar_scroll.setWidget(sidebar)
+        body.addWidget(sidebar_scroll)
         self.pages = QStackedWidget()
         body.addWidget(self.pages, 1)
         outer.addLayout(body, 1)
@@ -129,22 +137,17 @@ class MainWindow(QMainWindow):
         heading = QHBoxLayout()
         heading.addWidget(label("SeedLab 服务", "cardTitle"))
         heading.addStretch()
-        self.hero_state = label("● 已停止", "state")
+        self.hero_state = label("● 已停止", "state", True)
         heading.addWidget(self.hero_state)
         hero.box.addLayout(heading)
         self.hero_message = label("服务尚未启动", None, True)
         hero.box.addWidget(self.hero_message)
         self.hero_details = label("", "muted", True)
         hero.box.addWidget(self.hero_details)
-        actions = QHBoxLayout()
         self.overview_primary = button("启动 SeedLab", self.overview_action, True)
         self.overview_restart = button("重启 SeedLab", self.manager.restart)
         self.error_logs = button("查看日志", lambda: self.select_page(4))
-        actions.addWidget(self.overview_primary)
-        actions.addWidget(self.overview_restart)
-        actions.addWidget(self.error_logs)
-        actions.addStretch()
-        hero.box.addLayout(actions)
+        hero.box.addWidget(ActionRow((self.overview_primary, self.overview_restart, self.error_logs)))
         page.addWidget(hero)
         self.bootstrap = Card()
         self.bootstrap.box.addWidget(label("首次管理员尚未设置", "cardTitle"))
@@ -156,21 +159,17 @@ class MainWindow(QMainWindow):
         self.token_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.token_edit.setMaximumWidth(360)
         token_row.addWidget(self.token_edit, 1)
-        self.reveal_button = button("显示初始化码", self.toggle_token)
-        token_row.addWidget(self.reveal_button)
-        token_row.addWidget(button("复制初始化码", self.copy_token))
         token_row.addStretch()
         self.bootstrap.box.addLayout(token_row)
-        self.bootstrap.box.addWidget(button("打开初始化页面", lambda: self.open_browser("/setup")))
+        self.reveal_button = button("显示初始化码", self.toggle_token)
+        self.copy_button = button("复制初始化码", self.copy_token)
+        self.setup_button = button("打开初始化页面", lambda: self.open_browser("/setup"), True)
+        self.bootstrap.box.addWidget(ActionRow((self.reveal_button, self.copy_button, self.setup_button)))
         page.addWidget(self.bootstrap)
-        cards = QHBoxLayout()
-        cards.setSpacing(14)
         self.service_card = StatusCard("服务状态", "已停止", "等待启动")
         self.access_card = StatusCard("当前访问", "仅本机使用", self.manager.url)
         self.database_card = StatusCard("数据库")
-        for card in (self.service_card, self.access_card, self.database_card):
-            cards.addWidget(card, 1)
-        page.addLayout(cards)
+        page.addWidget(StatusCardRow((self.service_card, self.access_card, self.database_card)))
         recent = Card()
         recent.box.addWidget(label("最近事件", "cardTitle"))
         self.recent_events = label("最近没有需要处理的问题。", "muted", True)
@@ -181,24 +180,30 @@ class MainWindow(QMainWindow):
     def _build_management(self):
         page = self._page("运行管理", "启动、正常停止或重启本控制中心管理的服务。停止时会等待当前请求完成。")
         card = Card()
-        card.box.addWidget(label("本机服务", "cardTitle"))
-        self.management_details = label("", None, True)
-        card.box.addWidget(self.management_details)
+        heading = QHBoxLayout()
+        heading.addWidget(label("本机服务", "cardTitle"))
+        heading.addStretch()
+        self.management_state = label("● 已停止", "state", True)
+        heading.addWidget(self.management_state)
+        card.box.addLayout(heading)
+        self.management_grid = InfoGrid((
+            ("status", "运行状态"), ("pid", "进程编号"),
+            ("host", "监听地址"), ("port", "端口"),
+            ("started", "启动时间"), ("elapsed", "运行时长"),
+            ("version", "版本"), ("health", "健康状态"),
+        ))
+        card.box.addWidget(self.management_grid)
         self.management_message = label("", "muted", True)
         card.box.addWidget(self.management_message)
-        actions = QHBoxLayout()
         self.start_button = button("启动 SeedLab", self.manager.start, True)
         self.stop_button = button("停止 SeedLab", self.manager.stop)
         self.restart_button = button("重启 SeedLab", self.manager.restart)
         self.open_button = button("打开 SeedLab", self.open_browser)
-        for item in (self.start_button, self.stop_button, self.restart_button, self.open_button):
-            actions.addWidget(item)
-        actions.addStretch()
-        card.box.addLayout(actions)
+        card.box.addWidget(ActionRow((self.start_button, self.stop_button, self.restart_button, self.open_button)))
         page.addWidget(card)
         notice = Card()
-        notice.box.addWidget(label("关于正常停止", "cardTitle"))
-        notice.box.addWidget(label("停止不会删除实验数据。服务会完成当前请求后退出；如等待过久，您可以继续等待，或在确认后强制结束。", "muted", True))
+        notice.box.addWidget(label("正常停止", "sectionTitle"))
+        notice.box.addWidget(label("停止服务时会等待当前请求完成，不会删除实验数据。如长时间无法退出，可在确认后强制结束。", "muted", True))
         page.addWidget(notice)
         page.addStretch()
 
@@ -206,7 +211,9 @@ class MainWindow(QMainWindow):
         page = self._page("网络访问", "当前采用本机模式，在这台电脑的浏览器中使用 SeedLab。")
         card = Card()
         card.box.addWidget(label("仅本机使用", "cardTitle"))
-        card.box.addWidget(label(self.manager.url, "value"))
+        address = label(self.manager.url, "value", True)
+        address.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        card.box.addWidget(address)
         card.box.addWidget(label("局域网共享：尚未配置\n远程访问：尚未配置", None, True))
         card.box.addWidget(label("局域网共享将在下一阶段接入。远程访问由 SakuraFrp 独立客户端提供，后续仅接入远程地址检测。", "muted", True))
         page.addWidget(card)
@@ -229,7 +236,7 @@ class MainWindow(QMainWindow):
     def _build_logs(self):
         page = self._page("日志与诊断", "查看最近运行事件；发生问题时可打开日志目录查看详细记录。")
         tools = QHBoxLayout()
-        self.log_state = label("", "muted")
+        self.log_state = label("", "muted", True)
         tools.addWidget(self.log_state)
         tools.addStretch()
         tools.addWidget(button("打开日志目录", self.open_logs))
@@ -240,6 +247,7 @@ class MainWindow(QMainWindow):
             card = Card()
             card.box.addWidget(label(title, "cardTitle"))
             view = QPlainTextEdit()
+            view.setObjectName("eventLog")
             view.setReadOnly(True)
             view.setMinimumHeight(100)
             view.setMaximumHeight(170)
@@ -256,7 +264,7 @@ class MainWindow(QMainWindow):
         card.box.addWidget(label("SeedLab", "cardTitle"))
         card.box.addWidget(label(f"应用版本：v{VERSION}\n默认端口：8848\n运行模式：仅本机\n数据库结构版本：c6d91f28a405", None, True))
         card.box.addWidget(label("作者：Steven_Chen / SS_Zhong\n许可：MIT License", "muted", True))
-        card.box.addWidget(label("统计分析阶段（Stage 4）尚未开始。", "muted"))
+        card.box.addWidget(label("统计分析阶段（Stage 4）尚未开始。", "muted", True))
         page.addWidget(card)
         page.addStretch()
 
@@ -293,7 +301,7 @@ class MainWindow(QMainWindow):
     def refresh(self):
         manager = self.manager
         tone = "good" if manager.can_open else "error" if manager.state == State.ERROR else "neutral" if manager.state == State.STOPPED else "progress"
-        for item in (self.header_state, self.hero_state):
+        for item in (self.header_state, self.hero_state, self.management_state):
             item.setText("● " + manager.label)
             item.setProperty("tone", tone)
             item.style().unpolish(item)
@@ -318,7 +326,10 @@ class MainWindow(QMainWindow):
         self.database_path.setText(path)
         pid = str(manager.process.pid) if manager.process else "—"
         started = manager.started_at.strftime("%Y-%m-%d %H:%M:%S") if manager.started_at else "—"
-        self.management_details.setText(f"服务状态：{manager.label}\n\nPID：{pid}    ·    监听地址：{manager.HOST}    ·    端口：{manager.PORT}\n\n启动时间：{started}\n运行时长：{self.elapsed()}\n健康状态：{health}\n版本：v{VERSION}")
+        fields = {"status": manager.label, "pid": pid, "host": manager.HOST, "port": str(manager.PORT),
+                  "started": started, "elapsed": self.elapsed(), "version": f"v{VERSION}", "health": health}
+        for key, value in fields.items():
+            self.management_grid.values[key].setText(value)
         self.management_message.setText(manager.message)
         self.log_state.setText("当前状态：" + manager.label)
         for action, enabled in ((self.tray_start, manager.can_start), (self.tray_stop, manager.can_stop),
@@ -326,6 +337,9 @@ class MainWindow(QMainWindow):
             action.setEnabled(enabled)
         self.tray.setToolTip("SeedLab · " + manager.label)
         self.check_bootstrap()
+        self.recent_events.setText("\n".join(format_event(when, message, overview=True)
+                                            for when, message in self.events)
+                                   or "最近没有需要处理的问题。")
         if self._exit_after_stop and manager.process is None and not manager.pending_start:
             self.finish_exit()
 
@@ -361,9 +375,9 @@ class MainWindow(QMainWindow):
     def add_event(self, message):
         if not any(term in message for term in ("启动成功", "已停止", "失败", "恢复", "缺失", "被占用", "未通过", "意外退出")):
             return
-        self.events.append(datetime.now().strftime("%H:%M:%S") + "  " + message)
-        self.events = self.events[-4:]
-        self.recent_events.setText("\n".join(self.events))
+        self.events.insert(0, (datetime.now(), message))
+        del self.events[3:]
+        self.recent_events.setText("\n".join(format_event(when, text, overview=True) for when, text in self.events))
         if self.pages.currentIndex() == 4:
             self.refresh_logs()
 
@@ -380,6 +394,11 @@ class MainWindow(QMainWindow):
     def refresh_logs(self):
         for view, name in zip(self.log_views, ("production-server", "control-center")):
             view.setPlainText(user_log_tail(self.manager.paths.logs / f"{name}.log"))
+            cursor = view.textCursor()
+            cursor.select(QTextCursor.SelectionType.Document)
+            spacing = QTextBlockFormat()
+            spacing.setLineHeight(145, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+            cursor.mergeBlockFormat(spacing)
 
     def restore_window(self):
         self.showNormal()

@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta
 import importlib.util
 from io import StringIO
 
@@ -19,7 +20,7 @@ from app.version import VERSION
 from control_center.paths import RuntimePaths
 from control_center.server_manager import ServerProcessManager, State
 from control_center.main_window import MainWindow
-from control_center.log_utils import make_logger, user_log_tail
+from control_center.log_utils import make_logger, user_log_tail, format_event
 from control_center.theme import window_dimensions
 
 
@@ -215,6 +216,12 @@ def test_window_six_pages_tray_close_and_bootstrap(manager, qt_app, monkeypatch)
     window.show()
     qt_app.processEvents()
     assert window.pages.count() == 6 and window.pages.currentIndex() == 0
+    for index, nav in enumerate(window.nav_buttons):
+        assert not nav.icon().isNull() and nav.iconSize().width() == 18
+        nav.click()
+        assert window.pages.currentIndex() == index and nav.isChecked()
+        assert sum(item.isChecked() for item in window.nav_buttons) == 1
+    window.select_page(0)
     manager.accept_health({"status": "ok", "version": VERSION})
     window.refresh()
     assert window.bootstrap.isVisible()
@@ -246,6 +253,67 @@ def test_window_six_pages_tray_close_and_bootstrap(manager, qt_app, monkeypatch)
     window.hide()
     window.ui_timer.stop()
     window.deleteLater()
+
+
+def test_management_grid_refreshes_service_fields(manager, qt_app):
+    window = MainWindow(manager)
+    window.select_page(1)
+    manager.process = Child()
+    manager.state = State.RUNNING
+    manager.health_ok = True
+    manager.started_at = datetime.now() - timedelta(minutes=2)
+    window.refresh()
+    values = window.management_grid.values
+    assert len(values) == 8
+    assert values["status"].text() == "正在运行"
+    assert values["pid"].text() == "12345"
+    assert values["host"].text() == "127.0.0.1" and values["port"].text() == "8848"
+    assert values["version"].text() == f"v{VERSION}" and values["health"].text() == "正常"
+    assert values["started"].text() == manager.started_at.strftime("%Y-%m-%d %H:%M:%S")
+    assert values["elapsed"].text().startswith("00:02:")
+    assert "正在运行" in window.management_state.text()
+    manager.process = None
+    manager.state = State.STOPPED
+    manager.health_ok = False
+    manager.started_at = None
+    window.refresh()
+    assert values["pid"].text() == "—" and values["health"].text() == "未运行"
+    window.ui_timer.stop()
+    window.tray.hide()
+    window.deleteLater()
+
+
+def test_overview_only_keeps_three_important_events(manager, qt_app):
+    window = MainWindow(manager)
+    assert window.recent_events.text() == "最近没有需要处理的问题。"
+    messages = ("SeedLab 启动成功。", "SeedLab 已停止。", "服务意外退出，请查看日志后重试。", "健康检查已恢复。")
+    for message in messages:
+        window.add_event(message)
+    window.add_event("健康检查完成")
+    window.add_event("正在启动 SeedLab。")
+    assert len(window.events) == 3
+    text = window.recent_events.text()
+    assert len(text.splitlines()) == 3
+    assert "启动成功" not in text and "健康检查完成" not in text
+    assert text.splitlines()[0].endswith("健康检查已恢复")
+    assert text.splitlines()[0].startswith(datetime.now().strftime("%H:%M"))
+    window.ui_timer.stop()
+    window.tray.hide()
+    window.deleteLater()
+
+
+def test_event_log_uses_readable_times_without_changing_full_file(tmp_path):
+    now = datetime(2026, 10, 2, 17, 0)
+    path = tmp_path / "events.log"
+    original = ("2026-10-01 16:05:05,658 INFO [事件] SeedLab 已停止。\n"
+                "2026-10-02 16:09:42,911 INFO [事件] SeedLab 启动成功。\n"
+                "2026-10-02 16:09:43,123 INFO technical details\n")
+    path.write_text(original, encoding="utf-8")
+    assert user_log_tail(path, now=now).splitlines() == [
+        "16:09:42    SeedLab 启动成功", "10-01 16:05    SeedLab 已停止"]
+    assert user_log_tail(path, limit=1, now=now) == "16:09:42    SeedLab 启动成功"
+    assert path.read_text(encoding="utf-8") == original
+    assert format_event(datetime(2026, 10, 2, 16, 9), "启动成功。", overview=True, now=now) == "16:09    启动成功"
 
 
 @pytest.mark.parametrize("width,height,scale", [(1366,768,1), (1366,768,1.25), (1920,1080,1), (1920,1080,1.25)])
