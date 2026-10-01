@@ -35,7 +35,8 @@ def paths(tmp_path):
     web.mkdir()
     (web / "index.html").write_text("<html>test</html>", encoding="utf-8")
     return RuntimePaths(ROOT, Path(sys.executable), web, tmp_path / "isolated.db",
-                        tmp_path / "bootstrap.token", tmp_path / "logs")
+                        tmp_path / "bootstrap.token", tmp_path / "logs",
+                        tmp_path / "config/seedlab.json", tmp_path / "backups")
 
 
 @pytest.fixture

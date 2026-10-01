@@ -15,6 +15,10 @@ from .widgets.status_card import Card, StatusCard, StatusCardRow, label
 from .widgets.nav_button import NavButton
 from .widgets.info_grid import InfoGrid
 from .widgets.action_row import ActionRow
+from .operations import Operations
+from .config_store import ConfigError
+from .network_service import MODE_LABELS
+from .widgets.operations_panels import NetworkPanel, BackupPanel, SettingsPanel, copy_text
 
 
 NAVIGATION = ("概览", "运行管理", "网络访问", "数据与备份", "日志与诊断", "设置与关于")
@@ -34,6 +38,7 @@ class MainWindow(QMainWindow):
     def __init__(self, manager: ServerProcessManager | None = None):
         super().__init__()
         self.manager = manager or ServerProcessManager(parent=self)
+        self.operations = Operations(self.manager, parent=self)
         self._allow_exit = False
         self._exit_after_stop = False
         self._hidden_notice = False
@@ -86,7 +91,7 @@ class MainWindow(QMainWindow):
             self.nav_buttons.append(nav)
             navigation.addWidget(nav)
         navigation.addStretch()
-        navigation.addWidget(label("仅本机运行\n实验数据留在此设备", "muted", True))
+        navigation.addWidget(label("实验数据留在此设备\n按需选择访问方式", "muted", True))
         sidebar_scroll = QScrollArea()
         sidebar_scroll.setObjectName("navScroll")
         sidebar_scroll.setFixedWidth(202)
@@ -106,6 +111,7 @@ class MainWindow(QMainWindow):
         self._build_about()
         self._build_tray()
         self.manager.changed.connect(self.refresh)
+        self.operations.changed.connect(self.refresh)
         self.manager.event.connect(self.add_event)
         self.manager.stop_timed_out.connect(self.stop_timeout_dialog)
         self.events = []
@@ -208,29 +214,18 @@ class MainWindow(QMainWindow):
         page.addStretch()
 
     def _build_network(self):
-        page = self._page("网络访问", "当前采用本机模式，在这台电脑的浏览器中使用 SeedLab。")
-        card = Card()
-        card.box.addWidget(label("仅本机使用", "cardTitle"))
-        address = label(self.manager.url, "value", True)
-        address.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        card.box.addWidget(address)
-        card.box.addWidget(label("局域网共享：尚未配置\n远程访问：尚未配置", None, True))
-        card.box.addWidget(label("局域网共享将在下一阶段接入。远程访问由 SakuraFrp 独立客户端提供，后续仅接入远程地址检测。", "muted", True))
-        page.addWidget(card)
+        page = self._page("网络访问", "选择本机、局域网或远程访问方式；修改后请明确保存设置。")
+        self.network_panel = NetworkPanel(self.manager)
+        self.network_panel.save_requested.connect(self.save_network)
+        page.addWidget(self.network_panel)
         page.addStretch()
 
     def _build_data(self):
-        page = self._page("数据与备份", "查看当前数据库文件的位置和大小。本页只读，不进行数据库查询或修改。")
-        card = Card()
-        card.box.addWidget(label("当前数据库文件", "cardTitle"))
-        self.database_details = label("", None, True)
-        card.box.addWidget(self.database_details)
-        self.database_path = QLineEdit()
-        self.database_path.setReadOnly(True)
-        card.box.addWidget(self.database_path)
-        card.box.addWidget(label("自动备份：尚未配置", "muted"))
-        card.box.addWidget(label("正式备份和恢复将在后续阶段接入。当前人工测试数据及验收快照保持原样。", "muted", True))
-        page.addWidget(card)
+        page = self._page("数据与备份", "检查数据库并创建独立备份；现有数据和历史备份不会被覆盖。")
+        self.backup_panel = BackupPanel(self.manager, self.operations)
+        self.database_details = self.backup_panel.database_details
+        self.database_path = self.backup_panel.database_path
+        page.addWidget(self.backup_panel)
         page.addStretch()
 
     def _build_logs(self):
@@ -259,10 +254,13 @@ class MainWindow(QMainWindow):
         page.addStretch()
 
     def _build_about(self):
-        page = self._page("设置与关于", "当前为本机运行基础版本。访问模式和其他可编辑设置将在后续阶段接入。")
+        page = self._page("设置与关于", "设置自动备份与保留份数；访问方式在网络访问页面设置。")
         card = Card()
+        self.settings_panel = SettingsPanel(self.manager)
+        self.settings_panel.save_requested.connect(self.save_backup_settings)
+        page.addWidget(self.settings_panel)
         card.box.addWidget(label("SeedLab", "cardTitle"))
-        card.box.addWidget(label(f"应用版本：v{VERSION}\n默认端口：8848\n运行模式：仅本机\n数据库结构版本：c6d91f28a405", None, True))
+        card.box.addWidget(label(f"应用版本：v{VERSION}\n默认端口：8848\n数据库结构版本：c6d91f28a405", None, True))
         card.box.addWidget(label("作者：Steven_Chen / SS_Zhong\n许可：MIT License", "muted", True))
         card.box.addWidget(label("统计分析阶段（Stage 4）尚未开始。", "muted", True))
         page.addWidget(card)
@@ -307,7 +305,7 @@ class MainWindow(QMainWindow):
             item.style().unpolish(item)
             item.style().polish(item)
         self.hero_message.setText(manager.message)
-        self.hero_details.setText(f"运行时间 {self.elapsed()}   ·   版本 v{VERSION}   ·   监听 {manager.HOST}   ·   端口 {manager.PORT}")
+        self.hero_details.setText(f"运行时间 {self.elapsed()}   ·   版本 v{VERSION}   ·   监听 {manager.bind_host}   ·   端口 {manager.port}")
         self.overview_primary.setText("打开 SeedLab" if manager.can_open else "启动 SeedLab")
         self.overview_primary.setEnabled(manager.can_open or manager.can_start)
         self.overview_restart.setEnabled(manager.can_stop)
@@ -322,11 +320,16 @@ class MainWindow(QMainWindow):
         name, path, size = manager.paths.database_info()
         self.database_card.value.setText(name)
         self.database_card.detail.setText(size)
+        self.access_card.value.setText("外部服务" if manager.state == State.EXTERNAL else MODE_LABELS[manager.active_config.access_mode])
+        self.access_card.detail.setText(manager.user_url or "请先配置访问地址")
+        self.network_panel.refresh()
+        self.settings_panel.refresh()
+        self.backup_panel.refresh()
         self.database_details.setText(f"文件名：{name}\n文件大小：{size}")
         self.database_path.setText(path)
         pid = str(manager.process.pid) if manager.process else "—"
         started = manager.started_at.strftime("%Y-%m-%d %H:%M:%S") if manager.started_at else "—"
-        fields = {"status": manager.label, "pid": pid, "host": manager.HOST, "port": str(manager.PORT),
+        fields = {"status": manager.label, "pid": pid, "host": manager.bind_host, "port": str(manager.port),
                   "started": started, "elapsed": self.elapsed(), "version": f"v{VERSION}", "health": health}
         for key, value in fields.items():
             self.management_grid.values[key].setText(value)
@@ -364,16 +367,13 @@ class MainWindow(QMainWindow):
         self.reveal_button.setText("隐藏初始化码" if self._token_revealed else "显示初始化码")
 
     def copy_token(self):
-        clipboard = QApplication.clipboard()
-        token = self.token_edit.text()
-        clipboard.setText(token)
-        if clipboard.text() == token:
+        if copy_text(self, self.token_edit.text()):
             self.bootstrap_hint.setText("初始化码已复制。请仅用于设置首位管理员，不要向其他人转发。")
         else:
-            self.bootstrap_hint.setText("无法写入剪贴板。请显示初始化码后手动复制，或检查本机剪贴板是否可用。")
+            self.bootstrap_hint.setText("无法写入剪贴板。请显示初始化码后手动复制。")
 
     def add_event(self, message):
-        if not any(term in message for term in ("启动成功", "已停止", "失败", "恢复", "缺失", "被占用", "未通过", "意外退出")):
+        if not any(term in message for term in ("启动成功", "已停止", "失败", "恢复", "缺失", "被占用", "未通过", "意外退出", "备份完成", "模式已更新", "远程访问", "数据库检查")):
             return
         self.events.insert(0, (datetime.now(), message))
         del self.events[3:]
@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
 
     def open_browser(self, suffix=""):
         if self.manager.can_open:
-            QDesktopServices.openUrl(QUrl(self.manager.url + (suffix if isinstance(suffix, str) else "")))
+            QDesktopServices.openUrl(QUrl(self.manager.user_url + (suffix if isinstance(suffix, str) else "")))
 
     def open_logs(self):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.manager.paths.logs)))
@@ -418,7 +418,67 @@ class MainWindow(QMainWindow):
         else:
             self.showMinimized()
 
+    def save_network(self, candidate, *, exiting=False):
+        restart = False
+        if self.manager.process is not None and self.manager.network_settings_changed(candidate) and not exiting:
+            dialog = QMessageBox(self)
+            dialog.setWindowTitle("保存访问方式")
+            dialog.setText("访问方式变更需要重启 SeedLab，当前请求会先完成。")
+            save = dialog.addButton("保存并重启", QMessageBox.ButtonRole.AcceptRole)
+            dialog.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+            dialog.exec()
+            if dialog.clickedButton() != save:
+                return False
+            restart = True
+        try:
+            self.manager.apply_settings(candidate, restart=restart, exiting=exiting)
+        except ConfigError as error:
+            QMessageBox.warning(self, "设置未保存", str(error))
+            return False
+        except OSError:
+            self.manager.control_log.exception("运行设置保存失败")
+            QMessageBox.warning(self, "设置未保存", "请检查访问设置和配置目录权限后重试；原设置已保留。")
+            return False
+        self.network_panel.load()
+        if self.manager.polling:
+            self.network_panel.auto_check()
+        return True
+
+    def save_backup_settings(self, candidate):
+        try:
+            self.manager.apply_settings(candidate)
+        except (ConfigError, OSError):
+            self.manager.control_log.exception("备份设置保存失败")
+            QMessageBox.warning(self, "设置未保存", "请检查配置目录权限，或等待服务启动和停止完成后重试。")
+            return False
+        self.settings_panel.load()
+        return True
+
     def request_exit(self):
+        if self.network_panel.dirty or self.settings_panel.dirty:
+            dialog = QMessageBox(self)
+            dialog.setWindowTitle("未保存的设置")
+            dialog.setText("有未保存的设置。保存后将用于下次启动；退出前仍会正常停止本控制中心启动的服务。")
+            save = dialog.addButton("保存", QMessageBox.ButtonRole.AcceptRole)
+            discard = dialog.addButton("不保存", QMessageBox.ButtonRole.DestructiveRole)
+            dialog.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+            dialog.exec()
+            if dialog.clickedButton() == save:
+                try:
+                    candidate = self.network_panel.candidate()
+                    if self.settings_panel.dirty:
+                        from dataclasses import replace
+                        backup = self.settings_panel.candidate()
+                        candidate = replace(candidate, auto_backup_enabled=backup.auto_backup_enabled,
+                                            auto_backup_retention=backup.auto_backup_retention)
+                    if not self.save_network(candidate, exiting=True):
+                        return
+                    self.settings_panel.load()
+                except ConfigError as error:
+                    QMessageBox.warning(self, "请检查设置", str(error))
+                    return
+            elif dialog.clickedButton() != discard:
+                return
         if self.manager.process is not None:
             dialog = QMessageBox(self)
             dialog.setWindowTitle("退出控制中心")
@@ -448,6 +508,13 @@ class MainWindow(QMainWindow):
     def finish_exit(self):
         if self._allow_exit:
             return
+        self.operations.closing = True
+        if self.operations.busy:
+            self._exit_after_stop = True
+            self.hero_message.setText("正在完成数据检查或备份，完成后退出。")
+            return
+        self.network_panel.timer.stop()
+        self.network_panel.checker.stop()
         self._allow_exit = True
         self.ui_timer.stop()
         self.manager.stop_checks()

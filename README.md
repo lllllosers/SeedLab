@@ -6,7 +6,7 @@ Stage 3 已随 v0.4.0 正式发布，包含幼苗测定、实验生命周期、�
 
 ## 技术栈
 
-Stage 3.5 正在开发生产部署基础：Vue 与 API 共用 `127.0.0.1:8848`，第一版浅色 Control Center 已具备托盘、隐藏启动、健康检查、正常停止/重启与首次管理员提示，等待人工 UI 验收。局域网切换、正式备份、设置持久化及便携打包尚未完成。版本保持 0.4.0，Stage 4 尚未开始。安装 `backend[test,control]` 可选依赖后运行 `run_control_center.bat`；详见[生产部署与控制中心设计](docs/10_生产部署与控制中心设计.md)。
+Stage 3.5 正在开发生产部署基础：Vue 与 API 共用 `127.0.0.1:8848`，浅色 Control Center 已具备托盘、隐藏启动、健康检查、正常停止/重启、首次管理员提示，以及本机/局域网/远程模式、持久化运行设置、SQLite 在线手工备份与每日自动备份（默认保留 14 份）和数据库健康检查，等待人工验收。SakuraFrp 仍由独立客户端管理；恢复、升级、开机启动、防火墙管理及便携打包尚未实现。版本保持 0.4.0，Stage 4 尚未开始。安装 `backend[test,control]` 可选依赖后运行 `run_control_center.bat`；详见[生产部署与控制中心设计](docs/10_生产部署与控制中心设计.md)。
 
 - 后端：Python 3.12+、FastAPI、SQLAlchemy 2、Alembic、Pydantic 2、SQLite WAL、Argon2、pytest、openpyxl。
 - 前端：Vue 3、TypeScript、Vite、Element Plus、Pinia、Vue Router、Axios。

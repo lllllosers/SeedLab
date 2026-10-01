@@ -14,6 +14,8 @@ from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkRe
 from app.version import VERSION
 from .log_utils import make_logger
 from .paths import RuntimePaths
+from .config_store import ConfigStore, ConfigError
+from .network_service import lan_addresses, resolve_lan, MODE_LABELS
 
 
 class State(str, Enum):
@@ -34,10 +36,8 @@ class ServerProcessManager(QObject):
     event = Signal(str)
     stop_timed_out = Signal()
     _output_error = Signal(str)
-    HOST = "127.0.0.1"
-    PORT = 8848
 
-    def __init__(self, paths: RuntimePaths | None = None, parent=None, *, polling=True):
+    def __init__(self, paths: RuntimePaths | None = None, parent=None, *, polling=True, config_store=None):
         super().__init__(parent)
         self.paths = paths or RuntimePaths.discover()
         self.polling = polling
@@ -60,6 +60,12 @@ class ServerProcessManager(QObject):
         self.stop_timeout = 10.0
         self.control_log = make_logger(self.paths.logs, "control-center")
         self.server_log = make_logger(self.paths.logs, "production-server")
+        self.config_store = config_store or ConfigStore(self.paths.config_file, self.control_log)
+        self.config_store.load()
+        self.running_config = None
+        self.external_config = None
+        self.start_config = None
+        self.network_warning = self.config_store.warning
         self._output_error.connect(self._remember_error)
         self.network = QNetworkAccessManager(self)
         self.network.finished.connect(self._health_finished)
@@ -76,7 +82,50 @@ class ServerProcessManager(QObject):
 
     @property
     def url(self):
-        return f"http://{self.HOST}:{self.PORT}"
+        return self.health_url
+
+    @property
+    def config(self):
+        return self.config_store.settings
+
+    @property
+    def active_config(self):
+        return self.running_config or self.external_config or self.start_config or self.config
+
+    @property
+    def bind_host(self):
+        return self.active_config.bind_host
+
+    @property
+    def port(self):
+        return self.active_config.port
+
+    @property
+    def health_url(self):
+        return self.active_config.health_url
+
+    @property
+    def user_url(self):
+        return self.active_config.user_url
+
+    def apply_settings(self, settings, *, restart=False, exiting=False):
+        if self.pending_start or self.state in {State.STARTING, State.STOPPING}:
+            raise ConfigError("服务正在启动或停止，请完成后再保存设置。")
+        network_changed = any(getattr(settings, key) != getattr(self.config, key)
+                              for key in ("access_mode", "port", "lan_address", "remote_url"))
+        requires_restart = network_changed and self.network_settings_changed(settings)
+        if self.process is not None and requires_restart and not (restart or exiting):
+            raise ConfigError("访问方式变更需要重启 SeedLab，请选择保存并重启。")
+        self.config_store.save(settings)
+        self.network_warning = "设置将在下次由控制中心启动时生效。" if self.state == State.EXTERNAL else ""
+        self._event("运行设置已保存。" if not network_changed else "访问模式已更新：" + MODE_LABELS[settings.access_mode] + "。")
+        if self.process is not None and requires_restart and restart:
+            self.restart()
+        self.changed.emit()
+
+    def network_settings_changed(self, settings):
+        return any(getattr(settings, key) != getattr(self.active_config, key)
+                   for key in ("access_mode", "port", "lan_address", "remote_url"))
 
     @property
     def label(self):
@@ -92,13 +141,15 @@ class ServerProcessManager(QObject):
 
     @property
     def can_open(self):
-        return self.state in {State.RUNNING, State.EXTERNAL} and self.health_ok
+        return self.state in {State.RUNNING, State.EXTERNAL} and self.health_ok and bool(self.user_url)
 
     def _event(self, message):
         self.control_log.info("[事件] %s", message)
         self.event.emit(message)
 
     def _set_state(self, state, message):
+        if state == State.ERROR and self.process is None:
+            self.start_config = None
         if state == State.ERROR and (state != self.state or message != self.message):
             self._event(message)
         self.state = state
@@ -110,7 +161,7 @@ class ServerProcessManager(QObject):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
                 if os.name == "nt":
                     probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-                probe.bind((self.HOST, self.PORT))
+                probe.bind((self.bind_host, self.port))
             return True
         except OSError:
             return False
@@ -156,21 +207,24 @@ class ServerProcessManager(QObject):
             if healthy:
                 self.pending_start = False
                 if self.state != State.EXTERNAL:
+                    self.external_config = self.active_config
+                    self.start_config = None
                     self._event("检测到 SeedLab 已在运行，当前服务由其他入口启动。")
                 self._set_state(State.EXTERNAL, "可打开 SeedLab；请在原启动入口停止服务。")
             elif self.pending_start:
                 self.pending_start = False
                 self._spawn()
             elif self.state == State.EXTERNAL:
+                self.external_config = None
                 self.initialized = None
                 self._set_state(State.STOPPED, "外部服务已停止，可从此处启动。")
             elif not self._port_free():
-                self._set_state(State.ERROR, f"端口 {self.PORT} 已被其他程序占用。请关闭占用程序后重试。")
+                self._set_state(State.ERROR, f"端口 {self.port} 已被其他程序占用。请关闭占用程序后重试。")
         elif healthy and self.process.poll() is None and self.state not in {State.STOPPING, State.ERROR}:
             if self.state == State.STARTING:
                 self.started_at = datetime.now()
                 self.restart_pending = False
-                self._event("SeedLab 启动成功。")
+                self._event("SeedLab 启动成功：" + MODE_LABELS[self.active_config.access_mode] + "。")
                 self.server_log.info("[事件] SeedLab 启动成功。")
             elif not was_healthy:
                 self._event("健康检查已恢复。")
@@ -179,6 +233,11 @@ class ServerProcessManager(QObject):
 
     def start(self):
         if not self.can_start:
+            return
+        self.start_config, self.network_warning = resolve_lan(self.config, lan_addresses())
+        if self.start_config.access_mode == "lan" and not self.start_config.lan_address:
+            self.start_config = None
+            self._set_state(State.ERROR, "当前没有可用的局域网地址，请连接网络或改用仅本机使用。")
             return
         if not self.paths.python.is_file():
             self._set_state(State.ERROR, "运行环境缺失，请先安装项目的 Python 依赖。")
@@ -194,16 +253,22 @@ class ServerProcessManager(QObject):
 
     def _spawn(self):
         if not self._port_free():
-            self._set_state(State.ERROR, f"端口 {self.PORT} 已被其他程序占用。请关闭占用程序后重试。")
+            self._set_state(State.ERROR, f"端口 {self.port} 已被其他程序占用。请关闭占用程序后重试。")
             return
         try:
             self.stop_file = self.paths.new_stop_file()
             environment = os.environ.copy()
             environment.update(PYTHONUTF8="1", PYTHONUNBUFFERED="1", SEEDLAB_ENV="production")
-            self.process = subprocess.Popen(self.paths.command(self.stop_file, self.HOST, self.PORT),
+            environment["SEEDLAB_COOKIE_SECURE"] = "true" if self.active_config.cookie_secure else "false"
+            if self.paths.database is not None:
+                environment["SEEDLAB_DATABASE_URL"] = "sqlite:///" + self.paths.database.resolve().as_posix()
+            environment["SEEDLAB_BOOTSTRAP_TOKEN_PATH"] = str(self.paths.bootstrap_token)
+            self.process = subprocess.Popen(self.paths.command(self.stop_file, self.bind_host, self.port),
                 cwd=self.paths.root, env=environment, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            self.running_config = self.active_config
+            self.start_config = None
             self._event("正在启动 SeedLab。")
             self.server_log.info("[事件] 正在启动 SeedLab。")
             threading.Thread(target=self._capture_output, args=(self.process,), daemon=True).start()
@@ -219,7 +284,7 @@ class ServerProcessManager(QObject):
                     self.server_log.info(line.rstrip())
                     for marker, reason in (("数据库升级失败", "数据库升级失败，请查看日志并保留现有数据库。"),
                                            ("前端生产文件缺失", "前端生产文件缺失，请先构建前端。"),
-                                           ("address already in use", f"端口 {self.PORT} 已被其他程序占用。")):
+                                           ("address already in use", f"端口 {self.port} 已被其他程序占用。")):
                         if marker in line:
                             self._output_error.emit(reason)
         except Exception:
@@ -231,6 +296,7 @@ class ServerProcessManager(QObject):
     def stop(self):
         if self.process is None:
             self.pending_start = False
+            self.start_config = None
             if self.state != State.EXTERNAL:
                 self._set_state(State.STOPPED, "服务已停止。")
             return
@@ -274,6 +340,7 @@ class ServerProcessManager(QObject):
                 stopped = self.state == State.STOPPING
                 restart = self.restart_pending and stopped
                 self.process = None
+                self.running_config = None
                 self.health_ok = False
                 self.started_at = None
                 self.initialized = None

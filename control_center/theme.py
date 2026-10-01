@@ -31,6 +31,10 @@ QPushButton#nav { text-align: left; border: none; border-left: 3px solid transpa
 QPushButton#nav:hover { background: #f5f8fc; }
 QPushButton#nav:checked { background: #edf4fe; color: #447db9; border-left-color: #6ba0de; font-weight: 600; }
 QLineEdit { background: #f7f9fc; border: 1px solid #e5ebf3; border-radius: 7px; padding: 9px; }
+QComboBox, QSpinBox { background: #f7f9fc; border: 1px solid #e5ebf3; border-radius: 7px; padding: 8px; min-height: 20px; }
+QRadioButton, QCheckBox { spacing: 8px; padding: 6px 0; }
+QRadioButton::indicator { width: 14px; height: 14px; border: 1px solid #96a8bc; border-radius: 8px; background: white; }
+QRadioButton::indicator:checked { background: #568ed0; border: 3px solid #dce9f9; width: 10px; height: 10px; }
 QPlainTextEdit#eventLog { background: #fcfdff; border: 1px solid #eef2f7; border-radius: 8px; padding: 10px; font-size: 13px; }
 QScrollArea { border: none; }
 QScrollBar:vertical { background: transparent; width: 7px; margin: 4px 0; }

@@ -16,6 +16,16 @@ class RuntimePaths:
     database: Path | None
     bootstrap_token: Path
     logs: Path
+    config_override: Path | None = None
+    backups_override: Path | None = None
+
+    @property
+    def config_file(self):
+        return self.config_override or self.root / "config" / "seedlab.json"
+
+    @property
+    def backups(self):
+        return self.backups_override or self.root / "backups"
 
     @classmethod
     def discover(cls):

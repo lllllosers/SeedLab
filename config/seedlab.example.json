@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "access_mode": "local",
+  "port": 8848,
+  "lan_address": null,
+  "remote_url": null,
+  "auto_backup_enabled": true,
+  "auto_backup_retention": 14
+}
