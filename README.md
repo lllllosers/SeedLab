@@ -1,20 +1,26 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.4.0 / Seedling Measurement Workflow**。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.4.1 / Production Trial Deployment**。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
 
 Stage 3 已随 v0.4.0 正式发布，包含幼苗测定、实验生命周期、材料导入衔接与项目卫生工具；Stage 4 尚未开始。幼苗根苗长测定采用 DAG（Days After Germination，发芽后测定时间）：将单株首次在巡检中判定发芽的时间 `germinated_at` 转为实验室本地日期，再加动态配置的 DAG 自然日。培养皿置床时间 `sown_at` 另行保留，用于巡检，不作为幼苗测定基准。测定任务由样本与时间点实时派生；根长、苗长均以 mm 记录，区分真实 0、无法测量和尚未测定。统计分析与派生指标留待 Stage 4。
 
+## 生产试运行与 portable
+
+Stage 3.5 已收口为 v0.4.1。系统提供实验业务闭环、DAG 幼苗测定、Vue 与 API 单端口部署、Windows 运行控制中心、本机/局域网/远程 HTTPS 入口、portable、正式业务数据库在线备份和数据库检查。控制中心提供启停、重启、托盘、日志及首次管理员提示，自动备份默认保留 14 份。SakuraFrp 由独立客户端管理，数据库恢复和升级器尚未正式实现。
+
+控制中心首次部署通过五步向导选择独立数据目录（推荐程序目录同级 SeedLabData），设置访问方式和自动备份，初始化新空库。实验数据、运行配置、日志及备份保存在所选位置；程序目录仅保存安装定位文件。首位管理员在网页 /setup 创建，以后启动复用同一数据目录和账号。部署身份独立，不接管其他实例；端口占用时阻止继续，修改端口后再部署。访问设置保存重启后须通过真实服务核验。
+
+正式备份仅面向不可替代的业务数据库 seedlab.db；源码由 Git/GitHub 管理，测试库、构建产物、运行配置和日志不建立额外备份体系。build/、dist/ 保持构建产物命名，均被 Git 忽略且可重新生成。
+
+正式便携包为 **SeedLab-v0.4.1-portable.zip**。解压完整文件夹后双击 SeedLab Control Center.exe，日常运行无需另装 Python、Node 或 Git。开发者手工准备 backend[test,control,packaging] 和前端依赖后运行 `scripts/build_portable.ps1 -OutputName portable-v041`，输出位于 dist/portable-v041/；脚本不联网安装，分发包不包含业务数据。详见 [打包说明](packaging/README.md)、[普通使用说明](packaging/使用说明.txt) 和 [生产部署设计](docs/10_生产部署与控制中心设计.md)。
+
+用户已确认新目录管理员初始化、账号复用、本机、LAN 保存重启及同机访问、实例隔离。第二设备 LAN、真实 SakuraFrp HTTPS 及无开发工具的新 Windows 机器尚未完成环境验收；Windows 代码签名尚未配置。
+
+**Stage 4 统计分析尚未开始。200 物种历史实验尚未回填，将作为 v0.4.1 后独立维护任务 Legacy Backfill 处理；最终完整 Project Hygiene 在回填核账后开展。**
+
+源码控制中心安装 `backend[test,control]` 后运行 run_control_center.bat。开发者需要显式使用现有 .env / backend/data 时可加 --skip-first-run；测试可通过 --data-root 指定隔离目录。普通首次部署拒绝 TEMP 数据位置，原有开发双服务流程保持不变。
+
 ## 技术栈
-
-portable 修复候选版将服务身份绑定到独立数据目录，避免新部署进入旧账号；首次设置支持处理端口冲突，访问模式保存后须经实际服务确认，统一 Windows 图标与通知名称。修复候选包构建与验收说明见 [packaging/README.md](packaging/README.md)，等待人工验收。
-
-Stage 3.5 正在进行 Windows portable 内部试运行：Vue 与 API 共用 `127.0.0.1:8848`，浅色 Control Center 提供托盘、隐藏启动、健康检查、正常停止/重启、首次管理员提示，本机/局域网/远程访问、SQLite 在线备份（自动备份默认保留 14 份）和数据库检查。Phase 4A 的独立程序/数据目录、五步向导及共享迁移入口已验收；Phase 4B 增加共享运行时的 onedir 候选包、单实例、Windows 登录启动与自动启动服务设置，等待 portable 人工验收。最终便携版尚未正式发布；SakuraFrp 由独立客户端管理，恢复、升级及防火墙管理尚未实现。VERSION 保持 0.4.0，Stage 4 尚未开始。源码控制中心安装 `backend[test,control]` 后运行 `run_control_center.bat`；详见[生产部署与控制中心设计](docs/10_生产部署与控制中心设计.md)。
-
-控制中心首次正式部署会引导选择独立数据目录（推荐程序目录同级的 `SeedLabData`），依次设置访问方式、自动备份并初始化空库。实验数据库、运行设置、日志和备份均保存于所选位置；最后写入程序目录的 `config/installation.json`，以后启动复用同一数据目录。首位管理员继续在网页 `/setup` 创建。不会自动搬动、复制或导入开发库及历史实验。
-
-开发者需要明确使用现有 `.env` / `backend/data` 时，可运行 `run_control_center.bat --skip-first-run`；隔离验证可用 `--data-root <绝对路径>`。普通首次部署拒绝 TEMP 数据位置，显式测试路径允许临时目录。`run_dev.bat` 的 5173/8000 开发流程保持原样。
-
-开发者构建候选包：手工安装 `backend[test,control,packaging]` 和前端依赖，再运行 `scripts/build_portable.ps1`。输出位于 `dist/portable/`，候选 ZIP 为 `SeedLab-v0.4.0-stage35-portable-test.zip`；脚本不联网安装，不包含用户数据。普通用户解压完整文件夹后双击 `SeedLab Control Center.exe`，运行无需另装 Python、Node 或 Git。详见 [packaging/README.md](packaging/README.md) 和 [普通使用说明](packaging/使用说明.txt)。
 
 - 后端：Python 3.12+、FastAPI、SQLAlchemy 2、Alembic、Pydantic 2、SQLite WAL、Argon2、pytest、openpyxl。
 - 前端：Vue 3、TypeScript、Vite、Element Plus、Pinia、Vue Router、Axios。
@@ -86,7 +92,7 @@ scripts/   开发启动、测试、只读卫生检查、安全缓存清理与开
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。`v0.4.0` 标记 Stage 3 / Seedling Measurement Workflow。Stage 4 尚未开始。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。`v0.4.0` 标记 Stage 3 / Seedling Measurement Workflow，`v0.4.1` 标记 Stage 3.5 / Production Trial Deployment。Stage 4 尚未开始。
 
 ## 项目卫生维护
 

@@ -1,6 +1,6 @@
-# Windows portable 内部候选包
+# Windows portable 生产试运行包
 
-VERSION 保持 0.4.0。本目录只保存打包源码，不发布 tag 或 GitHub Release。
+v0.4.1 / Production Trial Deployment。本目录保存打包源码；版本唯一来源为 backend/app/version.py，正式分发包发布到 GitHub Release。
 
 ## 构建
 
@@ -11,17 +11,17 @@ VERSION 保持 0.4.0。本目录只保存打包源码，不发布 tag 或 GitHub
 cd frontend
 npm install
 cd ..
-.\scripts\build_portable.ps1
+.\scripts\build_portable.ps1 -OutputName portable-v041
 ```
 
-实际工具为 PyInstaller 6.22.3。packaging 可选依赖接受 6.x，构建检查版本并打印。脚本不联网安装，仅清理带所有权标记的 build/portable-pyinstaller、build/portable-cache、dist/portable；路径或后代有重定向时拒绝删除，不碰用户数据。
+实际工具为 PyInstaller 6.22.3。packaging 可选依赖接受 6.x，构建检查版本并打印。脚本不联网安装，仅清理带所有权标记的 build/portable-pyinstaller、build/portable-cache 和选定的 dist 输出目录（默认 portable，本版 portable-v041）；路径或后代有重定向时拒绝删除，不碰用户数据。
 
 一个 spec、两次 Analysis、两个 PYZ/EXE、一个共享 COLLECT。控制中心为 windowed；服务器保留 stdout，由控制中心 CREATE_NO_WINDOW 启动。两份 EXE 共用 _internal，服务器在程序根目录，避免复制整套 DLL。前端和迁移源码放在 app/web、app/migrations，运行时禁止写入字节码缓存。动态模型、SQLite、Uvicorn、Qt Network/SVG、Argon2、拼音和 tzdata 通过 spec/hook 收集。
 
 spec 显式设置冻结解释器 UTF-8 与无缓冲 stdout。冻结解释器不读取 PYTHONUTF8；服务输出必须与控制中心 UTF-8 日志管道一致，不能依赖用户的 Windows 区域设置。
 
 ```text
-dist/portable/SeedLab/
+dist/portable-v041/SeedLab/
   SeedLab Control Center.exe
   SeedLabServer.exe
   _internal/
@@ -31,11 +31,11 @@ dist/portable/SeedLab/
   使用说明.txt
   LICENSE
   AUTHORS.md
-dist/portable/SeedLab-v0.4.0-stage35-portable-test.zip
-dist/portable/artifact-report.json
+dist/portable-v041/SeedLab-v0.4.1-portable.zip
+dist/portable-v041/artifact-report.json
 ```
 
-脚本验证迁移 head，扫描目录及 ZIP 的用户数据、配置、日志、开发资产、重定向和 CRC，报告数量、体积及最大 20 个文件。候选包日常不调用 Python、Node、npm 或 Git；构建仍需要开发依赖。
+脚本验证迁移 head，扫描目录及 ZIP 的用户数据、配置、日志、开发资产、重定向和 CRC，报告数量、体积及最大 20 个文件。便携包日常不调用 Python、Node、npm 或 Git；构建仍需要开发依赖。
 
 ## 运行与验收
 
@@ -45,11 +45,11 @@ QLocalServer/QLocalSocket 在当前用户会话内按程序目录和数据目录
 
 登录启动只管理 HKCU\Software\Microsoft\Windows\CurrentVersion\Run 的 SeedLabControlCenter 值：带引号的绝对控制中心 EXE 路径加 --startup。默认关闭，开发模式禁用；旧位置只提示，明确保存才更新，取消只删除该值。
 
-候选 ZIP 必须在仓库外、收缩 PATH、隔离数据条件下验证实际 EXE。此机安装了开发工具，不能称为“干净 Windows 验证”。另一设备 LAN、真实 SakuraFrp、真实登录启动和 UI 未实测部分须如实记录，完整验收前不能宣布全部通过。
+最终 ZIP 必须在仓库外、收缩 PATH、隔离数据条件下验证实际 EXE。此机安装了开发工具，不能称为“干净 Windows 验证”。另一设备 LAN、真实 SakuraFrp、真实登录启动和 UI 未实测部分须如实记录，完整验收前不能宣布全部通过。
 
 内部包未签名，不改变 Windows 安全策略。没有实现升级、恢复、系统服务或安装器。
 
-## 实例隔离与修复候选包
+## 实例隔离与品牌
 
 每份数据目录的 config/instance.json 保存独立部署编号和本机探测凭据；已有部署缺文件时安全补建，不修改业务库结构。公开 health 继续只返回状态与版本，携带本部署凭据的控制中心才能读取部署编号、数据目录、端口、访问方式、监听地址和进程号。控制中心核对身份、规范化数据路径、端口、访问方式和自己启动的进程号；另一份服务及缺少身份的旧版均不接管、不读取账号状态、不提供停止或重启。
 
@@ -59,9 +59,17 @@ QLocalServer/QLocalSocket 在当前用户会话内按程序目录和数据目录
 
 SeedLab.ico 从现有品牌 SVG 生成七个尺寸；EXE、主窗口、向导、托盘及通知共用该图形。Windows 产品描述从唯一 VERSION 动态生成；任务栏使用 SeedLab.ControlCenter，便携版仅注册当前用户该产品的 DisplayName/IconUri，不修改其他产品或登录启动项。通知名称统一为“SeedLab 运行控制中心”。真实 Windows 图标缓存与通知外观仍需人工验收。
 
-重建修复候选包可运行 `scripts/build_portable.ps1 -OutputName portable-instance-fix`，输出在 dist/portable-instance-fix。此方式保留此前人工部署的 dist/portable；默认构建仍遇到用户部署文件时拒绝清理。运行身份文件与凭据禁止进入候选 ZIP。
+正式构建使用独立 dist/portable-v041 输出，保留此前人工部署的 dist/portable；默认构建遇到用户部署文件时仍拒绝清理。运行身份文件与凭据禁止进入分发 ZIP。build/、dist/ 可重新生成，不属于备份。发布确认前保留正式 ZIP；GitHub Release 上传确认后，本地副本无需长期保存。本轮不大规模清理已有构建目录或历史数据库快照。
 
-### 本轮修复验证
+### v0.4.1 最终发布验证（2026-10-02）
+
+- backend 完整回归 213 passed / 1 skipped；跳过原因为当前 Windows 账号不能创建符号链接。frontend 18 passed，构建通过；pip check、npm ls、Alembic current/check、现有开发库只读 integrity/FK 检查通过，head 保持 c6d91f28a405。
+- 正式文件 SeedLab-v0.4.1-portable.zip：78,045,693 字节，958 个文件；目录与 ZIP 的敏感文件、开发内容、空禁止目录及 CRC 检查通过。SHA256：2545c284da478011fc3d4d8ac50a9dc993436bee5e4968070cdf13bffd318ba0。两份 EXE 产品版本 0.4.1，同源七尺寸图标。
+- 正式 ZIP 在仓库外的中文/空格程序目录和全新隔离 Data Root 完成冻结 EXE 验证：账号隔离、本机/LAN 保存正常重启、同机 LAN 登录、正常安装定位重开复用、同程序/同数据单实例。真实浏览器完成新库初始化和登录；手工备份及数据库检查功能通过。测试未使用正式实验库，不创建正式发布数据库。
+- 用户反馈最终包第十三、十四部分全部人工检查通过：EXE、向导、主窗口、任务栏、托盘、通知图标与名称，首次部署、新管理员、本机/LAN、托盘恢复、启停、手工备份、数据库检查、退出重开及单实例。Windows 窗口工具仍不能初始化，人工外观结果来自用户反馈，而非代理截图。
+- 第二设备 LAN、真实 SakuraFrp HTTPS 和无开发工具的新 Windows 机器仍未完成环境验收，不夸大上述验证范围。
+
+### 实例隔离修复验证（0.4.0 开发阶段记录）
 
 - 后端完整回归 211 passed / 1 skipped，其中新增 17 项实例隔离及品牌测试；前端 18 passed，生产构建成功。pip check、npm ls、Alembic current/check、git diff --check 通过；迁移 head 保持 c6d91f28a405，VERSION 保持 0.4.0。
 - 最终候选 ZIP 在仓库外的中文及空格路径解压，运行 PATH 只保留 Windows 系统目录。旧实例占用端口时，新部署在写入前拒绝继续；另一个控制中心不能读取旧实例账号状态，也不能停止或重启它。全新数据目录无账号、初始化码独立，真实浏览器完成 /setup 创建管理员和登录；另一份数据的账号不能登录新库。
