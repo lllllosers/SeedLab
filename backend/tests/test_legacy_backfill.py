@@ -91,6 +91,11 @@ def test_original_source_baseline_and_empty_samples(source_data):
     assert names[33] == names[153] == 'Lepidium apetalum'
     assert names[55] == names[56] == 'Lappula myosotis'
     assert {k: names[k] for k in legacy.SCIENTIFIC_NAMES} == legacy.SCIENTIFIC_NAMES
+    obtained = {m.number: sum(s.material_number == m.number for s in source_data.samples) for m in source_data.materials}
+    assert obtained[51] == 10
+    assert sum(n == 0 for n in obtained.values()) == 21
+    assert sum(0 < n < 10 for n in obtained.values()) == 20
+    assert sum(10-n for n in obtained.values()) == 335
 
 
 def test_default_dry_run_apply_and_repeat_rejection(source_path, source_data, temporary_target, capsys):
@@ -106,12 +111,16 @@ def test_default_dry_run_apply_and_repeat_rejection(source_path, source_data, te
     apply_args = ['--source', str(source_path), '--data-root', str(path.parent), '--owner', 'legacy-test-owner', '--apply']
     assert legacy.main(apply_args) == 0
     result = capsys.readouterr().out
-    assert 'GER-202608-001' in result and '"wide_rows": 1665' in result
+    assert 'GER-202608-001' in result and '"wide_rows": 2000' in result and '"long_rows": 6000' in result
     engine = make_engine(f'sqlite:///{path.as_posix()}')
     with Session(engine) as db:
         experiment = db.query(legacy.Experiment).one()
         assert legacy.reconcile_database(db, source_data, experiment)['value_differences'] == 0
-        assert legacy.reconcile_workbook(legacy.build(db, [experiment.id]), source_data)['all_dag_empty_rows'] == 10
+        report = legacy.reconcile_workbook(legacy.build(db, [experiment.id]), source_data)
+        assert report['all_dag_empty_actual_rows'] == 10 and report['all_dag_empty_rows'] == 345
+        assert (report['planned_sample_slots'], report['planned_measurement_slots'], report['obtained_sample_slots'],
+            report['measured_slots'], report['absent_sample_slots'], report['unmeasured_actual_slots'],
+            report['absent_sample_measurement_slots']) == (2000, 6000, 1665, 4955, 335, 40, 1005)
     engine.dispose()
     assert legacy.main(args + ['--apply']) == 1
     assert '已有业务数据' in capsys.readouterr().err

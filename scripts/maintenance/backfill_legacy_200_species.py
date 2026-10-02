@@ -182,6 +182,8 @@ def read_source(path: Path) -> LegacyData:
     require(local_datetime(min(sown_by_number.values())).date() == START, "最早置床日期不一致")
     metrics["all_dag_empty_samples"] = [[s.material_number, s.number] for s in samples
                                          if all(pair == (None, None) for pair in s.lengths)]
+    obtained_counts = Counter(s.material_number for s in samples)
+    metrics["obtained_per_material"] = {f"{m.number:03d}": obtained_counts[m.number] for m in materials}
     require(metrics["all_dag_empty_samples"] == [[27, n] for n in range(1, 11)], "全 DAG 未测样本清单不一致")
     return LegacyData(tuple(materials), tuple(samples), metrics)
 
@@ -274,33 +276,71 @@ def reconcile_workbook(stream: BytesIO, data: LegacyData) -> dict:
     try:
         long_rows = list(book["04_幼苗测定长表"].values)[1:]
         wide_rows = list(book["05_幼苗测定宽表"].values)
-        require(wide_rows[0][8:] == tuple(column for day in DAYS for column in (f"RL{day}", f"SL{day}")),
+        require(wide_rows[0][8:14] == tuple(column for day in DAYS for column in (f"RL{day}", f"SL{day}"))
+                and wide_rows[0][14:] == ("发芽判定时间", "是否已有实际幼苗", "计划取样序号", "取样范围", "计划培养皿重复"),
                 "导出宽表 DAG 列不一致")
+        source_samples = {(s.material_number, s.number): s for s in data.samples}
+        source_values = source_measurements(data)
+        planned_samples = {(m.number, number) for m in data.materials for number in range(1, 11)}
+        planned_stages = {(*key, day) for key in planned_samples for day in DAYS}
+        expected_long = {}
+        expected_status = {}
+        for key in planned_stages:
+            source_sample = source_samples.get(key[:2])
+            expected_long[key] = source_values.get(key, (
+                source_sample.germinated_at if source_sample else None, None, None, None))
+            expected_status[key] = "已测定" if key in source_values else "无测定记录" if source_sample else "无实际幼苗"
         actual_long = {}
+        actual_status = {}
         for row in long_rows:
             number, sample = int(row[2]), int(row[4].rsplit("-", 1)[1])
             key = (number, sample, row[9])
             require(row[3] == dish_display_number(number, 1, 1)
                     and row[4] == sample_display_number(number, 1, 1, sample), "导出长表现场编号不一致")
             require(key not in actual_long, "导出长表存在重复测定")
-            require(all(isinstance(row[i], (int, float)) and not isinstance(row[i], bool) for i in (13, 15)),
-                    "导出长表长度必须为数值，真实 0 不能变成文字或空白")
-            actual_long[key] = (utc_naive(datetime.fromisoformat(row[8])), utc_naive(datetime.fromisoformat(row[11])),
-                                Decimal(str(row[13])), Decimal(str(row[15])))
-            require(row[12] == 0 and row[14] == row[16] == "已测", "历史测定日期或长度状态导出不一致")
-        require(actual_long == source_measurements(data), "导出长表逐值核账不一致")
+            require(all(row[i] is None or (isinstance(row[i], (int, float)) and not isinstance(row[i], bool)) for i in (13, 15)),
+                    "导出长表长度必须为数值或空白，真实 0 不能变成文字")
+            actual_long[key] = (utc_naive(datetime.fromisoformat(row[8])) if row[8] else None,
+                                utc_naive(datetime.fromisoformat(row[11])) if row[11] else None,
+                                Decimal(str(row[13])) if row[13] is not None else None,
+                                Decimal(str(row[15])) if row[15] is not None else None)
+            actual_status[key] = row[18]
+            require(row[19] == sample and row[20] == "每皿" and row[21] == 1, "导出长表计划取样结构不一致")
+            if row[18] == "已测定":
+                require(row[12] == 0 and row[14] == row[16] == "已测", "历史测定日期或长度状态导出不一致")
+            else:
+                require(row[11:14] == (None, None, None) and row[15] is None
+                        and row[14] == row[16] == row[18], "导出缺失槽位不得补时间、长度或 NA")
+            expected_planned = (local_datetime(source_samples[key[:2]].germinated_at).date()
+                                + timedelta(days=key[2])).isoformat() if key[:2] in source_samples else None
+            require(row[10] == expected_planned, "导出长表计划日期与实际幼苗匹配不一致")
+        require(actual_long == expected_long and actual_status == expected_status, "导出长表计划槽位或逐值核账不一致")
+        statuses = Counter(actual_status.values())
+        require(statuses == {"已测定": 4955, "无测定记录": 40, "无实际幼苗": 1005}
+                and len(actual_long) == 6000, "4955 / 40 / 1005 / 6000 导出闭环不一致")
         actual_wide = {}
+        actual_sample_facts = {}
         for row in wide_rows[1:]:
             number, sample = int(row[2]), int(row[4].rsplit("-", 1)[1])
             key = (number, sample)
             require(key not in actual_wide, "导出宽表存在重复幼苗")
             require(row[3] == dish_display_number(number, 1, 1)
                     and row[4] == sample_display_number(number, 1, 1, sample), "导出宽表现场编号不一致")
-            require(all(v is None or (isinstance(v, (int, float)) and not isinstance(v, bool)) for v in row[8:]),
+            require(all(v is None or (isinstance(v, (int, float)) and not isinstance(v, bool)) for v in row[8:14]),
                     "导出宽表长度必须为数值或空白，不能变成文字或 NA")
-            actual_wide[key] = tuple(Decimal(str(v)) if v is not None else None for v in row[8:])
-        expected_wide = {(s.material_number, s.number): tuple(v for pair in s.lengths for v in pair) for s in data.samples}
-        require(actual_wide == expected_wide, "导出宽表逐值核账不一致（包括全 DAG 未测幼苗）")
+            actual_wide[key] = tuple(Decimal(str(v)) if v is not None else None for v in row[8:14])
+            actual_sample_facts[key] = (utc_naive(datetime.fromisoformat(row[14])) if row[14] else None, row[15])
+            require(row[16] == sample and row[17] == "每皿" and row[18] == 1, "导出宽表计划取样结构不一致")
+        expected_wide = {key: tuple(v for pair in source_samples[key].lengths for v in pair)
+                         if key in source_samples else (None,)*6 for key in planned_samples}
+        expected_sample_facts = {key: (source_samples[key].germinated_at, "是") if key in source_samples else (None, "否")
+                                 for key in planned_samples}
+        require(actual_wide == expected_wide and actual_sample_facts == expected_sample_facts,
+                "导出宽表计划槽位、实际幼苗或逐值核账不一致")
+        require(Counter(key[0] for key in actual_wide) == {m.number: 10 for m in data.materials},
+                "导出宽表必须包含全部 200 份材料，每份材料 10 个计划槽位")
+        require(all(actual_wide[(27, n)] == (None,)*6 and actual_sample_facts[(27, n)][1] == "是"
+                    for n in range(1, 11)), "材料 027 的实际幼苗不能误标为无实际幼苗")
         rate_rows = list(book["02_发芽率汇总"].values)[1:]
         require(len(rate_rows) == 200 and all(row[9:11] == (None, None) for row in rate_rows),
                 "无巡检时累计发芽和发芽率必须导出为空白")
@@ -308,7 +348,12 @@ def reconcile_workbook(stream: BytesIO, data: LegacyData) -> dict:
         require(all("-M" not in str(value) for sheet in book for row in sheet.values for value in row),
                 "导出中出现培养皿内部编号")
         return {"long_rows": len(actual_long), "wide_rows": len(actual_wide), "value_differences": 0,
+                "planned_sample_slots": len(planned_samples), "obtained_sample_slots": len(source_samples),
+                "absent_sample_slots": len(planned_samples)-len(source_samples),
+                "planned_measurement_slots": len(planned_stages), "measured_slots": statuses["已测定"],
+                "unmeasured_actual_slots": statuses["无测定记录"], "absent_sample_measurement_slots": statuses["无实际幼苗"],
                 "all_dag_empty_rows": sum(all(v is None for v in values) for values in actual_wide.values()),
+                "all_dag_empty_actual_rows": sum(all(v is None for v in actual_wide[key]) for key in source_samples),
                 "root_zeros": sum(values[i] == 0 for values in actual_wide.values() for i in (0, 2, 4)),
                 "shoot_zeros": sum(values[i] == 0 for values in actual_wide.values() for i in (1, 3, 5))}
     finally:

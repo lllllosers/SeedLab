@@ -383,7 +383,12 @@ def test_multiday_sowing_observation_and_export(auth_client, tmp_path):
     assert len(observation_rows) == 3
     assert sorted(item[9] for item in observation_rows[1:]) == [0, 2]
     assert observation_rows[1][3].startswith("001-")
-    assert len(list(workbook.worksheets[3].values)) == 1
+    # Both selected designs remain present, including the cancelled replicate.
+    planned = client.get(f"/api/experiments/{first_id}/configuration").json()
+    other = client.get(f"/api/experiments/{second_id}/configuration").json()
+    expected_slots = sum(item['protocol']['sample_count'] * item['protocol']['replicate_count'] * len(item['dag_days'])
+                         for item in (planned, other))
+    assert len(list(workbook.worksheets[3].values)) == expected_slots + 1
     assert list(workbook.worksheets[5].values)[1][0] == "导出时间"
     workbook.close()
     assert client.get(f"/api/experiments/{first_id}/configuration").json()["materials"][0]["experiment_number"] == 1

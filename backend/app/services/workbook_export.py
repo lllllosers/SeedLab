@@ -1,6 +1,7 @@
 """Single and multi-experiment workbook built from the same source facts."""
 
 from datetime import datetime, timezone
+from collections import defaultdict
 from io import BytesIO
 
 from fastapi import HTTPException
@@ -9,9 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (Experiment, ExperimentMaterial, GerminationDish,
-                        GerminationObservation, MeasurementTimepoint, SeedlingMeasurement,
-                        SeedlingSample, SeedLot, Taxon)
-from app.services.ordering import display_number, field_number, material_key, sample_display_number
+                        GerminationObservation, SeedLot, Taxon)
+from app.services.ordering import display_number, field_number, material_key
+from app.services.measurement_slots import build_measurement_slots
 from app.services.local_time import local_date, local_datetime
 from app.services.seedling_measurement import scheduled_date
 from app.version import VERSION
@@ -35,6 +36,13 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                                           row[0].id))
     if not rows:
         raise HTTPException(422, "所选实验还没有材料，无法生成工作簿")
+    canonical = build_measurement_slots(db, experiment_ids)
+    slots_by_material = defaultdict(list)
+    stages_by_slot = defaultdict(list)
+    for slot in canonical.seedling_slots:
+        slots_by_material[slot.material.id].append(slot)
+    for stage in canonical.measurement_slots:
+        stages_by_slot[stage.seedling.key].append(stage)
     workbook = Workbook()
     materials_sheet = workbook.active
     materials_sheet.title = "01_材料总表"
@@ -51,11 +59,12 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                               "中文名", "学名", "实际置床时间", "巡检时间", "本次新增发芽数", "累计发芽数", "发芽率"))
     long_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "位置标签",
                        "中文名", "学名", "发芽判定时间", "DAG", "计划测定日期", "实际测定时间",
-                       "延迟天数", "根长（mm）", "根长状态", "苗长（mm）", "苗长状态", "备注"))
-    all_dag = sorted(set(db.scalars(select(MeasurementTimepoint.day_after_germination)
-                                    .where(MeasurementTimepoint.experiment_id.in_(experiment_ids))).all()))
+                       "延迟天数", "根长（mm）", "根长状态", "苗长（mm）", "苗长状态", "备注",
+                       "数据状态", "计划取样序号", "取样范围", "计划培养皿重复"))
+    all_dag = sorted({point.day_after_germination for point in canonical.timepoints})
     wide_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "位置标签", "中文名", "学名") +
-                      tuple(column for day in all_dag for column in (f"RL{day}", f"SL{day}")))
+                      tuple(column for day in all_dag for column in (f"RL{day}", f"SL{day}")) +
+                      ("发芽判定时间", "是否已有实际幼苗", "计划取样序号", "取样范围", "计划培养皿重复"))
     material_ids = [item.id for item, _, _ in rows]
     dishes = list(db.scalars(select(GerminationDish).where(GerminationDish.material_id.in_(material_ids))))
     dishes_by_material = {}
@@ -66,17 +75,6 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
     observations_by_dish = {}
     for observation in observations:
         observations_by_dish.setdefault(observation.dish_id, []).append(observation)
-    samples = list(db.scalars(select(SeedlingSample).where(
-        SeedlingSample.dish_id.in_([dish.id for dish in dishes])))) if dishes else []
-    samples_by_dish = {}
-    for sample in samples:
-        samples_by_dish.setdefault(sample.dish_id, []).append(sample)
-    measurements = list(db.execute(select(SeedlingMeasurement, MeasurementTimepoint)
-                                   .join(MeasurementTimepoint, SeedlingMeasurement.timepoint_id == MeasurementTimepoint.id)
-                                   .where(MeasurementTimepoint.experiment_id.in_(experiment_ids))).all())
-    measurements_by_sample = {}
-    for measurement, day in measurements:
-        measurements_by_sample.setdefault(measurement.sample_id, []).append((measurement, day.day_after_germination))
     for index, (material, lot, taxon) in enumerate(rows, start=1):
         summary_number = display_number(index)
         experiment = experiments[material.experiment_id]
@@ -106,27 +104,33 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                                           _date(dish.sown_at), _date(observation.observed_at),
                                           observation.new_germinated_count, count,
                                           round(count / dish.seed_count * 100, 2)))
-            for sample in sorted(samples_by_dish.get(dish.id, []), key=lambda item: item.sample_number):
-                sample_number = sample_display_number(material.experiment_number, dish.replicate_no,
-                                                      replicate_count, sample.sample_number)
-                sample_measurements = measurements_by_sample.get(sample.id, [])
-                values = {}
-                for measurement, day in sorted(sample_measurements, key=lambda pair: pair[1]):
-                    root = float(measurement.root_length_mm) if measurement.root_length_mm is not None else None
-                    shoot = float(measurement.shoot_length_mm) if measurement.shoot_length_mm is not None else None
-                    planned = scheduled_date(sample.germinated_at, day)
-                    long_sheet.append((summary_number, source_name, original_number, dish_number,
-                                       sample_number, sample.position_label, taxon.common_name,
-                                       taxon.scientific_name, local_datetime(sample.germinated_at).isoformat() if sample.germinated_at else None, day,
-                                       _date(planned), local_datetime(measurement.measured_at).isoformat(),
-                                       (local_date(measurement.measured_at) - planned).days if planned else None,
-                                       root, "无法测量" if measurement.root_unavailable else "已测",
-                                       shoot, "无法测量" if measurement.shoot_unavailable else "已测", measurement.notes))
-                    values[day] = ("NA" if measurement.root_unavailable else root,
-                                   "NA" if measurement.shoot_unavailable else shoot)
-                wide_sheet.append((summary_number, source_name, original_number, dish_number, sample_number,
-                                   sample.position_label, taxon.common_name, taxon.scientific_name) +
-                                  tuple(value for day in all_dag for value in values.get(day, (None, None))))
+        for slot in slots_by_material[material.id]:
+            sample = slot.sample
+            germinated_at = sample.germinated_at if sample else None
+            germinated_text = local_datetime(germinated_at).isoformat() if germinated_at else None
+            position = sample.position_label if sample else None
+            scope_text = "每皿" if slot.sample_scope == "per_dish" else "每材料"
+            values = {}
+            for stage in stages_by_slot[slot.key]:
+                measurement = stage.measurement
+                day = stage.timepoint.day_after_germination
+                root = float(measurement.root_length_mm) if measurement and measurement.root_length_mm is not None else None
+                shoot = float(measurement.shoot_length_mm) if measurement and measurement.shoot_length_mm is not None else None
+                planned = scheduled_date(germinated_at, day)
+                long_sheet.append((summary_number, source_name, original_number, slot.dish_number,
+                    slot.seedling_number, position, taxon.common_name, taxon.scientific_name,
+                    germinated_text, day, _date(planned),
+                    local_datetime(measurement.measured_at).isoformat() if measurement else None,
+                    (local_date(measurement.measured_at) - planned).days if measurement and planned else None,
+                    root, ("无法测量" if measurement.root_unavailable else "已测") if measurement else stage.data_status,
+                    shoot, ("无法测量" if measurement.shoot_unavailable else "已测") if measurement else stage.data_status,
+                    measurement.notes if measurement else None, stage.data_status, slot.planned_number, scope_text, slot.replicate_no))
+                values[day] = ("NA" if measurement and measurement.root_unavailable else root,
+                               "NA" if measurement and measurement.shoot_unavailable else shoot)
+            wide_sheet.append((summary_number, source_name, original_number, slot.dish_number, slot.seedling_number,
+                position, taxon.common_name, taxon.scientific_name) +
+                tuple(value for day in all_dag for value in values.get(day, (None, None))) +
+                (germinated_text, "是" if sample else "否", slot.planned_number, scope_text, slot.replicate_no))
     explanation.append(("项目", "说明"))
     notes = [
         ("导出时间", datetime.now(timezone.utc).isoformat()),
@@ -139,11 +143,16 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
         ("培养皿现场编号", "单重复使用实验内材料编号，多重复在编号后加 -1、-2 等；不导出内部技术编号"),
         ("幼苗编号", "培养皿现场编号加皿内幼苗序号，例如单重复 001-01，多重复 001-1-01"),
         ("DAG", "发芽后测定时间，幼苗实际发芽后第 N 天"),
-        ("测定值含义", "0 是实测零值；NA 表示无法测量；空白表示尚未测定。根长、苗长单位均为 mm"),
+        ("测定值含义", "0 是实测零值；NA 表示已有记录中明确无法测量；空白表示没有测定值，不自动解释为漏测或最终未获得幼苗。根长、苗长单位均为 mm"),
         ("计划测定日期", "以幼苗发芽判定时间的实验室本地日期加 DAG 自然日计算；延迟天数按实际测定日期计算"),
         ("测定时间时区", "幼苗测定长表的发芽判定时间和实际测定时间按系统配置的实验室时区显示，并带时区偏移"),
         ("发芽率汇总", "仅以实际已置床的培养皿种子数为分母；没有巡检记录时累计发芽数和发芽率留空，明确记录 0 才表示已巡检且没有发芽"),
-        ("测定数据", "长表仅列已有测定记录；宽表保留全部已选幼苗，未测的根长、苗长留空，即使所有测定时间均未测也保留幼苗行"),
+        ("测定数据", "宽表每行是一个计划幼苗槽位；长表每行是该槽位在本实验配置的一个发芽后测定时间。全部材料保留，空计划槽位只用于导出，不创建实际幼苗或测定记录"),
+        ("数据状态", "已测定：已有测定记录；无测定记录：已有实际幼苗但该时间点没有记录；无实际幼苗：计划槽位尚无实际幼苗。仅表达当前事实，不判断实验最终结果"),
+        ("计划取样序号", "按实验方案与材料覆盖值生成。每皿取样按各重复展开；每材料取样在全部重复间共用取样数，按实际发芽时间、重复和幼苗序号匹配，实际幼苗编号不改变"),
+        ("计划培养皿重复", "按每皿取样时标明计划重复，尚未建立或已取消的培养皿仍保留设计位置；跨皿共用取样数时留空，不预先分配实际培养皿"),
+        ("跨皿取样空槽位", "每材料取样且有多个重复时，尚无实际幼苗的槽位不指定培养皿，培养皿和幼苗编号留空；使用原实验编号与计划取样序号识别槽位"),
+        ("联合导出时间点", "宽表列汇集所选实验的测定时间；长表仅展开各实验自身配置的时间点，其他实验独有的时间点在宽表留空"),
     ]
     for note in notes:
         explanation.append(note)

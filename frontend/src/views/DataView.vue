@@ -69,7 +69,7 @@ async function exportLedger() {
         </div>
         <div>
           <h2>导出实验数据</h2>
-          <p>选择一个或多个实验，生成包含材料、发芽、幼苗测定等原始数据的 Excel 工作簿。</p>
+          <p>选择一个或多个实验，导出全部材料及实验方案规定的幼苗测定位置；已有记录显示实测值，无实际幼苗或无测定记录的位置保留为空。</p>
         </div>
       </div>
       <label for="export-experiments">选择实验</label>
@@ -90,7 +90,7 @@ async function exportLedger() {
           :label="`${item.name} · ${item.code}`"
         />
       </el-select>
-      <p v-if="!experiments.length" class="wizard-empty">尚无实验，请先创建实验并录入实验数据。</p>
+      <p v-if="!experiments.length" class="wizard-empty">尚无实验，请先创建实验并填写材料和取样方案。</p>
       <el-button
         type="primary"
         :icon="Download"

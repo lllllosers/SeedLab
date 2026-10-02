@@ -175,7 +175,7 @@ def test_export_keeps_zero_na_and_unmeasured_blank(auth_client):
         json={"experiment_ids": [base.split('/')[-1]]}, headers=headers).content), data_only=True)
     long_rows = list(workbook["04_幼苗测定长表"].values)
     wide_rows = list(workbook["05_幼苗测定宽表"].values)
-    assert len(long_rows) == 2
+    assert len(long_rows) == 5
     long = dict(zip(long_rows[0], long_rows[1]))
     assert long["根长（mm）"] == 0
     assert long["苗长（mm）"] is None and long["苗长状态"] == "无法测量"

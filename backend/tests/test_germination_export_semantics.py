@@ -41,11 +41,13 @@ def test_wide_keeps_all_unmeasured_samples_and_preserves_zero(auth_client):
     base, dish, _, _ = setup_experiment(client, headers, days=(3, 7, 14))
     sample = observe(client, headers, base, dish, datetime.now(timezone.utc) - timedelta(days=3))
     book = export(client, headers, base)
-    assert book['04_幼苗测定长表'].max_row == 1
+    assert book['04_幼苗测定长表'].max_row == 7
     rows = list(book['05_幼苗测定宽表'].values)
-    assert len(rows) == 2
+    assert len(rows) == 3
     assert rows[1][3:5] == ('001', '001-01')
-    assert rows[1][8:] == (None,) * 6
+    assert rows[1][8:14] == (None,) * 6
+    assert rows[1][15] == '是' and rows[2][15] == '否'
+    assert [row[18] for row in list(book['04_幼苗测定长表'].values)[1:]] == ['无测定记录'] * 3 + ['无实际幼苗'] * 3
     book.close()
     task = next(t for t in client.get(base + '/measurement-tasks').json()['tasks']
                 if t['day_after_germination'] == 3)
@@ -54,9 +56,9 @@ def test_wide_keeps_all_unmeasured_samples_and_preserves_zero(auth_client):
         'root_length_mm': 0, 'shoot_length_mm': 0, 'measured_at': datetime.now(timezone.utc).isoformat()})
     assert response.status_code == 201, response.text
     book = export(client, headers, base)
-    assert book['04_幼苗测定长表'].max_row == 2
+    assert book['04_幼苗测定长表'].max_row == 7
     row = list(book['05_幼苗测定宽表'].values)[1]
-    assert row[8:] == (0, 0, None, None, None, None)
+    assert row[8:14] == (0, 0, None, None, None, None)
     assert book['05_幼苗测定宽表']['I2'].data_type == 'n'
     assert book['05_幼苗测定宽表']['J2'].data_type == 'n'
     book.close()
