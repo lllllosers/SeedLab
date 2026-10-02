@@ -174,3 +174,33 @@ def test_candidate_scan_rejects_data_and_developer_assets():
         assert module.forbidden(name)
     assert not module.forbidden("_internal/tzdata/zoneinfo/Asia/Shanghai")
     assert not module.forbidden("app/migrations/versions/3179cf93a5f4_initial.py")
+
+
+@pytest.mark.parametrize("container", ["directory", "zip"])
+def test_portable_scan_rejects_empty_data_or_developer_directories(tmp_path, container):
+    import zipfile
+    spec = importlib.util.spec_from_file_location("portable_gate", ROOT / "scripts/check_portable.py")
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    package = tmp_path / "SeedLab"
+    package.mkdir()
+    for name in module.REQUIRED:
+        target = package / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"isolated packaging fixture")
+    (package / "config").mkdir()
+    if container == "directory":
+        module.inspect_directory(package)  # Empty config is allowed.
+        (package / "backups").mkdir()
+        with pytest.raises(ValueError, match="backups"):
+            module.inspect_directory(package)
+    else:
+        archive_path = tmp_path / "portable.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            for name in module.REQUIRED:
+                archive.write(package / name, "SeedLab/" + name)
+            archive.writestr("SeedLab/config/", b"")
+        module.inspect_zip(archive_path)
+        with zipfile.ZipFile(archive_path, "a") as archive:
+            archive.writestr("SeedLab/tests/", b"")
+        with pytest.raises(ValueError, match="tests"):
+            module.inspect_zip(archive_path)

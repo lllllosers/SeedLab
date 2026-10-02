@@ -1,4 +1,4 @@
-# Builds an internal candidate only. Dependencies must already be installed.
+# Builds the portable distribution. Dependencies must already be installed.
 [CmdletBinding()]
 param(
     [ValidatePattern('^portable(?:-[a-z0-9]+)*$')]
@@ -71,12 +71,12 @@ try {
     & $taskPython (Join-Path $taskRoot 'scripts\check_portable.py') --directory $taskPackage
     if ($LASTEXITCODE -ne 0) { throw 'Portable directory safety gate failed.' }
     $taskVersion=(& $taskPython -c 'from app.version import VERSION; print(VERSION)').Trim()
-    $taskZip=Join-Path $taskDist "SeedLab-v$taskVersion-stage35-portable-test.zip"
+    $taskZip=Join-Path $taskDist "SeedLab-v$taskVersion-portable.zip"
     Compress-Archive -LiteralPath $taskPackage -DestinationPath $taskZip -CompressionLevel Optimal
     & $taskPython (Join-Path $taskRoot 'scripts\check_portable.py') --directory $taskPackage --zip $taskZip --report (Join-Path $taskDist 'artifact-report.json')
     if ($LASTEXITCODE -ne 0) { throw 'Portable ZIP safety gate failed.' }
-    Write-Host "[DONE] Candidate directory: $taskPackage"
-    Write-Host "[DONE] Candidate ZIP: $taskZip"
+    Write-Host "[DONE] Portable directory: $taskPackage"
+    Write-Host "[DONE] Portable ZIP: $taskZip"
 } finally {
     $env:PYINSTALLER_CONFIG_DIR=$taskOldCache
     $env:PYTHONUTF8=$taskOldUtf8

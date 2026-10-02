@@ -32,17 +32,18 @@ def inspect_directory(directory):
         if file.is_symlink() or file.lstat().st_file_attributes & 0x400:
             raise ValueError(f"Redirected artifact refused: {file}")
     sizes = {file.relative_to(directory).as_posix():file.stat().st_size for file in files if file.is_file()}
-    check_names(sizes)
+    check_names([file.relative_to(directory).as_posix() for file in files])
     return {"bytes":sum(sizes.values()), "files":len(sizes),
             "largest20":sorted(sizes.items(), key=lambda item:item[1], reverse=True)[:20]}
 
 
 def inspect_zip(path):
     with zipfile.ZipFile(path) as archive:
+        entries = [info.filename for info in archive.infolist()]
         names = [info.filename for info in archive.infolist() if not info.is_dir()]
-        if any(not name.startswith("SeedLab/") for name in names):
+        if any(not name.startswith("SeedLab/") for name in entries):
             raise ValueError("ZIP must contain exactly one SeedLab root")
-        check_names([name.removeprefix("SeedLab/") for name in names])
+        check_names([name.removeprefix("SeedLab/") for name in entries])
         bad = archive.testzip()
         if bad: raise ValueError(f"ZIP CRC failed: {bad}")
     return {"bytes":path.stat().st_size, "files":len(names), "forbidden_files":0}
