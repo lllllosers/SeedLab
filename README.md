@@ -1,6 +1,6 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式发布版为 **v0.4.1 / Production Trial Deployment**。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前版本为 **v0.5.0 发布候选（2026-10-03）/ Experiment Identity, Legacy Validation & Planned Result Export**，最新已发布版仍为 v0.4.1；v0.5.0 尚未创建 tag 或 GitHub Release。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
 
 Stage 3 已随 v0.4.0 正式发布，包含幼苗测定、实验生命周期、材料导入衔接与项目卫生工具；Stage 4 尚未开始。幼苗根苗长测定采用 DAG（Days After Germination，发芽后测定时间）：将单株首次在巡检中判定发芽的时间 `germinated_at` 转为实验室本地日期，再加动态配置的 DAG 自然日。培养皿置床时间 `sown_at` 另行保留，用于巡检，不作为幼苗测定基准。测定任务由样本与时间点实时派生；根长、苗长均以 mm 记录，区分真实 0、无法测量和尚未测定。统计分析与派生指标留待 Stage 4。
 
@@ -12,7 +12,7 @@ Stage 3.5 已收口为 v0.4.1。系统提供实验业务闭环、DAG 幼苗测�
 
 正式备份仅面向不可替代的业务数据库 seedlab.db；源码由 Git/GitHub 管理，测试库、构建产物、运行配置和日志不建立额外备份体系。build/、dist/ 保持构建产物命名，均被 Git 忽略且可重新生成。
 
-正式便携包为 **SeedLab-v0.4.1-portable.zip**。解压完整文件夹后双击 SeedLab Control Center.exe，日常运行无需另装 Python、Node 或 Git。开发者手工准备 backend[test,control,packaging] 和前端依赖后运行 `scripts/build_portable.ps1 -OutputName portable-v041`，输出位于 dist/portable-v041/；脚本不联网安装，分发包不包含业务数据。详见 [打包说明](packaging/README.md)、[普通使用说明](packaging/使用说明.txt) 和 [生产部署设计](docs/10_生产部署与控制中心设计.md)。
+本次候选便携包名称为 **SeedLab-v0.5.0-portable.zip**。解压完整文件夹后双击 SeedLab Control Center.exe，日常运行无需另装 Python、Node 或 Git。开发者手工准备 backend[test,control,packaging] 和前端依赖后运行 `scripts/build_portable.ps1 -OutputName portable-v050`，输出位于 dist/portable-v050/；脚本不联网安装，分发包不包含业务数据。详见 [打包说明](packaging/README.md)、[普通使用说明](packaging/使用说明.txt) 和 [生产部署设计](docs/10_生产部署与控制中心设计.md)。
 
 用户已确认新目录管理员初始化、账号复用、本机、LAN 保存重启及同机访问、实例隔离。第二设备 LAN、真实 SakuraFrp HTTPS 及无开发工具的新 Windows 机器尚未完成环境验收；Windows 代码签名尚未配置。
 
@@ -79,17 +79,19 @@ cd ..
 
 种子批次内部关联使用 UUID；`LOT-YYYY-NNN` 按年流水、创建后永久不变，与原始材料编号及实验内材料编号相互独立。物种 `SP-NNNN` 全局流水，中文名或排序变化不会重编号。
 
-## 实验身份、历史验证与科研导出（开发分支，尚未发布）
+## v0.5.0 实验身份、历史验证与科研导出（2026-10-03 阶段收口）
 
-当前正式发布仍为 v0.4.1，应用 VERSION 保持 0.4.1。本独立阶段增加实验身份、未记录发芽语义、临时历史回填验证与科研结果导出结构，下一版本尚未发布。
+应用 VERSION 为 0.5.0。本阶段已通过合并审查并收口为发布候选，增加实验身份、未记录发芽语义、临时历史回填验证与科研结果导出结构；tag / GitHub Release 等待单独授权。
 
 - 创建实验明确选择“种子萌发试验”（GER），名称由用户自由填写，命名示例仅作提示。
 - 新实验编号为 `GER-YYYYMM-NNN`，按类型和月份独立流水。年月优先取计划开始日期，未填时使用实验室时区（默认 Asia/Shanghai）的当前年月。创建后修改名称或计划日期不会改变编号，类型不可修改。
-- 旧 `EXP-YYYY-NNN` 实验编号无损保留；升级只回填 GER 类型。开发迁移 head 为 `d2e7a46b910c`，接续 v0.4.1 的 `c6d91f28a405`。
+- 旧 `EXP-YYYY-NNN` 实验编号无损保留；升级只回填 GER 类型。v0.5.0 迁移 head 为 `d2e7a46b910c`，接续 v0.4.1 的 `c6d91f28a405`，发布准备不新增迁移。
 - 实验内材料确认后固定为 001、002；培养皿单重复 001，多重复 001-1；幼苗单重复 001-01，多重复 001-1-01。页面、搜索与正式 Excel 使用现场编号，内部培养皿长 code 和 UUID 不展示。
 - 没有发芽巡检记录时，累计发芽数、发芽率和剩余数量为未记录，API 返回空值、页面显示未记录或空位、Excel 留空；明确巡检 0 才显示累计 0 和发芽率 0%。
 - 正式科研宽表按计划幼苗槽位导出，长表按计划幼苗 × 本实验配置的 DAG 导出；共用只读槽位服务，保留没有实际幼苗的材料，不在数据库创建空槽位。历史数据对应宽表 2000 行、长表 6000 行，区分已测定、无测定记录和无实际幼苗。未来分析须从设计全集 LEFT JOIN 真实事实。
 - 200份材料的历史回填仅在一次性临时测试库验证，未进行正式生产导入。实验保持进行中；根苗长实际测定严格为 `measured_at = germinated_at + DAG`，没有提前或推迟，不作推定。干重、Stage 4 和最终 Project Hygiene 尚未开始。见[历史回填能力验证](docs/10_历史回填能力验证.md)。
+
+发芽观察结束闭环、最终 0 发芽确认及自动结束实验没有在本阶段实现；数据库恢复和升级器也仍未实现。
 
 ## 项目结构
 
@@ -104,7 +106,7 @@ scripts/   开发启动、测试、只读卫生检查、安全缓存清理与开
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。`v0.4.0` 标记 Stage 3 / Seedling Measurement Workflow，`v0.4.1` 标记 Stage 3.5 / Production Trial Deployment。Stage 4 尚未开始。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。`v0.4.0` 标记 Stage 3 / Seedling Measurement Workflow，`v0.4.1` 标记 Stage 3.5 / Production Trial Deployment。当前 main 准备 v0.5.0 发布候选，尚未创建对应 tag / Release。Stage 4 尚未开始。
 
 ## 项目卫生维护
 

@@ -2,7 +2,9 @@
 
 SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2`、`v0.4.0` 和 `v0.4.1`。
 
-## 未发布 — Experiment Identity, Legacy Validation & Planned Result Export
+## 0.5.0 — Experiment Identity, Legacy Validation & Planned Result Export（2026-10-03）
+
+阶段已收口，当前准备发布候选；尚未创建 v0.5.0 tag 或 GitHub Release。
 
 - 新增独立且创建后不可修改的 GER 实验类型，集中提供中文名称“种子萌发试验”；创建向导保留自由命名并提供非强制提示。
 - 新实验按类型和年月生成 GER-YYYYMM-NNN；年月优先取计划开始日期，未填时取实验室时区当前年月。编号创建后永久不变，唯一约束冲突回滚整个创建请求。
@@ -11,7 +13,8 @@ SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来�
 - 没有巡检记录时累计发芽、发芽率与剩余数量返回空值，页面和 Excel 保留未记录含义；明确巡检 0 与删除最后一次巡检分别有回归验证。
 - 新增固定源文件的历史 200 份材料回填验证工具：只接受系统临时目录内一次性空业务库，默认只读 dry-run，明确 apply 后整事务核账再提交，失败回滚、重复导入拒绝；未导入正式业务库。
 - 科研宽表和长表共用只读计划槽位投影，保留所有材料及尚无实际幼苗的设计位置。历史数据宽表 2000 行、长表 6000 行，4955 条实测、40 个真实幼苗未测槽位和 1005 个无实际幼苗槽位闭合；真实 0 保持数值，缺失留空。未来分析从设计全集 LEFT JOIN 真实事实。
-- 增加旧库无损升级、并发冲突、类型生命周期、年月、编号导出、计划槽位和真实历史文件回归验证。VERSION 保持 0.4.1，当前分支尚未发布；正式历史导入、干重、Stage 4 与最终 Project Hygiene 尚未开始。
+- 增加旧库无损升级、并发冲突、类型生命周期、年月、编号导出、计划槽位和真实历史文件回归验证。VERSION 为 0.5.0，沿用当前迁移 head d2e7a46b910c，不新增迁移。
+- 正式 200 份历史材料生产导入、干重、Stage 4 统计分析、发芽观察结束闭环及最终 Project Hygiene 尚未完成；数据库恢复、升级器仍未实现。
 
 ## 0.4.1 — Production Trial Deployment（2026-10-02）
 

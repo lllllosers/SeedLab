@@ -1,6 +1,6 @@
 # Windows portable 生产试运行包
 
-v0.4.1 / Production Trial Deployment。本目录保存打包源码；版本唯一来源为 backend/app/version.py，正式分发包发布到 GitHub Release。
+v0.5.0 发布候选（2026-10-03）/ Experiment Identity, Legacy Validation & Planned Result Export。本目录保存打包源码；版本唯一来源为 backend/app/version.py，本轮不创建 tag 或 GitHub Release。
 
 ## 构建
 
@@ -11,17 +11,17 @@ v0.4.1 / Production Trial Deployment。本目录保存打包源码；版本唯�
 cd frontend
 npm install
 cd ..
-.\scripts\build_portable.ps1 -OutputName portable-v041
+.\scripts\build_portable.ps1 -OutputName portable-v050
 ```
 
-实际工具为 PyInstaller 6.22.3。packaging 可选依赖接受 6.x，构建检查版本并打印。脚本不联网安装，仅清理带所有权标记的 build/portable-pyinstaller、build/portable-cache 和选定的 dist 输出目录（默认 portable，本版 portable-v041）；路径或后代有重定向时拒绝删除，不碰用户数据。
+实际工具为 PyInstaller 6.22.3。packaging 可选依赖接受 6.x，构建检查版本并打印。脚本不联网安装，仅清理带所有权标记的 build/portable-pyinstaller、build/portable-cache 和选定的 dist 输出目录（默认 portable，本版 portable-v050）；路径或后代有重定向时拒绝删除，不碰用户数据。
 
 一个 spec、两次 Analysis、两个 PYZ/EXE、一个共享 COLLECT。控制中心为 windowed；服务器保留 stdout，由控制中心 CREATE_NO_WINDOW 启动。两份 EXE 共用 _internal，服务器在程序根目录，避免复制整套 DLL。前端和迁移源码放在 app/web、app/migrations，运行时禁止写入字节码缓存。动态模型、SQLite、Uvicorn、Qt Network/SVG、Argon2、拼音和 tzdata 通过 spec/hook 收集。
 
 spec 显式设置冻结解释器 UTF-8 与无缓冲 stdout。冻结解释器不读取 PYTHONUTF8；服务输出必须与控制中心 UTF-8 日志管道一致，不能依赖用户的 Windows 区域设置。
 
 ```text
-dist/portable-v041/SeedLab/
+dist/portable-v050/SeedLab/
   SeedLab Control Center.exe
   SeedLabServer.exe
   _internal/
@@ -31,8 +31,8 @@ dist/portable-v041/SeedLab/
   使用说明.txt
   LICENSE
   AUTHORS.md
-dist/portable-v041/SeedLab-v0.4.1-portable.zip
-dist/portable-v041/artifact-report.json
+dist/portable-v050/SeedLab-v0.5.0-portable.zip
+dist/portable-v050/artifact-report.json
 ```
 
 脚本验证迁移 head，扫描目录及 ZIP 的用户数据、配置、日志、开发资产、重定向和 CRC，报告数量、体积及最大 20 个文件。便携包日常不调用 Python、Node、npm 或 Git；构建仍需要开发依赖。
@@ -59,7 +59,7 @@ QLocalServer/QLocalSocket 在当前用户会话内按程序目录和数据目录
 
 SeedLab.ico 从现有品牌 SVG 生成七个尺寸；EXE、主窗口、向导、托盘及通知共用该图形。Windows 产品描述从唯一 VERSION 动态生成；任务栏使用 SeedLab.ControlCenter，便携版仅注册当前用户该产品的 DisplayName/IconUri，不修改其他产品或登录启动项。通知名称统一为“SeedLab 运行控制中心”。真实 Windows 图标缓存与通知外观仍需人工验收。
 
-正式构建使用独立 dist/portable-v041 输出，保留此前人工部署的 dist/portable；默认构建遇到用户部署文件时仍拒绝清理。运行身份文件与凭据禁止进入分发 ZIP。build/、dist/ 可重新生成，不属于备份。发布确认前保留正式 ZIP；GitHub Release 上传确认后，本地副本无需长期保存。本轮不大规模清理已有构建目录或历史数据库快照。
+正式构建使用独立 dist/portable-v050 输出，保留此前人工部署的 dist/portable；默认构建遇到用户部署文件时仍拒绝清理。运行身份文件与凭据禁止进入分发 ZIP。build/、dist/ 可重新生成，不属于备份。发布确认前保留正式 ZIP；GitHub Release 上传确认后，本地副本无需长期保存。本轮不大规模清理已有构建目录或历史数据库快照。
 
 ### v0.4.1 最终发布验证（2026-10-02）
 

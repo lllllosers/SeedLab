@@ -1,4 +1,4 @@
-SeedLab v0.4.1 生产便携试运行版
+SeedLab v0.5.0 生产便携试运行版（发布候选）
 
 1. 将整个 SeedLab 文件夹解压到有写入权限的位置，保留文件夹中的全部文件。
 2. 双击“SeedLab Control Center.exe”。不需要另行安装开发软件。
