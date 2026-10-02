@@ -378,7 +378,7 @@ def test_multiday_sowing_observation_and_export(auth_client, tmp_path):
     assert [item[0] for item in material_rows[1:]] == ["001", "002"]
     assert [item[2] for item in material_rows[1:]] == ["001", "001"]
     rate_rows = list(workbook.worksheets[1].values)
-    assert sorted((row[7], row[8], row[9], row[10]) for row in rate_rows[1:]) == [(0, 0, 0, None), (2, 40, 2, 5)]
+    assert sorted((row[7], row[8], row[9], row[10]) for row in rate_rows[1:]) == [(0, 0, None, None), (2, 40, 2, 5)]
     observation_rows = list(workbook.worksheets[2].values)
     assert len(observation_rows) == 3
     assert sorted(item[9] for item in observation_rows[1:]) == [0, 2]

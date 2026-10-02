@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { GerminationExecution } from '../../types'
 import { dateTimeText } from '../../utils'
+import { germinationText } from '../../utils/germination'
 const props = defineProps<{ execution: GerminationExecution; materialId?: string | null }>()
 defineEmits<{ showAll: [] }>()
 const dishes = computed(() =>
@@ -14,7 +15,7 @@ const dishes = computed(() =>
   <div class="execution-section-head">
     <div>
       <h3>培养皿状态</h3>
-      <p>累计发芽数、发芽率和剩余数量均由巡检事实动态计算。</p>
+      <p>累计发芽数、发芽率和剩余数量按巡检记录计算；尚未巡检时显示“未记录”。</p>
     </div>
     <div>
       <el-button v-if="materialId" link @click="$emit('showAll')">查看全部培养皿</el-button
@@ -55,10 +56,10 @@ const dishes = computed(() =>
           <td>{{ dateTimeText(dish.sown_at) }}</td>
           <td>{{ dish.cancelled_at ? '已取消' : dish.sown_at ? '已置床' : '待置床' }}</td>
           <td>
-            <strong>{{ dish.cumulative_germinated }}</strong>
+            <strong>{{ germinationText(dish.cumulative_germinated) }}</strong>
           </td>
           <td>
-            <div v-if="dish.sown_at && dish.observation_count" class="rate-cell">
+            <div v-if="dish.germination_rate !== null" class="rate-cell">
               <el-progress
                 :percentage="dish.germination_rate"
                 :show-text="false"
@@ -67,7 +68,7 @@ const dishes = computed(() =>
             </div>
             <span v-else>—</span>
           </td>
-          <td>{{ dish.remaining_ungerminated }}</td>
+          <td>{{ germinationText(dish.remaining_ungerminated) }}</td>
           <td>{{ dish.sample_count }}</td>
           <td>{{ dateTimeText(dish.last_observed_at) }}</td>
         </tr>

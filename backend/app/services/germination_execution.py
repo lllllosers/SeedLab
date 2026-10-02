@@ -31,6 +31,7 @@ def dish_user_number(db: Session, dish: GerminationDish) -> str:
 
 
 def cumulative(db: Session, dish_id: str) -> int:
+    """Internal capacity arithmetic; public summaries separately test for observations."""
     return int(db.scalar(select(func.coalesce(func.sum(GerminationObservation.new_germinated_count), 0))
                          .where(GerminationObservation.dish_id == dish_id)) or 0)
 
@@ -237,10 +238,12 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
             "seeds_per_dish", "replicate_count", "sample_count", "sample_scope"))
         values = effective(material, protocol) if has_defaults else None
         material_seed_total = material_germinated = 0
+        material_observed = False
         replicate_count = max((dish.replicate_no for dish in relevant), default=1)
         for dish in relevant:
             history = observations_by_dish[dish.id]
             germinated = sum(item.new_germinated_count for item in history)
+            material_observed = material_observed or bool(history)
             if dish.sown_at and not dish.cancelled_at:
                 material_seed_total += dish.seed_count
             material_germinated += germinated
@@ -258,9 +261,9 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
                 "today_observed": any(local_date(item.observed_at) == local_today for item in history),
                 "observation_period_end_at": iso_utc(utc_naive(dish.sown_at) + timedelta(days=protocol.observation_period_days))
                   if dish.sown_at and protocol and protocol.observation_period_days else None,
-                "cumulative_germinated": germinated,
-                "germination_rate": round(germinated / dish.seed_count * 100, 2),
-                "remaining_ungerminated": dish.seed_count - germinated,
+                "cumulative_germinated": germinated if history else None,
+                "germination_rate": round(germinated / dish.seed_count * 100, 2) if history else None,
+                "remaining_ungerminated": dish.seed_count - germinated if history else None,
                 "sample_count": len(samples_by_dish[dish.id]),
                 "sample_target": values["effective_sample_count"] if values else None,
                 "material_sample_count": material_samples,
@@ -275,8 +278,9 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
             "sown_count": sum(dish.sown_at is not None for dish in relevant),
             "cancelled_count": sum(dish.cancelled_at is not None for dish in relevant),
             "dish_count": len(relevant), "seed_count": material_seed_total,
-            "cumulative_germinated": material_germinated,
-            "germination_rate": round(material_germinated / material_seed_total * 100, 2) if material_seed_total else 0,
+            "cumulative_germinated": material_germinated if material_observed else None,
+            "germination_rate": round(material_germinated / material_seed_total * 100, 2)
+              if material_observed and material_seed_total else None,
             "sample_count": material_samples,
             "sample_target": values["effective_sample_count"] * (
                 sum(dish.cancelled_at is None for dish in relevant) if protocol.sample_scope == "per_dish" else 1
@@ -318,8 +322,8 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
         "latest_sown_estimated_finish_at": iso_utc(latest_finish),
         "pending_material_count": sum(any(not dish.sown_at and not dish.cancelled_at for dish in dishes
                                          if dish.material_id == material.id) for material in materials),
-        "cumulative_germinated": total_germinated,
-        "germination_rate": round(total_germinated / total_seeds * 100, 2) if total_seeds else 0,
+        "cumulative_germinated": total_germinated if observations else None,
+        "germination_rate": round(total_germinated / total_seeds * 100, 2) if observations and total_seeds else None,
         "sample_count": len(samples),
         "materials": material_rows, "dishes": dish_rows, "recent_observations": recent,
     }

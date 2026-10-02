@@ -134,9 +134,9 @@ export interface GerminationDishStatus {
   cancel_reason: string | null
   today_observed: boolean
   observation_period_end_at: string | null
-  cumulative_germinated: number
-  germination_rate: number
-  remaining_ungerminated: number
+  cumulative_germinated: number | null
+  germination_rate: number | null
+  remaining_ungerminated: number | null
   sample_count: number
   sample_target: number | null
   material_sample_count: number
@@ -156,8 +156,8 @@ export interface GerminationMaterialStatus {
   cancelled_count: number
   dish_count: number
   seed_count: number
-  cumulative_germinated: number
-  germination_rate: number
+  cumulative_germinated: number | null
+  germination_rate: number | null
   sample_count: number
   sample_target: number | null
 }
@@ -191,8 +191,8 @@ export interface GerminationExecution {
   latest_sown_estimated_finish_at: string | null
   pending_material_count: number
   seed_count: number
-  cumulative_germinated: number
-  germination_rate: number
+  cumulative_germinated: number | null
+  germination_rate: number | null
   sample_count: number
   materials: GerminationMaterialStatus[]
   dishes: GerminationDishStatus[]

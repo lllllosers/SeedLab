@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { germinationText } from '../../utils/germination'
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../../api/client'
@@ -79,14 +80,14 @@ async function save() {
     if (raw === '') continue
     const count = Number(raw)
     if (!Number.isInteger(count) || count < 0)
-      return ElMessage.warning(`${dish.field_number || '编号未确认'} 的本次新增必须为非负整数`)
+      return ElMessage.warning(`${dish.field_number || '编号未确认'} 的新增发芽数请按整粒数量填写，不能小于 0；没有新增时填 0`)
     entries.push({
       dish_id: dish.id,
       new_germinated_count: count,
       notes: notes[dish.id]?.trim() || null,
     })
   }
-  if (!entries.length) return ElMessage.warning('请至少填写一个培养皿；空白表示本次未巡检')
+  if (!entries.length) return ElMessage.warning('请至少填写一个培养皿的新增发芽数；留空表示本次未巡检')
   const date = new Date(observedAt.value)
   if (Number.isNaN(date.getTime())) return ElMessage.warning('请填写有效的巡检时间')
   saving.value = true
@@ -113,7 +114,7 @@ async function save() {
   <div class="execution-section-head">
     <div>
       <h3>发芽巡检工作台</h3>
-      <p>共享巡检时间；空白表示未检查，明确填写 0 表示已检查但没有新增发芽。</p>
+      <p>本次所有培养皿使用同一巡检时间；留空表示未检查，填写 0 表示已检查但没有新增发芽。</p>
     </div>
     <div class="execution-time">
       <label>巡检时间</label><input v-model="observedAt" type="datetime-local" step="60" />
@@ -204,10 +205,10 @@ async function save() {
           <td>R{{ dish.replicate_no }}</td>
           <td>{{ dish.seed_count }}</td>
           <td>
-            <strong>{{ dish.cumulative_germinated }}</strong>
+            <strong>{{ germinationText(dish.cumulative_germinated) }}</strong>
           </td>
-          <td>{{ dish.germination_rate }}%</td>
-          <td>{{ dish.remaining_ungerminated }}</td>
+          <td>{{ germinationText(dish.germination_rate, true) }}</td>
+          <td>{{ germinationText(dish.remaining_ungerminated) }}</td>
           <td>
             {{ sampleProgress(dish) }}
             <small v-if="sampleDone(dish)">取样完成 ✓；仍可继续巡检</small>
@@ -239,7 +240,7 @@ async function save() {
       >{{
         enteredCount
           ? `本次将保存 ${enteredCount} 个培养皿`
-          : '请至少填写一个培养皿；0 表示已检查但没有新增发芽。'
+          : '请至少填写一个培养皿的新增发芽数；0 表示已检查但没有新增发芽。'
       }}
       · 同一天可多次巡检</span
     ><el-button

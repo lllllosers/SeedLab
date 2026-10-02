@@ -89,11 +89,12 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
         relevant = sorted(dishes_by_material.get(material.id, []), key=lambda dish: dish.replicate_no)
         sown = [dish for dish in relevant if dish.sown_at is not None and dish.cancelled_at is None]
         actual_seeds = sum(dish.seed_count for dish in sown)
-        germinated = sum(observation.new_germinated_count for dish in sown
-                         for observation in observations_by_dish.get(dish.id, []))
+        recorded = [observation for dish in sown for observation in observations_by_dish.get(dish.id, [])]
+        germinated = sum(observation.new_germinated_count for observation in recorded) if recorded else None
         rate_sheet.append((summary_number, source_name, original_number, taxon.common_name,
                            taxon.scientific_name, lot.source_code, lot.code, len(sown), actual_seeds,
-                           germinated, round(germinated / actual_seeds * 100, 2) if actual_seeds else None))
+                           germinated, round(germinated / actual_seeds * 100, 2)
+                           if germinated is not None and actual_seeds else None))
         for dish in relevant:
             replicate_count = max(item.replicate_no for item in relevant)
             dish_number = field_number(material, replicate_count, dish.replicate_no)
@@ -109,8 +110,6 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                 sample_number = sample_display_number(material.experiment_number, dish.replicate_no,
                                                       replicate_count, sample.sample_number)
                 sample_measurements = measurements_by_sample.get(sample.id, [])
-                if not sample_measurements:
-                    continue
                 values = {}
                 for measurement, day in sorted(sample_measurements, key=lambda pair: pair[1]):
                     root = float(measurement.root_length_mm) if measurement.root_length_mm is not None else None
@@ -139,12 +138,12 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
         ("原实验编号", "实验内确认置床编号时固定的编号；不同实验可各自从 001 开始"),
         ("培养皿现场编号", "单重复使用实验内材料编号，多重复在编号后加 -1、-2 等；不导出内部技术编号"),
         ("幼苗编号", "培养皿现场编号加皿内幼苗序号，例如单重复 001-01，多重复 001-1-01"),
-        ("DAG", "Days After Germination，幼苗实际发芽后第 N 天"),
+        ("DAG", "发芽后测定时间，幼苗实际发芽后第 N 天"),
         ("测定值含义", "0 是实测零值；NA 表示无法测量；空白表示尚未测定。根长、苗长单位均为 mm"),
         ("计划测定日期", "以幼苗发芽判定时间的实验室本地日期加 DAG 自然日计算；延迟天数按实际测定日期计算"),
         ("测定时间时区", "幼苗测定长表的发芽判定时间和实际测定时间按系统配置的实验室时区显示，并带时区偏移"),
-        ("发芽率汇总", "仅以实际已置床的培养皿种子数为分母；没有实际置床种子时发芽率留空"),
-        ("测定数据", "仅导出已有的正式测定记录；空表不代表测定值为 0"),
+        ("发芽率汇总", "仅以实际已置床的培养皿种子数为分母；没有巡检记录时累计发芽数和发芽率留空，明确记录 0 才表示已巡检且没有发芽"),
+        ("测定数据", "长表仅列已有测定记录；宽表保留全部已选幼苗，未测的根长、苗长留空，即使所有测定时间均未测也保留幼苗行"),
     ]
     for note in notes:
         explanation.append(note)

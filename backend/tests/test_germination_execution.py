@@ -132,6 +132,11 @@ def test_batch_blank_is_missing_zero_is_checked_and_late_observation_is_allowed(
     assert client.post(f"{base}/observations", json={"dish_id": dish_id, "observed_at": MORNING,
                         "new_germinated_count": 0}, headers=headers).status_code == 409
     dishes = start(client, headers, base).json()["dishes"]
+    before = client.get(f"{base}/execution").json()
+    assert before["cumulative_germinated"] is None and before["germination_rate"] is None
+    assert all(m["cumulative_germinated"] is None and m["germination_rate"] is None for m in before["materials"])
+    assert all(d[key] is None for d in dishes for key in (
+        "cumulative_germinated", "remaining_ungerminated", "germination_rate"))
     r1, r2 = dishes[0]["id"], dishes[1]["id"]
     response = batch(client, headers, base, MORNING, [
         {"dish_id": r1, "new_germinated_count": None},
@@ -141,8 +146,13 @@ def test_batch_blank_is_missing_zero_is_checked_and_late_observation_is_allowed(
     assert len(response.json()["created"]) == 1
     summary = response.json()["execution"]
     assert summary["dishes"][0]["observation_count"] == 0
+    assert all(summary["dishes"][0][key] is None for key in (
+        "cumulative_germinated", "remaining_ungerminated", "germination_rate"))
     assert summary["dishes"][1]["observation_count"] == 1
     assert summary["dishes"][1]["cumulative_germinated"] == 0
+    assert summary["dishes"][1]["germination_rate"] == 0
+    assert summary["dishes"][1]["remaining_ungerminated"] == 5
+    assert summary["cumulative_germinated"] == 0 and summary["germination_rate"] == 0
     assert summary["dishes"][1]["last_observed_at"] is not None
     assert batch(client, headers, base, MORNING, [{"dish_id": r2, "new_germinated_count": 0}],).status_code == 409
     assert batch(client, headers, base, "2026-08-31T20:00:00+08:00",
