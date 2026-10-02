@@ -38,7 +38,8 @@ const steps = [
   '特殊材料',
   '检查与创建',
 ]
-const form = reactive({ name: '', description: '', planned_start_date: '' })
+const experimentTypes = ref<{ value: string; label: string }[]>([])
+const form = reactive({ experiment_type: '', name: '', description: '', planned_start_date: '' })
 const lots = ref<AvailableLot[]>([])
 const materials = ref<ExperimentMaterialInput[]>([])
 const reviewMaterials = computed(() =>
@@ -75,6 +76,12 @@ watch(lots, (current) => {
 const prefillSource = ref('')
 const created = ref(false)
 onMounted(async () => {
+  try {
+    experimentTypes.value = (await api.get('/experiments/types')).data
+    form.experiment_type = experimentTypes.value[0]?.value || ''
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  }
   const prefill = readMaterialPrefill(sessionStorage)
   if (!prefill) return
   try {
@@ -104,6 +111,7 @@ onBeforeRouteLeave(async () => {
 })
 function payload() {
   return {
+    experiment_type: form.experiment_type,
     name: form.name.trim(),
     description: form.description.trim() || null,
     planned_start_date: form.planned_start_date || null,
@@ -116,6 +124,7 @@ function payload() {
   }
 }
 function validCurrent(): boolean {
+  if (step.value === 0 && !form.experiment_type) return warn('请先选择实验类型；列表未加载时请刷新后重试')
   if (step.value === 0 && form.name.trim().length < 2) return warn('请填写至少 2 个字的实验名称')
   if (step.value === 1 && !lots.value.length) return warn('请至少选择一个种子批次')
   if (
@@ -204,8 +213,20 @@ async function create() {
         ><div class="wizard-step-copy">
           <h2>实验基本信息</h2>
           <p>为这次具体实验命名。负责人默认是当前登录用户。</p>
+          <p>
+            建议按实验类型、日期、顺序号命名，也可按研究内容自定义。例如：种子萌发试验-202609-01，或盐胁迫下披碱草种子萌发试验。
+          </p>
         </div>
         <el-form label-position="top"
+          ><el-form-item label="实验类型">
+            <el-select v-model="form.experiment_type" placeholder="请选择实验类型">
+              <el-option
+                v-for="item in experimentTypes"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select> </el-form-item
           ><el-form-item label="实验名称"
             ><el-input
               v-model="form.name"
@@ -254,6 +275,11 @@ async function create() {
         </div>
         <div class="review-section">
           <h3>{{ form.name }}</h3>
+          <p>
+            实验类型：{{
+              experimentTypes.find((item) => item.value === form.experiment_type)?.label
+            }}
+          </p>
           <p>{{ form.description || '暂无实验说明' }}</p>
           <p>
             计划开始：{{ form.planned_start_date || '未设置' }} · 负责人：{{

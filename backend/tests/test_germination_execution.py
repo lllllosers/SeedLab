@@ -26,7 +26,7 @@ def configured(client, headers, *, scope="per_dish", target=3, replicates=2, see
         lots.append(lot)
         material_inputs.append({"seed_lot_id": lot["id"]})
     data = {
-        "name": "Stage 2 发芽执行试验",
+        "experiment_type": "GER", "name": "Stage 2 发芽执行试验",
         "protocol": {"seeds_per_dish": seeds, "replicate_count": replicates,
                      "observation_period_days": 5, "sampling_rule": "first_germinated",
                      "sample_count": target, "sample_scope": scope,
@@ -330,7 +330,7 @@ def test_stage2_migration_preserves_existing_dish_and_sample(tmp_path, monkeypat
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d2e7a46b910c"
         assert conn.execute(text("SELECT COUNT(*) FROM germination_observations")).scalar() == 1
         assert conn.execute(text("SELECT COUNT(*) FROM seedling_samples")).scalar() == 1
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []

@@ -4,7 +4,11 @@ import type { GerminationExecution } from '../../types'
 import { dateTimeText } from '../../utils'
 const props = defineProps<{ execution: GerminationExecution; materialId?: string | null }>()
 defineEmits<{ showAll: [] }>()
-const dishes = computed(() => props.materialId ? props.execution.dishes.filter((dish) => dish.material_id === props.materialId) : props.execution.dishes)
+const dishes = computed(() =>
+  props.materialId
+    ? props.execution.dishes.filter((dish) => dish.material_id === props.materialId)
+    : props.execution.dishes,
+)
 </script>
 <template>
   <div class="execution-section-head">
@@ -12,7 +16,10 @@ const dishes = computed(() => props.materialId ? props.execution.dishes.filter((
       <h3>培养皿状态</h3>
       <p>累计发芽数、发芽率和剩余数量均由巡检事实动态计算。</p>
     </div>
-    <div><el-button v-if="materialId" link @click="$emit('showAll')">查看全部培养皿</el-button><el-tag type="success" effect="plain">{{ dishes.length }} 个培养皿</el-tag></div>
+    <div>
+      <el-button v-if="materialId" link @click="$emit('showAll')">查看全部培养皿</el-button
+      ><el-tag type="success" effect="plain">{{ dishes.length }} 个培养皿</el-tag>
+    </div>
   </div>
   <div class="execution-table-wrap">
     <table class="execution-table">
@@ -34,12 +41,14 @@ const dishes = computed(() => props.materialId ? props.execution.dishes.filter((
       <tbody>
         <tr v-for="dish in dishes" :key="dish.id">
           <td>
-            <b>{{ dish.field_number || dish.code }}</b><small v-if="dish.field_number">系统编号：{{ dish.code }}</small>
+            <b>{{ dish.field_number || '编号未确认' }}</b>
           </td>
           <td>
             <b>{{ dish.taxon_common_name || dish.taxon_scientific_name }}</b>
             <small v-if="dish.taxon_common_name">{{ dish.taxon_scientific_name }}</small>
-            <small>原始材料编号：{{ dish.source_code || '未填写' }} · {{ dish.seed_lot_code }}</small>
+            <small
+              >原始材料编号：{{ dish.source_code || '未填写' }} · {{ dish.seed_lot_code }}</small
+            >
           </td>
           <td>R{{ dish.replicate_no }}</td>
           <td>{{ dish.seed_count }}</td>

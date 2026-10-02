@@ -44,7 +44,7 @@ def test_migration_api_empty_idempotent_explicit_paths_and_schema_check(runtime,
     monkeypatch.chdir(tmp_path)
     runtime.database.parent.mkdir(parents=True)
     url = "sqlite:///" + runtime.database.as_posix()
-    assert upgrade_database(url, runtime.migration_root) == ("c6d91f28a405",)
+    assert upgrade_database(url, runtime.migration_root) == ("d2e7a46b910c",)
     before = runtime.database.read_bytes()
     assert upgrade_database(url, runtime.migration_root) == migration_heads(runtime.migration_root)
     check_database_schema(url, runtime.migration_root)
@@ -60,7 +60,7 @@ def test_installation_missing_and_new_data_paths_with_last_commit(runtime, monke
         assert runtime.config_file.is_file()
         assert check_database(runtime.database).valid
         with closing(sqlite3.connect(runtime.database)) as db:
-            assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("c6d91f28a405",)
+            assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("d2e7a46b910c",)
         assert not store.path.exists()
         original_save(data_root)
     monkeypatch.setattr(store, "save", finish)

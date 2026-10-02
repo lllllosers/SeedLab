@@ -65,6 +65,9 @@ class SeedLot(Identity, Base):
 class Experiment(Identity, Base):
     __tablename__ = "experiments"
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    experiment_type: Mapped[str] = mapped_column(String(8),
+        CheckConstraint("experiment_type IN ('GER')", name="ck_experiment_type"),
+        default="GER", server_default="GER", nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="draft", nullable=False)
     description: Mapped[str | None] = mapped_column(Text)

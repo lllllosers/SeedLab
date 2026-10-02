@@ -10,13 +10,14 @@ from app.models import (Experiment, ExperimentMaterial, GerminationDish, Measure
                         SeedlingMeasurement, SeedlingSample, SeedLot, Taxon)
 from app.services.common import require_entity
 from app.services.local_time import iso_utc, today
+from app.services.ordering import field_number_expression, sample_number_expression
 
 
 def slots():
     s, d, m, lot, t, p, v = SeedlingSample, GerminationDish, ExperimentMaterial, SeedLot, Taxon, MeasurementTimepoint, SeedlingMeasurement
     replicates = select(d.material_id.label("material_id"), func.max(d.replicate_no).label("count")).group_by(d.material_id).subquery()
     number = func.printf("%03d", m.experiment_number)
-    field = case((replicates.c.count == 1, number), else_=number + "-" + cast(d.replicate_no, String))
+    field = field_number_expression(m.experiment_number, d.replicate_no, replicates.c.count)
     planned = func.date(func.seedlab_local_date(s.germinated_at), "+" + cast(p.day_after_germination, String) + " days")
     measured_date = func.seedlab_local_date(v.measured_at)
     state = case((v.id.is_not(None), "completed"), (s.germinated_at.is_(None), "unschedulable"),
@@ -25,7 +26,8 @@ def slots():
         Experiment.id.label("experiment_id"), Experiment.code.label("experiment_code"),
         m.id.label("material_id"), number.label("experiment_number"),
         d.id.label("dish_id"), d.code.label("dish_code"), field.label("field_number"), d.replicate_no,
-        s.id.label("sample_id"), s.sample_number, s.position_label, s.germinated_at,
+        s.id.label("sample_id"), s.sample_number, sample_number_expression(field, s.sample_number).label("sample_display_number"),
+        s.position_label, s.germinated_at,
         t.common_name.label("taxon_common_name"), t.scientific_name.label("taxon_scientific_name"), t.code.label("taxon_code"),
         lot.code.label("seed_lot_code"), lot.source_code,
         p.id.label("timepoint_id"), p.day_after_germination,
@@ -56,10 +58,14 @@ def search(c, q: str | None):
     normalized = (q or '').strip()
     if re.fullmatch(r"\d{3}", normalized):
         return c.experiment_number == normalized
+    if re.fullmatch(r"\d{3}-\d{2,}", normalized):
+        return or_(c.field_number == normalized, c.sample_display_number == normalized)
+    if re.fullmatch(r"\d{3}-\d+-\d{2,}", normalized):
+        return c.sample_display_number == normalized
     if re.fullmatch(r"\d{3}-\d+", normalized):
         return c.field_number == normalized
     term = f"%{normalized}%"
-    return or_(*(column.ilike(term) for column in (c.experiment_number, c.field_number, c.dish_code,
+    return or_(*(column.ilike(term) for column in (c.experiment_number, c.field_number, c.sample_display_number,
         c.taxon_common_name, c.taxon_scientific_name, c.taxon_code, c.seed_lot_code, c.source_code,
         c.position_label, cast(c.sample_number, String), "幼苗" + func.printf("%02d", c.sample_number),
         "幼苗 " + func.printf("%02d", c.sample_number))))

@@ -53,10 +53,8 @@ function rowClass({ row }: { row: MeasurementTask }) {
           }}</small></template
         >
       </el-table-column>
-      <el-table-column label="培养皿 / 幼苗" :min-width="compact ? 145 : 155">
-        <template #default="{ row }"
-          >{{ row.field_number }} · 幼苗{{ String(row.sample_number).padStart(2, '0') }}</template
-        >
+      <el-table-column label="幼苗编号" :min-width="compact ? 145 : 155">
+        <template #default="{ row }">幼苗 {{ row.sample_display_number || '编号未确认' }}</template>
       </el-table-column>
       <el-table-column prop="day_after_germination" label="DAG" width="58" />
       <el-table-column label="根长（mm）" :min-width="compact ? 92 : 105">

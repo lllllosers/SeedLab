@@ -129,7 +129,7 @@ def test_unused_ready_and_locked_plan_can_be_deleted(auth_client,locked):
     client,headers=auth_client
     taxon=client.post('/api/taxa',json={'scientific_name':'Unused species'},headers=headers).json()
     lot=client.post('/api/seed-lots',json={'taxon_id':taxon['id']},headers=headers).json()
-    response=client.post('/api/experiments/configured',json={'name':'未执行的方案','protocol':{'seeds_per_dish':10,'replicate_count':2,'observation_period_days':5,'sampling_rule':'first_germinated','sample_count':2,'sample_scope':'per_dish','germination_criterion':'胚根露出'},'materials':[{'seed_lot_id':lot['id']}],'dag_days':[0,3]},headers=headers)
+    response=client.post('/api/experiments/configured',json={'experiment_type':'GER','name':'未执行的方案','protocol':{'seeds_per_dish':10,'replicate_count':2,'observation_period_days':5,'sampling_rule':'first_germinated','sample_count':2,'sample_scope':'per_dish','germination_criterion':'胚根露出'},'materials':[{'seed_lot_id':lot['id']}],'dag_days':[0,3]},headers=headers)
     base='/api/experiments/'+response.json()['experiment']['id']
     assert client.patch(base,json={'status':'ready'},headers=headers).status_code==200
     if locked: assert client.post(base+'/confirm-numbers',headers=headers).status_code==200
@@ -247,12 +247,12 @@ def test_termination_migration_existing_and_roundtrip(tmp_path,monkeypatch):
     with engine.connect() as c:
         assert c.exec_driver_sql('SELECT termination_reason FROM experiments').scalar() is None
         assert c.exec_driver_sql('PRAGMA foreign_key_check').all()==[]
-    command.downgrade(config,'-1');command.upgrade(config,'head')
+    command.downgrade(config,'b742b49a162e');command.upgrade(config,'head')
     with engine.connect() as c:
         assert c.exec_driver_sql('SELECT name FROM experiments').scalar()=='旧实验'
-        assert c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar()=='c6d91f28a405'
+        assert c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar()=='d2e7a46b910c'
     with engine.begin() as c:c.exec_driver_sql("UPDATE experiments SET termination_reason='保留原因'")
-    with pytest.raises(RuntimeError,match='终止原因'):command.downgrade(config,'-1')
+    with pytest.raises(RuntimeError,match='终止原因'):command.downgrade(config,'b742b49a162e')
     with engine.connect() as c:assert c.exec_driver_sql('SELECT termination_reason FROM experiments').scalar()=='保留原因'
     engine.dispose();get_settings.cache_clear()
 

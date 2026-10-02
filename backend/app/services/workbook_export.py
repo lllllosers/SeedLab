@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.models import (Experiment, ExperimentMaterial, GerminationDish,
                         GerminationObservation, MeasurementTimepoint, SeedlingMeasurement,
                         SeedlingSample, SeedLot, Taxon)
-from app.services.ordering import display_number, field_number, material_key
+from app.services.ordering import display_number, field_number, material_key, sample_display_number
 from app.services.local_time import local_date, local_datetime
 from app.services.seedling_measurement import scheduled_date
 from app.version import VERSION
@@ -47,7 +47,7 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                             "原始材料编号", "系统物种编号", "系统种子批次编号", "来源", "采集/获得日期", "数量", "备注"))
     rate_sheet.append(("汇总编号", "来源实验", "原实验编号", "中文名", "学名", "原始材料编号",
                        "种子批次", "实际已置床培养皿数", "实际置床种子数", "累计发芽数", "发芽率（%）"))
-    observation_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "系统培养皿编号",
+    observation_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号",
                               "中文名", "学名", "实际置床时间", "巡检时间", "本次新增发芽数", "累计发芽数", "发芽率"))
     long_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "位置标签",
                        "中文名", "学名", "发芽判定时间", "DAG", "计划测定日期", "实际测定时间",
@@ -95,16 +95,19 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                            taxon.scientific_name, lot.source_code, lot.code, len(sown), actual_seeds,
                            germinated, round(germinated / actual_seeds * 100, 2) if actual_seeds else None))
         for dish in relevant:
-            dish_number = field_number(material, len(relevant), dish.replicate_no) if material.experiment_number else dish.code
+            replicate_count = max(item.replicate_no for item in relevant)
+            dish_number = field_number(material, replicate_count, dish.replicate_no)
             count = 0
             for observation in sorted(observations_by_dish.get(dish.id, []), key=lambda item: (item.observed_at, item.id)):
                 count += observation.new_germinated_count
                 observation_sheet.append((summary_number, source_name, original_number, dish_number,
-                                          dish.code, taxon.common_name, taxon.scientific_name,
+                                          taxon.common_name, taxon.scientific_name,
                                           _date(dish.sown_at), _date(observation.observed_at),
                                           observation.new_germinated_count, count,
                                           round(count / dish.seed_count * 100, 2)))
             for sample in sorted(samples_by_dish.get(dish.id, []), key=lambda item: item.sample_number):
+                sample_number = sample_display_number(material.experiment_number, dish.replicate_no,
+                                                      replicate_count, sample.sample_number)
                 sample_measurements = measurements_by_sample.get(sample.id, [])
                 if not sample_measurements:
                     continue
@@ -114,7 +117,7 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                     shoot = float(measurement.shoot_length_mm) if measurement.shoot_length_mm is not None else None
                     planned = scheduled_date(sample.germinated_at, day)
                     long_sheet.append((summary_number, source_name, original_number, dish_number,
-                                       sample.sample_number, sample.position_label, taxon.common_name,
+                                       sample_number, sample.position_label, taxon.common_name,
                                        taxon.scientific_name, local_datetime(sample.germinated_at).isoformat() if sample.germinated_at else None, day,
                                        _date(planned), local_datetime(measurement.measured_at).isoformat(),
                                        (local_date(measurement.measured_at) - planned).days if planned else None,
@@ -122,7 +125,7 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                                        shoot, "无法测量" if measurement.shoot_unavailable else "已测", measurement.notes))
                     values[day] = ("NA" if measurement.root_unavailable else root,
                                    "NA" if measurement.shoot_unavailable else shoot)
-                wide_sheet.append((summary_number, source_name, original_number, dish_number, sample.sample_number,
+                wide_sheet.append((summary_number, source_name, original_number, dish_number, sample_number,
                                    sample.position_label, taxon.common_name, taxon.scientific_name) +
                                   tuple(value for day in all_dag for value in values.get(day, (None, None))))
     explanation.append(("项目", "说明"))
@@ -134,7 +137,8 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
         ("排序规则", "按中文名完整拼音、学名、原始材料编号、系统批次编号排序"),
         ("汇总编号", "仅属于本次导出，按排序后的实验材料从 001 编起，不写回实验数据"),
         ("原实验编号", "实验内确认置床编号时固定的编号；不同实验可各自从 001 开始"),
-        ("培养皿现场编号", "单重复使用实验编号，多重复在编号后加 -1、-2 等"),
+        ("培养皿现场编号", "单重复使用实验内材料编号，多重复在编号后加 -1、-2 等；不导出内部技术编号"),
+        ("幼苗编号", "培养皿现场编号加皿内幼苗序号，例如单重复 001-01，多重复 001-1-01"),
         ("DAG", "Days After Germination，幼苗实际发芽后第 N 天"),
         ("测定值含义", "0 是实测零值；NA 表示无法测量；空白表示尚未测定。根长、苗长单位均为 mm"),
         ("计划测定日期", "以幼苗发芽判定时间的实验室本地日期加 DAG 自然日计算；延迟天数按实际测定日期计算"),

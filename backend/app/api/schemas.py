@@ -2,7 +2,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, computed_field
+from app.core.experiment_types import ExperimentType, EXPERIMENT_TYPES
 
 
 class ORMModel(BaseModel):
@@ -119,12 +120,14 @@ class SeedLotOut(ORMModel):
 
 
 class ExperimentIn(BaseModel):
+    experiment_type: ExperimentType
     name: str = Field(min_length=2, max_length=255)
     description: str | None = None
     planned_start_date: date | None = None
 
 
 class ExperimentPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = None
     planned_start_date: date | None = None
@@ -134,6 +137,13 @@ class ExperimentPatch(BaseModel):
 class ExperimentOut(ORMModel):
     id: str
     code: str
+    experiment_type: ExperimentType
+
+    @computed_field
+    @property
+    def experiment_type_label(self) -> str:
+        return EXPERIMENT_TYPES[self.experiment_type]
+
     name: str
     description: str | None
     status: str

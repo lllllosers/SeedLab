@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.schemas import BatchObservationInput, ObservationPatch
+from app.core.experiment_types import EXPERIMENT_TYPES
 from app.models import (Experiment, ExperimentMaterial, GerminationDish, GerminationObservation,
                         SeedlingSample, SeedLot, Taxon)
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
@@ -20,6 +21,13 @@ def dishes_for(db: Session, experiment_id: str) -> list[GerminationDish]:
     return list(db.scalars(select(GerminationDish).join(ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id)
                            .where(ExperimentMaterial.experiment_id == experiment_id)
                            .order_by(ExperimentMaterial.display_order, GerminationDish.replicate_no)))
+
+
+def dish_user_number(db: Session, dish: GerminationDish) -> str:
+    material = require_entity(db, ExperimentMaterial, dish.material_id)
+    count = db.scalar(select(func.max(GerminationDish.replicate_no)).where(
+        GerminationDish.material_id == material.id)) or 1
+    return field_number(material, count, dish.replicate_no) or "编号未确认"
 
 
 def cumulative(db: Session, dish_id: str) -> int:
@@ -109,16 +117,16 @@ def batch_create_observations(db: Session, experiment_id: str, data: BatchObserv
             if dish.cancelled_at is not None:
                 raise HTTPException(409, "已取消的培养皿不能记录发芽巡检")
             if dish.sown_at is None:
-                raise HTTPException(422, f"培养皿 {dish.code} 缺少实际置床时间")
+                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 缺少实际置床时间")
             if observed_at < utc_naive(dish.sown_at):
-                raise HTTPException(422, f"培养皿 {dish.code} 的巡检时间不能早于置床时间")
+                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 的巡检时间不能早于置床时间")
             current = cumulative(db, dish.id)
             if current + entry.new_germinated_count > dish.seed_count:
-                raise HTTPException(422, f"培养皿 {dish.code} 已累计发芽 {current} 粒，本次最多还能记录 {dish.seed_count - current} 粒")
+                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 已累计发芽 {current} 粒，本次最多还能记录 {dish.seed_count - current} 粒")
             if db.scalar(select(GerminationObservation.id).where(
                     GerminationObservation.dish_id == dish.id,
                     GerminationObservation.observed_at == observed_at)):
-                raise HTTPException(409, f"培养皿 {dish.code} 在这个时间已有巡检记录，请修改原记录或选择其他时间")
+                raise HTTPException(409, f"培养皿 {dish_user_number(db, dish)} 在这个时间已有巡检记录，请修改原记录或选择其他时间")
             observation = GerminationObservation(dish_id=dish.id, observed_at=observed_at,
                                                  new_germinated_count=entry.new_germinated_count,
                                                  notes=entry.notes)
@@ -166,7 +174,7 @@ def correct_observation(db: Session, experiment_id: str, observation_id: str,
                 raise HTTPException(409, f"此次巡检已选出 {source_count} 株幼苗，本次新增发芽数不能小于 {source_count}")
             other_total = cumulative(db, dish.id) - observation.new_germinated_count
             if other_total + patch["new_germinated_count"] > dish.seed_count:
-                raise HTTPException(422, f"培养皿 {dish.code} 的其他巡检已记录 {other_total} 粒，本次最多还能填写 {dish.seed_count - other_total} 粒")
+                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 的其他巡检已记录 {other_total} 粒，本次最多还能填写 {dish.seed_count - other_total} 粒")
         for key, value in patch.items():
             setattr(observation, key, value)
         flush_or_conflict(db)
@@ -229,7 +237,7 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
             "seeds_per_dish", "replicate_count", "sample_count", "sample_scope"))
         values = effective(material, protocol) if has_defaults else None
         material_seed_total = material_germinated = 0
-        replicate_count = values["effective_replicate_count"] if values else len(relevant)
+        replicate_count = max((dish.replicate_no for dish in relevant), default=1)
         for dish in relevant:
             history = observations_by_dish[dish.id]
             germinated = sum(item.new_germinated_count for item in history)
@@ -291,6 +299,8 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
     latest_finish = period_end + timedelta(days=max(dag_days)) if period_end and dag_days else None
     return {
         "experiment": {"id": experiment.id, "code": experiment.code, "name": experiment.name,
+                       "experiment_type": experiment.experiment_type,
+                       "experiment_type_label": EXPERIMENT_TYPES[experiment.experiment_type],
                        "status": experiment.status, "started_at": iso_utc(experiment.started_at),
                        "numbering_locked_at": iso_utc(experiment.numbering_locked_at)},
         "sampling_rule": protocol.sampling_rule if protocol else None,

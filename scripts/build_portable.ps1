@@ -66,7 +66,7 @@ try {
     }
     foreach ($taskName in @('LICENSE','AUTHORS.md')) { Copy-Item -LiteralPath (Join-Path $taskRoot $taskName) -Destination $taskPackage }
     Copy-Item -LiteralPath (Join-Path $taskRoot 'packaging\使用说明.txt') -Destination $taskPackage
-    & $taskPython -B -c "from app.services.migrations import migration_heads; assert migration_heads(r'$taskPackage\app\migrations') == ('c6d91f28a405',)"
+    & $taskPython -B -c "from app.services.migrations import migration_heads; assert migration_heads(r'$taskPackage\app\migrations') == migration_heads(r'$taskRoot\backend\alembic')"
     if ($LASTEXITCODE -ne 0) { throw 'Packaged migration resources failed head verification.' }
     & $taskPython (Join-Path $taskRoot 'scripts\check_portable.py') --directory $taskPackage
     if ($LASTEXITCODE -ne 0) { throw 'Portable directory safety gate failed.' }

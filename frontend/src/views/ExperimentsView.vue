@@ -105,8 +105,12 @@ onMounted(load)
       ><el-table-column
         prop="code"
         label="实验编号"
-        width="170"
+        width="195"
         sortable="custom"
+      /><el-table-column
+        prop="experiment_type_label"
+        label="实验类型"
+        width="150"
       /><el-table-column prop="name" sortable="custom" label="实验名称" min-width="300"
         ><template #default="{ row }"
           ><router-link class="table-link strong" :to="`/experiments/${row.id}`">{{

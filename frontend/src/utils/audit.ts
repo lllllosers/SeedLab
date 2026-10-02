@@ -14,6 +14,7 @@ const labels: Record<string, string> = {
   line: '导入行号',
   code: '编号',
   name: '名称',
+  experiment_type_label: '实验类型',
   scientific_name: '学名',
   common_name: '中文名',
   family: '科',
@@ -57,7 +58,7 @@ const labels: Record<string, string> = {
   observed_at: '巡检时间',
   new_germinated_count: '本次新增发芽',
   cumulative_germinated_count: '累计发芽',
-  sample_number: '幼苗编号',
+  sample_number: '皿内幼苗序号',
   germinated_at: '发芽判定时间',
   position_label: '位置标签',
   root_length_mm: '根长（mm）',
@@ -113,6 +114,7 @@ export function auditDetails(log: Pick<Audit, 'before' | 'after' | 'entity_type'
     .filter(
       (key) =>
         labels[key] &&
+        !(log.entity_type === 'GerminationDish' && key === 'code') &&
         !key.endsWith('_id') &&
         !['root_unavailable', 'shoot_unavailable'].includes(key),
     )

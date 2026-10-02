@@ -237,7 +237,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
         <el-input
           v-model="search"
           clearable
-          placeholder="搜索编号（001、001-1）、中文名、学名或幼苗"
+          placeholder="搜索材料、培养皿或幼苗编号（001-01 / 001-1-01）、中文名或学名"
         />
         <div class="material-worklist-filters">
           <el-select :model-value="status" @change="changeFilter"
@@ -299,11 +299,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
                 >今日剩余 {{ due }} 株<span v-if="overdue"> · 逾期 {{ overdue }} 株</span></span
               >
             </div>
-            <p v-if="selected">
-              当前：{{ selected.field_number }} · 幼苗{{
-                String(selected.sample_number).padStart(2, '0')
-              }}
-            </p>
+            <p v-if="selected">当前：幼苗 {{ selected.sample_display_number || '编号未确认' }}</p>
             <small>完成本材料后将自动进入下一份待测材料。</small>
           </section>
           <el-table
@@ -312,11 +308,9 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
             max-height="220"
             :row-class-name="taskRowClass"
             @row-click="chooseTask"
-            ><el-table-column label="培养皿 / 幼苗" min-width="145"
+            ><el-table-column label="幼苗编号" min-width="145"
               ><template #default="{ row }"
-                >{{ row.field_number }} · 幼苗{{
-                  String(row.sample_number).padStart(2, '0')
-                }}</template
+                >幼苗 {{ row.sample_display_number || '编号未确认' }}</template
               ></el-table-column
             ><el-table-column label="DAG" prop="day_after_germination" width="65" /><el-table-column
               label="计划日期"
@@ -345,11 +339,9 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
               <h3>同材料 DAG {{ selected.day_after_germination }} 已测参考</h3>
               <p>用于录入时核对数量级，仅显示原始测定值。</p>
               <el-table :data="reference" max-height="240"
-                ><el-table-column label="培养皿 / 幼苗" min-width="170"
+                ><el-table-column label="幼苗编号" min-width="170"
                   ><template #default="{ row }"
-                    >{{ row.field_number }} · 幼苗{{
-                      String(row.sample_number).padStart(2, '0')
-                    }}</template
+                    >幼苗 {{ row.sample_display_number || '编号未确认' }}</template
                   ></el-table-column
                 ><el-table-column label="根长（mm）"
                   ><template #default="{ row }">{{

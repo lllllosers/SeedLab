@@ -23,7 +23,7 @@ def test_experiment_status_actions_keep_start_as_only_active_path(auth_client):
     taxon = client.post("/api/taxa", headers=headers, json={"scientific_name": "Setaria viridis"}).json()
     lot = client.post("/api/seed-lots", headers=headers, json={"taxon_id": taxon["id"]}).json()
     experiment = client.post("/api/experiments/configured", headers=headers, json={
-        "name": "状态流程测试", "protocol": {"seeds_per_dish": 5, "replicate_count": 1,
+        "experiment_type": "GER", "name": "状态流程测试", "protocol": {"seeds_per_dish": 5, "replicate_count": 1,
         "observation_period_days": 7, "sampling_rule": "first_germinated", "sample_count": 1,
         "sample_scope": "per_dish", "germination_criterion": "胚根可见"},
         "materials": [{"seed_lot_id": lot["id"]}], "dag_days": [0, 3],
@@ -44,7 +44,7 @@ def test_experiment_status_actions_keep_start_as_only_active_path(auth_client):
 
 def test_ready_action_explains_incomplete_configuration(auth_client):
     client, headers = auth_client
-    experiment = client.post("/api/experiments", headers=headers, json={"name": "尚未配置的实验"}).json()
+    experiment = client.post("/api/experiments", headers=headers, json={"experiment_type": "GER", "name": "尚未配置的实验"}).json()
     response = client.patch(f"/api/experiments/{experiment['id']}", headers=headers,
                             json={"status": "ready"})
     assert response.status_code == 422

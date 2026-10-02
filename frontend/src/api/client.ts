@@ -17,6 +17,7 @@ export function errorMessage(error: unknown): string {
     if (Array.isArray(detail) && detail.length) {
       const field = String(detail[0]?.loc?.at(-1) || '')
       const labels: Record<string, string> = {
+        experiment_type: '实验类型',
         seeds_per_dish: '每皿种子数',
         replicate_count: '重复数',
         observation_period_days: '观察周期',

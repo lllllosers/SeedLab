@@ -52,7 +52,7 @@ def confirm(client, headers, content, decisions=None, mode="complete"):
 
 def config(client, headers, lot_ids, name="第二轮实验", replicates=2):
     response = client.post("/api/experiments/configured", headers=headers, json={
-        "name": name,
+        "experiment_type": "GER", "name": name,
         "protocol": {"seeds_per_dish": 20, "replicate_count": replicates,
                      "observation_period_days": 7, "sampling_rule": "first_germinated",
                      "sample_count": 2, "sample_scope": "per_dish",
@@ -504,7 +504,7 @@ def test_workflow_migration_preserves_existing_records_and_constraints(tmp_path,
         command.check(config)
         engine = make_engine(f"sqlite:///{db_path.as_posix()}")
         with engine.connect() as connection:
-            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "c6d91f28a405"
+            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "d2e7a46b910c"
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
             assert connection.exec_driver_sql("SELECT new_germinated_count FROM germination_observations WHERE id='observation'").scalar() == 0
             assert connection.exec_driver_sql("SELECT experiment_number FROM experiment_materials WHERE id='material'").scalar() is None
@@ -541,7 +541,7 @@ def test_workflow_migration_preserves_existing_records_and_constraints(tmp_path,
         command.upgrade(config, "head")
         fresh = make_engine(f"sqlite:///{fresh_path.as_posix()}")
         with fresh.connect() as connection:
-            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "c6d91f28a405"
+            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "d2e7a46b910c"
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         fresh.dispose()
     finally:

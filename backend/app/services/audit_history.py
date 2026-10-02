@@ -1,10 +1,10 @@
 """Paginated audit facts with batched business identities, including deleted objects."""
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, case, cast, func, or_, select
 
 from app.models import (AuditLog, Experiment, ExperimentMaterial, ExperimentProtocol, GerminationDish,
     GerminationObservation, MeasurementTimepoint, SeedlingMeasurement, SeedlingSample, SeedLot, Taxon, User)
 from app.services.local_time import iso_utc
-from app.services.ordering import display_number, field_number
+from app.services.ordering import display_number, field_number, sample_display_number, field_number_expression
 
 LABELS = {"Taxon": "物种", "SeedLot": "种子批次", "Experiment": "实验", "ExperimentProtocol": "实验方案",
           "ExperimentMaterial": "实验材料", "MeasurementTimepoint": "发芽后测定时间", "GerminationDish": "培养皿",
@@ -26,10 +26,20 @@ def list_history(db, page=1, page_size=50, action=None, entity_type=None, q=None
         material_ids = select(ExperimentMaterial.id).join(SeedLot).join(Taxon).where(or_(
             ExperimentMaterial.experiment_id.in_(experiment_ids), Taxon.common_name.ilike(term),
             Taxon.scientific_name.ilike(term), func.printf("%03d", ExperimentMaterial.experiment_number).ilike(term)))
-        dish_ids = select(GerminationDish.id).where(GerminationDish.material_id.in_(material_ids))
+        replicates = select(GerminationDish.material_id.label("material_id"),
+                            func.max(GerminationDish.replicate_no).label("count")).group_by(
+                            GerminationDish.material_id).subquery()
+        dish_number = field_number_expression(ExperimentMaterial.experiment_number,
+                                             GerminationDish.replicate_no, replicates.c.count)
+        dish_ids = select(GerminationDish.id).join(ExperimentMaterial).join(
+            replicates, replicates.c.material_id == GerminationDish.material_id).where(or_(
+            GerminationDish.material_id.in_(material_ids), dish_number.ilike(term)))
         observation_ids = select(GerminationObservation.id).where(GerminationObservation.dish_id.in_(dish_ids))
         protocol_ids = select(ExperimentProtocol.id).where(ExperimentProtocol.experiment_id.in_(experiment_ids))
-        query = query.where(or_(cast(AuditLog.before, String).ilike(term), cast(AuditLog.after, String).ilike(term),
+        def searchable_state(column):
+            return cast(case((AuditLog.entity_type == "GerminationDish", func.json_remove(column, "$.code")),
+                             else_=column), String).ilike(term)
+        query = query.where(or_(searchable_state(AuditLog.before), searchable_state(AuditLog.after),
             User.display_name.ilike(term), AuditLog.entity_type.in_([key for key, value in LABELS.items() if q.strip() in value]),
             AuditLog.entity_id.in_(related_measurements), AuditLog.entity_id.in_(experiment_ids),
             AuditLog.entity_id.in_(material_ids), AuditLog.entity_id.in_(dish_ids), AuditLog.entity_id.in_(observation_ids),
@@ -81,11 +91,14 @@ def list_history(db, page=1, page_size=50, action=None, entity_type=None, q=None
         point = points.get(measurement.timepoint_id) if measurement else points.get(state.get("timepoint_id")) or points.get(log.entity_id)
         protocol = protocols.get(log.entity_id)
         experiment = experiments.get(material.experiment_id) if material else experiments.get(point.experiment_id) if point else experiments.get(protocol.experiment_id) if protocol else experiments.get(log.entity_id)
-        code = experiment.code if experiment else state.get("code", "实验履历")
+        code = experiment.code if experiment else ("实验履历" if entity == "GerminationDish" else state.get("code", "实验履历"))
         if dish and material:
-            number = field_number(material, replicate_counts.get(material.id, 1), dish.replicate_no) if material.experiment_number else dish.code
+            number = field_number(material, replicate_counts.get(material.id, 1), dish.replicate_no) or "编号未确认"
             label = f"{code} · {number}"
-            if sample: label += f" · 幼苗{sample.sample_number:02d}"
+            if sample:
+                number = sample_display_number(material.experiment_number, dish.replicate_no,
+                                               replicate_counts.get(material.id, 1), sample.sample_number)
+                label = f"{code} · 幼苗 {number or '编号未确认'}"
             if entity == "SeedlingMeasurement" and point: label += f" · DAG{point.day_after_germination}"
             if entity == "GerminationObservation": label += " · 发芽巡检"
             return label

@@ -33,6 +33,8 @@ export interface SeedLot {
 }
 export type ExperimentStatus = 'draft' | 'ready' | 'active' | 'completed' | 'cancelled'
 export interface Experiment {
+  experiment_type: 'GER'
+  experiment_type_label: string
   id: string
   code: string
   name: string
@@ -239,9 +241,10 @@ export interface MeasurementTask {
   experiment_number: string | null
   dish_id: string
   dish_code: string
-  field_number: string
+  field_number: string | null
   replicate_no: number
   sample_id: string
+  sample_display_number: string | null
   sample_number: number
   position_label: string | null
   taxon_common_name: string | null
@@ -279,8 +282,9 @@ export interface MeasurementHistory {
   dag_days: number[]
   samples: Array<{
     sample_id: string
+    sample_display_number: string | null
     sample_number: number
-    field_number: string
+    field_number: string | null
     position_label: string | null
     germinated_at: string | null
     measurements: Record<string, MeasurementTask>

@@ -68,10 +68,11 @@ def history(db: Session, experiment_id: str, material_id: str) -> dict:
     for task in tasks:
         sample = samples.setdefault(task["sample_id"], {"sample_id": task["sample_id"],
             "sample_number": task["sample_number"], "field_number": task["field_number"],
+            "sample_display_number": task["sample_display_number"],
             "position_label": task["position_label"], "germinated_at": task["germinated_at"], "measurements": {}})
         sample["measurements"][str(task["day_after_germination"])] = task
     return {"dag_days": derived["dag_days"],
-            "samples": sorted(samples.values(), key=lambda row: (row["field_number"], row["sample_number"]))}
+            "samples": sorted(samples.values(), key=lambda row: (row["field_number"] or "", row["sample_number"]))}
 
 
 def _ownership(db: Session, experiment_id: str, sample_id: str, timepoint_id: str):

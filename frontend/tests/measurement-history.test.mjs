@@ -41,7 +41,7 @@ test('compact progress omits repeated context, keeps task details and guards edi
   assert.match(table, /compact\?: boolean/)
   assert.match(table, /v-if="!compact"[^>]*label="实验编号"/)
   assert.match(table, /v-if="!compact"[^>]*label="物种"/)
-  for (const label of ['培养皿 / 幼苗','DAG','根长（mm）','苗长（mm）','计划日期','实际测定时间','状态 / 延迟','备注','操作']) assert.ok(table.includes(`label="${label}"`))
+  for (const label of ['幼苗编号','DAG','根长（mm）','苗长（mm）','计划日期','实际测定时间','状态 / 延迟','备注','操作']) assert.ok(table.includes(`label="${label}"`))
   assert.match(table, /v-if="row.measurement_id"/)
   assert.match(table, /measurementValue\(row.root_length_mm, row.root_unavailable, !!row.measurement_id\)/)
   assert.match(workbench, /:items="progressTasks"\s+compact/)

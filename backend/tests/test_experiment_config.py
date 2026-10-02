@@ -19,7 +19,7 @@ def make_lot(client, headers, name="Setaria viridis"):
 
 def design(lot_id, **changes):
     data = {
-        "name": "可配置萌发试验", "planned_start_date": "2026-10-01",
+        "experiment_type": "GER", "name": "可配置萌发试验", "planned_start_date": "2026-10-01",
         "protocol": {"seeds_per_dish": 20, "replicate_count": 3, "observation_period_days": 14,
                      "sampling_rule": "first_germinated", "sample_count": 5, "sample_scope": "per_dish",
                      "germination_criterion": "胚根可见"},
@@ -60,7 +60,7 @@ def test_configured_creation_defaults_and_workload(auth_client, tmp_path):
 
 def test_protocol_created_for_existing_draft(auth_client):
     client, headers = auth_client
-    experiment = client.post("/api/experiments", json={"name": "旧草稿实验"}, headers=headers).json()
+    experiment = client.post("/api/experiments", json={"experiment_type": "GER", "name": "旧草稿实验"}, headers=headers).json()
     path = f"/api/experiments/{experiment['id']}"
     _, lot = make_lot(client, headers)
     assert client.put(f"{path}/protocol", json=design(lot['id'])["protocol"], headers=headers).status_code == 200
@@ -161,7 +161,7 @@ def test_stage1_migration_round_trip_preserves_data(client, tmp_path):
     login = client.post("/api/auth/login", json={"username": "admin", "password": "test-password-123"}).json()
     headers = {"X-CSRF-Token": login["csrf_token"]}
     _, lot = make_lot(client, headers)
-    experiment = client.post("/api/experiments", json={"name": "迁移保留实验"}, headers=headers).json()
+    experiment = client.post("/api/experiments", json={"experiment_type": "GER", "name": "迁移保留实验"}, headers=headers).json()
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
     engine = make_engine(url)
@@ -170,7 +170,7 @@ def test_stage1_migration_round_trip_preserves_data(client, tmp_path):
                     ExperimentMaterial(experiment_id=experiment["id"], seed_lot_id=lot["id"], display_order=0)])
         db.commit()
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d2e7a46b910c"
         assert "seeds_per_dish" in {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(experiment_protocols)")}
     engine.dispose()
     command.downgrade(config, "9456099da4fd")
@@ -184,7 +184,7 @@ def test_stage1_migration_round_trip_preserves_data(client, tmp_path):
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d2e7a46b910c"
         assert conn.execute(text("SELECT seeds_per_dish FROM experiment_protocols WHERE experiment_id=:id"), {"id": experiment["id"]}).scalar() == 12
         assert conn.execute(text("SELECT display_order FROM experiment_materials WHERE experiment_id=:id"), {"id": experiment["id"]}).scalar() == 0
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []

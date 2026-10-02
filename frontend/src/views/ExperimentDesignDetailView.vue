@@ -315,7 +315,9 @@ onMounted(load)
   <PageBackButton to="/experiments" label="返回实验列表" />
   <div v-if="item" class="page-heading detail-heading">
     <div>
-      <div class="eyebrow">实验编号 {{ item.code }}</div>
+      <div class="eyebrow">
+        实验类型：{{ item.experiment_type_label }} · 实验编号 {{ item.code }}
+      </div>
       <h1>{{ item.name }}</h1>
       <p>
         核对材料和方案，确认置床编号后可分批登记实际置床时间。计划开始
@@ -530,7 +532,7 @@ onMounted(load)
           >
         </div>
         <el-table :data="config.materials" max-height="560">
-          <el-table-column label="实验编号" width="100"
+          <el-table-column label="材料编号" width="100"
             ><template #default="{ row }"
               ><span class="experiment-number-badge">{{
                 row.experiment_number

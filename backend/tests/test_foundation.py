@@ -24,7 +24,7 @@ def test_migration_and_sqlite_settings(client: TestClient, tmp_path):
         assert {"users", "taxa", "seed_lots", "experiments", "germination_observations", "seedling_measurements", "audit_logs", "import_jobs"} <= tables
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d2e7a46b910c"
         timepoint_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurement_timepoints)")}
         sample_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(seedling_samples)")}
         assert "day_after_germination" in timepoint_columns
@@ -77,10 +77,10 @@ def test_taxon_unique_and_seed_lot_relationship(auth_client):
 
 def test_experiment_crud_and_dashboard(auth_client):
     client, headers = auth_client
-    created = client.post("/api/experiments", json={"name": "萌发温度试验"}, headers=headers)
+    created = client.post("/api/experiments", json={"experiment_type": "GER", "name": "萌发温度试验"}, headers=headers)
     assert created.status_code == 201
     item = created.json()
-    assert item["code"].startswith("EXP-")
+    assert item["code"].startswith("GER-")
     assert item["status"] == "draft"
     updated = client.patch(f"/api/experiments/{item['id']}", json={"description": "设计草稿"}, headers=headers)
     assert updated.status_code == 200 and updated.json()["description"] == "设计草稿"
@@ -192,7 +192,7 @@ def test_dag_migration_round_trip_preserves_referenced_rows(client: TestClient, 
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c6d91f28a405"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d2e7a46b910c"
         assert connection.execute(text("SELECT day_after_germination FROM measurement_timepoints WHERE id=:id"), {"id": timepoint_id}).scalar() == 2
         index_names = {row[1] for row in connection.exec_driver_sql("PRAGMA index_list(measurement_timepoints)")}
         assert "uq_timepoint_experiment_dag" in index_names

@@ -10,7 +10,7 @@ from app.db.session import make_engine
 
 
 REPAIR_REVISION = "0b6111724c00"
-CURRENT_HEAD = "c6d91f28a405"
+CURRENT_HEAD = "d2e7a46b910c"
 PREVIOUS_REVISION = "e8b62c74a901"
 INDEX_NAME = "ix_import_jobs_file_hash"
 

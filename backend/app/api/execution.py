@@ -3,7 +3,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (BatchObservationInput, ObservationInput, ObservationPatch,
@@ -15,7 +15,7 @@ from app.services import germination_execution as execution
 from app.services import sowing_workflow as sowing
 from app.services import experiment_config as design
 from app.services.common import require_entity
-from app.services.ordering import display_number
+from app.services.ordering import display_number, dish_display_number, field_number, sample_display_number
 
 
 router = APIRouter(prefix="/experiments", tags=["germination execution"])
@@ -30,7 +30,7 @@ def sowing_sheet(experiment_id: str, db: Session = Depends(get_db), _user: User 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "置床清单"
-    sheet.append(("实验编号", "中文名", "学名", "原始材料编号", "系统种子批次编号", "来源",
+    sheet.append(("实验内材料编号", "中文名", "学名", "原始材料编号", "系统种子批次编号", "来源",
                   "采集/获得日期", "重复数", "每皿种子数", "培养皿现场编号"))
     for material in config["materials"]:
         number = display_number(material["experiment_number"])
@@ -39,7 +39,7 @@ def sowing_sheet(experiment_id: str, db: Session = Depends(get_db), _user: User 
             sheet.append((number, material["taxon_common_name"], material["taxon_scientific_name"],
                           material["source_code"], material["seed_lot_code"], material["source"],
                           material["collected_at"], count, material["effective_seeds_per_dish"],
-                          number if count == 1 else f"{number}-{replicate}"))
+                          dish_display_number(material["experiment_number"], replicate, count)))
     output = io.BytesIO()
     workbook.save(output)
     workbook.close()
@@ -109,14 +109,20 @@ def delete_observation(experiment_id: str, observation_id: str,
 @router.get("/{experiment_id}/samples")
 def list_samples(experiment_id: str, db: Session = Depends(get_db), _user: User = Depends(current_user)):
     execution.execution_summary(db, experiment_id)
-    rows = db.execute(select(SeedlingSample, GerminationDish).join(
+    rows = db.execute(select(SeedlingSample, GerminationDish, ExperimentMaterial).join(
         GerminationDish, SeedlingSample.dish_id == GerminationDish.id).join(
         ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id).where(
         ExperimentMaterial.experiment_id == experiment_id).order_by(
-        GerminationDish.code, SeedlingSample.sample_number))
+        ExperimentMaterial.experiment_number, GerminationDish.replicate_no, SeedlingSample.sample_number)).all()
+    counts = dict(db.execute(select(GerminationDish.material_id, func.max(GerminationDish.replicate_no))
+                            .join(ExperimentMaterial).where(ExperimentMaterial.experiment_id == experiment_id)
+                            .group_by(GerminationDish.material_id)).all())
     return [{"id": sample.id, "dish_id": dish.id, "dish_code": dish.code,
              "sample_number": sample.sample_number,
+             "field_number": field_number(material, counts[material.id], dish.replicate_no),
+             "sample_display_number": sample_display_number(material.experiment_number, dish.replicate_no,
+                                                            counts[material.id], sample.sample_number),
              "germinated_at": execution.iso_utc(sample.germinated_at),
              "source_observation_id": sample.source_observation_id,
              "position_label": sample.position_label}
-            for sample, dish in rows]
+            for sample, dish, material in rows]

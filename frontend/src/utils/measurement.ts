@@ -82,6 +82,7 @@ export function taskSearchMatches(task: MeasurementTask, search: string) {
     [
       task.experiment_number,
       task.field_number,
+      task.sample_display_number,
       task.taxon_common_name,
       task.taxon_scientific_name,
       `幼苗${String(task.sample_number).padStart(2, '0')}`,
@@ -99,7 +100,7 @@ export function taskSearchMatches(task: MeasurementTask, search: string) {
 export function materialProgressTasks(tasks: MeasurementTask[]): MeasurementTask[] {
   return [...tasks].sort(
     (a, b) =>
-      a.field_number.localeCompare(b.field_number, 'en', { numeric: true }) ||
+      (a.field_number || '').localeCompare(b.field_number || '', 'en', { numeric: true }) ||
       a.replicate_no - b.replicate_no ||
       a.sample_number - b.sample_number ||
       a.day_after_germination - b.day_after_germination ||

@@ -112,7 +112,7 @@ async function savePosition(value: string) {
 <template>
   <div class="measurement-editor">
     <h3>
-      {{ task.field_number }} · 幼苗{{ String(task.sample_number).padStart(2, '0') }}
+      幼苗 {{ task.sample_display_number || '编号未确认' }}
       <el-tag>DAG {{ task.day_after_germination }}</el-tag>
     </h3>
     <p>

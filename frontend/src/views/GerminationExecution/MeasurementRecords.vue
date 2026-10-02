@@ -94,7 +94,11 @@ defineExpose({
     为真实零值，NA 为无法测量。
   </p>
   <div class="measurement-record-filters">
-    <el-input v-model="search" placeholder="搜索编号、中文名、学名或幼苗" clearable />
+    <el-input
+      v-model="search"
+      placeholder="搜索材料、培养皿或幼苗编号（001-01 / 001-1-01）、中文名或学名"
+      clearable
+    />
     <el-select
       v-model="materialIds"
       multiple

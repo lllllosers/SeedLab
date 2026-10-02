@@ -20,7 +20,7 @@ from app.services.local_time import local_date, today
 def setup_experiment(client, headers, days=(0, 1, 3), replicates=1):
     taxon = client.post("/api/taxa", json={"scientific_name": "Setaria viridis", "common_name": "狗尾草"}, headers=headers).json()
     lot = client.post("/api/seed-lots", json={"taxon_id": taxon["id"], "quantity": 100, "source_code": "SRC-1"}, headers=headers).json()
-    response = client.post("/api/experiments/configured", json={"name": "幼苗测定试验",
+    response = client.post("/api/experiments/configured", json={"experiment_type": "GER", "name": "幼苗测定试验",
         "protocol": {"seeds_per_dish": 10, "replicate_count": replicates, "observation_period_days": 30,
                      "sampling_rule": "first_germinated", "sample_count": 2, "sample_scope": "per_dish",
                      "germination_criterion": "胚根露出"}, "materials": [{"seed_lot_id": lot["id"]}],
@@ -224,7 +224,7 @@ def test_database_constraints_and_migration_roundtrip(tmp_path, monkeypatch):
     command.upgrade(config, "head")
     engine = make_engine(url)
     with engine.connect() as conn:
-        assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "c6d91f28a405"
+        assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "d2e7a46b910c"
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(text("UPDATE seedling_measurements SET root_length_mm=NULL, root_unavailable=0"))

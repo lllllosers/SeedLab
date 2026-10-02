@@ -1,6 +1,6 @@
 """Experiment design rules. No execution records are created in Stage 1."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.api.schemas import ConfiguredExperimentInput, MaterialInput, MaterialPatch, ProtocolInput
 from app.models import Experiment, ExperimentMaterial, ExperimentProtocol, GerminationDish, MeasurementTimepoint, SeedLot, Taxon, User
-from app.services.common import commit_or_conflict, flush_or_conflict, next_code, record, require_entity
+from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
+from app.services.experiment_identity import next_experiment_code, experiment_batch_month
+from app.api.schemas import ExperimentOut
 from app.services.ordering import material_key
 
 
@@ -138,7 +140,7 @@ def configuration(db: Session, experiment_id: str) -> dict:
     estimate = workload(experiment, protocol, materials, days) if complete and materials else None
     owner = db.get(User, experiment.owner_id) if experiment.owner_id else None
     return {
-        "experiment": experiment, "protocol": protocol,
+        "experiment": ExperimentOut.model_validate(experiment), "protocol": protocol,
         "owner_name": owner.display_name if owner else None,
         "materials": [{**material_dict(db, item, protocol), "preview_number": index}
                       for index, item in enumerate(materials, start=1)],
@@ -159,7 +161,8 @@ def preview(data: ConfiguredExperimentInput, db: Session) -> dict:
 
 def create_configured(db: Session, data: ConfiguredExperimentInput, user_id: str) -> dict:
     preview(data, db)
-    experiment = Experiment(code=next_code(db, Experiment, f"EXP-{datetime.now().year}-", 3),
+    experiment = Experiment(code=next_experiment_code(db, data.experiment_type, experiment_batch_month(data.planned_start_date)),
+                            experiment_type=data.experiment_type,
                             name=data.name.strip(), description=data.description, planned_start_date=data.planned_start_date,
                             owner_id=user_id)
     db.add(experiment)

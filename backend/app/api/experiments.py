@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -9,7 +7,8 @@ from app.core.auth import current_user
 from app.db.session import get_db
 from app.models import Experiment, User
 from app.models.entities import now_utc
-from app.services.common import commit_or_conflict, flush_or_conflict, next_code, record, require_entity
+from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
+from app.services.experiment_identity import next_experiment_code, experiment_batch_month
 from app.services.experiment_config import editable, set_status
 from app.services import experiment_lifecycle as lifecycle
 
@@ -33,7 +32,8 @@ def list_experiments(q: str = "", status: str | None = None, db: Session = Depen
 
 @router.post("", response_model=ExperimentOut, status_code=201)
 def create_experiment(data: ExperimentIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    item = Experiment(code=next_code(db, Experiment, f"EXP-{datetime.now().year}-", 3), owner_id=user.id, **data.model_dump())
+    item = Experiment(code=next_experiment_code(db, data.experiment_type, experiment_batch_month(data.planned_start_date)),
+                      owner_id=user.id, **data.model_dump())
     db.add(item)
     flush_or_conflict(db)
     record(db, user.id, "create", "Experiment", item.id, None, snapshot(item))

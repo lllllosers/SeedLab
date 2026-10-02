@@ -204,7 +204,7 @@ async function cancel(dishId: string) {
           aria-label="选择培养皿"
         />
         <div class="grow">
-          <b>{{ dish.field_number || dish.code }}</b>
+          <b>{{ dish.field_number || '编号未确认' }}</b>
           <small
             >{{
               dish.sown_at
