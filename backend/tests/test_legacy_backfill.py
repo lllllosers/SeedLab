@@ -1,0 +1,132 @@
+"""Source integration is opt-in; the original workbook is never checked into Git."""
+import hashlib
+import os
+from pathlib import Path
+import sqlite3
+import sys
+
+from alembic import command
+from alembic.config import Config
+import pytest
+from sqlalchemy.orm import Session
+
+from app.db.session import make_engine
+from app.models import User
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'maintenance'))
+import backfill_legacy_200_species as legacy
+
+
+@pytest.fixture(scope='module')
+def source_path():
+    value = os.environ.get('SEEDLAB_LEGACY_SOURCE')
+    if not value:
+        pytest.skip('Set SEEDLAB_LEGACY_SOURCE for read-only original-workbook integration')
+    return Path(value)
+
+
+@pytest.fixture(scope='module')
+def source_data(source_path):
+    return legacy.read_source(source_path)
+
+
+@pytest.fixture
+def temporary_target(tmp_path):
+    path = tmp_path / 'seedlab.db'
+    url = f'sqlite:///{path.as_posix()}'
+    config = Config(str(legacy.BACKEND / 'alembic.ini'))
+    config.set_main_option('script_location', str(legacy.BACKEND / 'alembic'))
+    config.attributes['database_url'] = url
+    command.upgrade(config, 'head')
+    engine = make_engine(url)
+    with Session(engine) as db:
+        user = User(username='legacy-test-owner', display_name='临时测试负责人', password_hash='test-only')
+        db.add(user)
+        db.commit()
+        owner_id = user.id
+    engine.dispose()
+    return path, owner_id
+
+
+def test_formal_and_nontemporary_targets_are_rejected(tmp_path):
+    outside = Path(__file__).resolve().parents[2] / '.test-temp-legacy' / 'test.db'
+    with pytest.raises(ValueError, match='系统临时目录'):
+        legacy.temporary_database(outside)
+    with pytest.raises(ValueError, match='SeedLabData'):
+        legacy.temporary_database(tmp_path / 'SeedLabData' / 'seedlab.db')
+    root = tmp_path / 'runtime'
+    root.mkdir()
+    (root / 'installation.json').write_text('{}', encoding='utf8')
+    with pytest.raises(ValueError, match='运行中的数据目录'):
+        legacy.temporary_database(root / 'seedlab.db')
+    missing = tmp_path / 'never-created.db'
+    with pytest.raises(ValueError, match='请先'):
+        legacy.temporary_database(missing)
+    assert not missing.exists()
+
+
+def test_wrong_source_hash_is_rejected_without_database_access(tmp_path, capsys):
+    source = tmp_path / 'synthetic-invalid.xlsx'
+    source.write_bytes(b'not the original workbook')
+    missing = tmp_path / 'never-created.db'
+    assert legacy.main(['--source', str(source), '--database', str(missing), '--owner', 'test']) == 1
+    assert 'SHA256' in capsys.readouterr().err
+    assert not missing.exists()
+
+
+def test_owner_validation_is_read_only(temporary_target):
+    path, _ = temporary_target
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match='负责人'):
+        legacy.inspect_target(path, 'missing-owner')
+    assert path.read_bytes() == before
+    assert not Path(str(path) + '-wal').exists()
+    assert not Path(str(path) + '-shm').exists()
+
+
+def test_original_source_baseline_and_empty_samples(source_data):
+    assert {key: source_data.metrics[key] for key in legacy.EXPECTED} == legacy.EXPECTED
+    assert source_data.metrics['all_dag_empty_samples'] == [[27, n] for n in range(1, 11)]
+    names = {m.number: m.scientific_name for m in source_data.materials}
+    assert names[33] == names[153] == 'Lepidium apetalum'
+    assert names[55] == names[56] == 'Lappula myosotis'
+    assert {k: names[k] for k in legacy.SCIENTIFIC_NAMES} == legacy.SCIENTIFIC_NAMES
+
+
+def test_default_dry_run_apply_and_repeat_rejection(source_path, source_data, temporary_target, capsys):
+    path, _ = temporary_target
+    before = path.read_bytes()
+    with source_path.open('rb') as stream:
+        source_hash_before = hashlib.file_digest(stream, 'sha256').hexdigest()
+    args = ['--source', str(source_path), '--database', str(path), '--owner', 'legacy-test-owner']
+    assert legacy.main(args) == 0
+    assert 'dry-run' in capsys.readouterr().out
+    assert path.read_bytes() == before
+    assert not Path(str(path) + '-wal').exists() and not Path(str(path) + '-shm').exists()
+    apply_args = ['--source', str(source_path), '--data-root', str(path.parent), '--owner', 'legacy-test-owner', '--apply']
+    assert legacy.main(apply_args) == 0
+    result = capsys.readouterr().out
+    assert 'GER-202608-001' in result and '"wide_rows": 1665' in result
+    engine = make_engine(f'sqlite:///{path.as_posix()}')
+    with Session(engine) as db:
+        experiment = db.query(legacy.Experiment).one()
+        assert legacy.reconcile_database(db, source_data, experiment)['value_differences'] == 0
+        assert legacy.reconcile_workbook(legacy.build(db, [experiment.id]), source_data)['all_dag_empty_rows'] == 10
+    engine.dispose()
+    assert legacy.main(args + ['--apply']) == 1
+    assert '已有业务数据' in capsys.readouterr().err
+    with source_path.open('rb') as stream:
+        assert hashlib.file_digest(stream, 'sha256').hexdigest() == source_hash_before == legacy.SOURCE_SHA256
+
+
+def test_validation_failure_rolls_back_all_business_rows(source_data, temporary_target, monkeypatch):
+    path, owner_id = temporary_target
+    def fail(*args):
+        raise ValueError('injected export validation failure')
+    monkeypatch.setattr(legacy, 'reconcile_workbook', fail)
+    with pytest.raises(ValueError, match='injected'):
+        legacy.apply(source_data, legacy.temporary_database(path), owner_id)
+    with sqlite3.connect(path) as db:
+        assert all(db.execute(f'SELECT count(*) FROM {table}').fetchone()[0] == 0 for table in legacy.BUSINESS_TABLES)
+        assert db.execute('SELECT count(*) FROM audit_logs').fetchone()[0] == 0
+        assert db.execute('SELECT count(*) FROM users').fetchone()[0] == 1
