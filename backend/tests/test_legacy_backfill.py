@@ -115,8 +115,10 @@ def test_default_dry_run_apply_and_repeat_rejection(source_path, source_data, te
     engine = make_engine(f'sqlite:///{path.as_posix()}')
     with Session(engine) as db:
         experiment = db.query(legacy.Experiment).one()
+        assert db.query(legacy.ExperimentProtocol).one().observation_period_days is None
         assert legacy.reconcile_database(db, source_data, experiment)['value_differences'] == 0
         report = legacy.reconcile_workbook(legacy.build(db, [experiment.id]), source_data)
+        assert report['value_differences'] == 0
         assert report['all_dag_empty_actual_rows'] == 10 and report['all_dag_empty_rows'] == 345
         assert (report['planned_sample_slots'], report['planned_measurement_slots'], report['obtained_sample_slots'],
             report['measured_slots'], report['absent_sample_slots'], report['unmeasured_actual_slots'],

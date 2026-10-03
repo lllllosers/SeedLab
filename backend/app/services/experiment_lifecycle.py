@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import delete, select
@@ -7,19 +7,17 @@ from sqlalchemy.orm import Session
 from app.models import (Experiment, ExperimentMaterial, ExperimentProtocol, GerminationDish,
                         GerminationObservation, MeasurementTimepoint, SeedlingMeasurement, SeedlingSample)
 from app.services.common import commit_or_conflict, record, require_entity
-from app.services.local_time import iso_utc, utc_naive
+from app.services.local_time import iso_utc
 from app.services.measurement_query import summary
 
 
 def completion_check(db: Session, experiment_id: str):
     experiment = require_entity(db, Experiment, experiment_id)
-    protocol = db.scalar(select(ExperimentProtocol).where(ExperimentProtocol.experiment_id == experiment_id))
     dishes = list(db.scalars(select(GerminationDish).join(ExperimentMaterial,
         GerminationDish.material_id == ExperimentMaterial.id).where(ExperimentMaterial.experiment_id == experiment_id)))
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
     pending = sum(dish.sown_at is None and dish.cancelled_at is None for dish in dishes)
-    observing = sum(bool(dish.sown_at and (not protocol or not protocol.observation_period_days or
-        utc_naive(dish.sown_at) + timedelta(days=protocol.observation_period_days) > now)) for dish in dishes)
+    # A planned duration is not evidence that observation has been completed.
+    observing = sum(dish.sown_at is not None and dish.cancelled_at is None for dish in dishes)
     measurement = summary(db, experiment_id)
     outstanding = sum(measurement[key] for key in ("due_today_count", "overdue_count", "upcoming_count", "unschedulable_count"))
     return {"pending_dish_count": pending, "observing_dish_count": observing, **measurement,
@@ -30,7 +28,7 @@ def completion_check(db: Session, experiment_id: str):
 def require_complete(db: Session, experiment_id: str):
     result = completion_check(db, experiment_id)
     if not result["can_complete"]:
-        raise HTTPException(409, f"实验尚未完成：待置床 {result['pending_dish_count']} 个、仍在观察期 {result['observing_dish_count']} 个、幼苗测定 {result['measurement_pending_count']} 项。若决定提前结束，请使用“终止实验”。")
+        raise HTTPException(409, f"实验尚未完成：待置床 {result['pending_dish_count']} 个、仍在观察 {result['observing_dish_count']} 个、幼苗测定 {result['measurement_pending_count']} 项。计划观察天数不代表观察已完成；若决定结束实验，请使用“终止实验”。")
 
 
 def complete(db: Session, experiment_id: str, user_id: str):

@@ -156,8 +156,13 @@ def test_completed_allows_correction_not_creation_or_deletion(auth_client, tmp_p
     tasks = client.get(f"{base}/measurement-tasks").json()["tasks"]
     item = client.post(f"{base}/measurements", json=payload(tasks[0], datetime.now(timezone.utc)), headers=headers).json()
     assert client.post(f"{base}/measurements", json=payload(tasks[1], datetime.now(timezone.utc)), headers=headers).status_code == 201
-    assert client.patch(f"{base}/sowing/{dish['id']}", json={"sown_at": (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()}, headers=headers).status_code == 200
-    assert client.patch(base, json={"status": "completed"}, headers=headers).status_code == 200
+    # Existing completed data keeps its correction policy, independently of planned days.
+    engine = make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE experiments SET status='completed' WHERE id=:id"),
+                     {"id": base.split('/')[-1]})
+    engine.dispose()
+    assert client.get(base).json()["status"] == "completed"
     assert client.post(f"{base}/measurements", json=payload(tasks[1], datetime.now(timezone.utc)), headers=headers).status_code == 409
     assert client.patch(f"{base}/measurements/{item['id']}", json={"notes": "复核完成"}, headers=headers).status_code == 200
     assert client.delete(f"{base}/measurements/{item['id']}", headers=headers).status_code == 409

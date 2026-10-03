@@ -65,7 +65,7 @@ def effective(material: ExperimentMaterial | MaterialInput, protocol: Experiment
 
 def validate_all(protocol: ExperimentProtocol | ProtocolInput, materials: list[ExperimentMaterial | MaterialInput]) -> None:
     if not protocol or any(getattr(protocol, key) is None for key in (
-        "seeds_per_dish", "replicate_count", "observation_period_days", "sampling_rule",
+        "seeds_per_dish", "replicate_count", "sampling_rule",
         "sample_count", "sample_scope", "germination_criterion"
     )):
         raise HTTPException(422, "请先填写完整的默认实验方案")
@@ -90,7 +90,8 @@ def workload(experiment: Experiment | ConfiguredExperimentInput, protocol: Exper
         seeds += repeats * value["effective_seeds_per_dish"]
         samples += value["effective_sample_count"] * (repeats if protocol.sample_scope == "per_dish" else 1)
     start = experiment.planned_start_date
-    finish = start + timedelta(days=protocol.observation_period_days + max(days)) if start and days else None
+    finish = (start + timedelta(days=protocol.observation_period_days + max(days))
+              if start and protocol.observation_period_days is not None and days else None)
     return {
         "material_count": len(materials), "estimated_dish_count": dishes,
         "estimated_seed_count": seeds, "estimated_sample_count": samples,
@@ -135,7 +136,7 @@ def configuration(db: Session, experiment_id: str) -> dict:
     materials = materials_for(db, experiment_id)
     days = [item.day_after_germination for item in days_for(db, experiment_id)]
     complete = protocol and all(getattr(protocol, key) is not None for key in (
-        "seeds_per_dish", "replicate_count", "observation_period_days", "sampling_rule",
+        "seeds_per_dish", "replicate_count", "sampling_rule",
         "sample_count", "sample_scope", "germination_criterion"))
     estimate = workload(experiment, protocol, materials, days) if complete and materials else None
     owner = db.get(User, experiment.owner_id) if experiment.owner_id else None
@@ -305,7 +306,7 @@ def set_status(db: Session, experiment: Experiment, target: str) -> None:
         else:
             fields = {
                 "seeds_per_dish": "每皿种子数", "replicate_count": "重复数",
-                "observation_period_days": "观察周期", "sampling_rule": "取样方式",
+                "sampling_rule": "取样方式",
                 "sample_count": "取样数", "sample_scope": "取样范围",
                 "germination_criterion": "发芽判定标准",
             }

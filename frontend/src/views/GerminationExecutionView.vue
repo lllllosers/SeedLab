@@ -103,7 +103,7 @@ onMounted(load)
   </div>
   <template v-if="execution"
     ><div v-if="execution.observation_period_overdue" class="execution-alert">
-      <b>已超过计划观察期</b><span>仍可继续记录真实巡检与晚期发芽；实验不会自动完成。</span>
+      <b>超过计划观察期限</b><span>仍可继续记录真实巡检与晚期发芽；实验不会自动完成。</span>
     </div>
     <section class="surface-panel execution-workspace">
       <el-tabs v-model="tab" :before-leave="beforeTabLeave"

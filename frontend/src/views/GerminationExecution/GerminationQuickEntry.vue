@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { germinationText } from '../../utils/germination'
+import { germinationText, todayPendingDish, observationPlanOverdue } from '../../utils/germination'
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, errorMessage } from '../../api/client'
@@ -24,13 +24,11 @@ function sampleDone(dish: GerminationExecution['dishes'][number]) {
 const visibleDishes = computed(() =>
   props.execution.dishes.filter((dish) => {
     if (!dish.sown_at || dish.cancelled_at) return false
-    const periodEnded =
-      !!dish.observation_period_end_at &&
-      new Date(dish.observation_period_end_at).getTime() < Date.now()
-    if (mode.value === 'pending' && (dish.today_observed || periodEnded)) return false
+    if (mode.value === 'pending' && !todayPendingDish(dish)) return false
     if (mode.value === 'observed' && !dish.today_observed) return false
     if (mode.value === 'sampled' && !sampleDone(dish)) return false
-    if (mode.value === 'ended' && !periodEnded) return false
+    if (mode.value === 'ended' && !observationPlanOverdue(dish.observation_period_end_at))
+      return false
     if (sownDate.value && dish.sown_at.slice(0, 10) !== sownDate.value) return false
     const term = search.value.trim().toLocaleLowerCase()
     return (
@@ -80,14 +78,17 @@ async function save() {
     if (raw === '') continue
     const count = Number(raw)
     if (!Number.isInteger(count) || count < 0)
-      return ElMessage.warning(`${dish.field_number || '编号未确认'} 的新增发芽数请按整粒数量填写，不能小于 0；没有新增时填 0`)
+      return ElMessage.warning(
+        `${dish.field_number || '编号未确认'} 的新增发芽数请按整粒数量填写，不能小于 0；没有新增时填 0`,
+      )
     entries.push({
       dish_id: dish.id,
       new_germinated_count: count,
       notes: notes[dish.id]?.trim() || null,
     })
   }
-  if (!entries.length) return ElMessage.warning('请至少填写一个培养皿的新增发芽数；留空表示本次未巡检')
+  if (!entries.length)
+    return ElMessage.warning('请至少填写一个培养皿的新增发芽数；留空表示本次未巡检')
   const date = new Date(observedAt.value)
   if (Number.isNaN(date.getTime())) return ElMessage.warning('请填写有效的巡检时间')
   saving.value = true
@@ -155,7 +156,7 @@ async function save() {
         label="已达到取样目标"
         value="sampled"
       />
-      <el-option label="观察期已结束" value="ended" />
+      <el-option label="超过计划观察期限" value="ended" />
     </el-select>
     <el-date-picker
       v-model="sownDate"

@@ -37,7 +37,7 @@ const labels: Record<string, string> = {
   numbering_locked_at: '编号确认时间',
   seeds_per_dish: '每皿粒数',
   replicate_count: '重复数',
-  observation_period_days: '观察周期（天）',
+  observation_period_days: '计划发芽观察天数',
   sample_count: '取样数',
   sample_scope: '取样范围',
   sampling_rule: '取样规则',

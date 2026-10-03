@@ -23,6 +23,7 @@ import {
   clearMaterialPrefill,
 } from '../utils/materialPrefill'
 import { effectiveMaterial } from '../utils/effectiveMaterial'
+import { defaultExperimentProtocol, validDishPlan } from '../utils/experimentProtocol'
 
 const router = useRouter()
 const auth = useAuth()
@@ -50,16 +51,7 @@ const reviewMaterials = computed(() =>
   })),
 )
 const dagDays = ref<number[]>([3, 7, 14])
-const protocol = ref<ExperimentProtocol>({
-  seeds_per_dish: 20,
-  replicate_count: 3,
-  observation_period_days: 14,
-  sampling_rule: 'first_germinated',
-  sample_count: 5,
-  sample_scope: 'per_dish',
-  germination_criterion: '',
-  summary: null,
-})
+const protocol = ref<ExperimentProtocol>(defaultExperimentProtocol())
 watch(lots, (current) => {
   const old = new Map(materials.value.map((item) => [item.seed_lot_id, item]))
   materials.value = current.map(
@@ -124,17 +116,12 @@ function payload() {
   }
 }
 function validCurrent(): boolean {
-  if (step.value === 0 && !form.experiment_type) return warn('请先选择实验类型；列表未加载时请刷新后重试')
+  if (step.value === 0 && !form.experiment_type)
+    return warn('请先选择实验类型；列表未加载时请刷新后重试')
   if (step.value === 0 && form.name.trim().length < 2) return warn('请填写至少 2 个字的实验名称')
   if (step.value === 1 && !lots.value.length) return warn('请至少选择一个种子批次')
-  if (
-    step.value === 2 &&
-    (!protocol.value.seeds_per_dish ||
-      !protocol.value.replicate_count ||
-      !protocol.value.observation_period_days ||
-      !protocol.value.germination_criterion.trim())
-  )
-    return warn('请填写完整且大于 0 的默认方案与发芽判定标准')
+  if (step.value === 2 && !validDishPlan(protocol.value))
+    return warn('请填写每皿种子数、重复数和发芽判定标准；计划观察天数可留空，有值时须为正整数')
   if (step.value === 3 && (!protocol.value.sample_count || protocol.value.sample_count < 1))
     return warn('取样数 N 必须大于 0')
   if (step.value === 4 && !dagDays.value.length) return warn('请至少添加一个 DAG 时间点')
@@ -291,7 +278,11 @@ async function create() {
           <h3>默认方案</h3>
           <p>
             每皿 {{ protocol.seeds_per_dish }} 粒 · 每材料 {{ protocol.replicate_count }} 次重复 ·
-            观察 {{ protocol.observation_period_days }} 天
+            计划发芽观察：{{
+              protocol.observation_period_days === null
+                ? '未设置'
+                : `${protocol.observation_period_days} 天`
+            }}
           </p>
           <p>
             按发芽顺序取前 {{ protocol.sample_count }} 株，{{

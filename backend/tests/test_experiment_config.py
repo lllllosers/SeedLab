@@ -111,6 +111,8 @@ def test_material_add_duplicate_order_remove_and_inactive(auth_client):
     ({"seeds_per_dish": 0}, {}, 422),
     ({"replicate_count": 0}, {}, 422),
     ({"observation_period_days": 0}, {}, 422),
+    ({"observation_period_days": -1}, {}, 422),
+    ({"observation_period_days": 1.5}, {}, 422),
     ({"sample_count": 0}, {}, 422),
     ({"sample_count": 21}, {}, 422),
     ({"sample_scope": "per_material", "sample_count": 61}, {}, 422),

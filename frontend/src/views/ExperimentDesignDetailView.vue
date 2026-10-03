@@ -12,6 +12,7 @@ import type {
 import { dateText, statusLabels } from '../utils'
 import PageBackButton from '../components/PageBackButton.vue'
 import { useClientPagination } from '../composables/useClientPagination'
+import { defaultExperimentProtocol } from '../utils/experimentProtocol'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,16 +37,7 @@ const info = reactive({
   description: '',
   planned_start_date: '',
 })
-const protocol = reactive<ExperimentProtocol>({
-  seeds_per_dish: 20,
-  replicate_count: 3,
-  observation_period_days: 14,
-  sampling_rule: 'first_germinated',
-  sample_count: 5,
-  sample_scope: 'per_dish',
-  germination_criterion: '',
-  summary: null,
-})
+const protocol = reactive<ExperimentProtocol>(defaultExperimentProtocol())
 const material = reactive({
   id: '',
   seeds_per_dish_override: null as number | null,
@@ -264,17 +256,16 @@ async function completeExperiment() {
     }>(`${base.value}/completion-check`)
     if (!data.can_complete) {
       await ElMessageBox.alert(
-        `待置床 ${data.pending_dish_count} 个、仍在观察期 ${data.observing_dish_count} 个、幼苗测定 ${data.measurement_pending_count} 项。如果实验决定提前结束，请使用“终止实验”。`,
+        `待置床 ${data.pending_dish_count} 个、仍在观察 ${data.observing_dish_count} 个、幼苗测定 ${data.measurement_pending_count} 项。计划观察天数不代表观察已完成；如果决定结束实验，请使用“终止实验”。`,
         '实验尚未完成',
         { confirmButtonText: '继续实验' },
       )
       return
     }
-    await ElMessageBox.confirm(
-      '所有观察周期和幼苗测定均已完成。完成后不能新增巡检和测定，仍可复核修改已测值。',
-      '完成实验',
-      { confirmButtonText: '确认完成', cancelButtonText: '继续实验' },
-    )
+    await ElMessageBox.confirm('确认完成后不能新增巡检和测定，仍可复核修改已测值。', '完成实验', {
+      confirmButtonText: '确认完成',
+      cancelButtonText: '继续实验',
+    })
     await run(() => api.post(`${base.value}/complete`), '实验已完成')
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))
@@ -445,8 +436,14 @@ onMounted(load)
             <dd>{{ config.protocol.replicate_count }} 次</dd>
           </div>
           <div>
-            <dt>观察周期</dt>
-            <dd>{{ config.protocol.observation_period_days }} 天</dd>
+            <dt>计划发芽观察天数</dt>
+            <dd>
+              {{
+                config.protocol.observation_period_days === null
+                  ? '未设置'
+                  : `${config.protocol.observation_period_days} 天`
+              }}
+            </dd>
           </div>
           <div>
             <dt>取样方式</dt>
@@ -637,8 +634,16 @@ onMounted(load)
           ><el-input-number v-model="protocol.seeds_per_dish" :min="1" /></el-form-item
         ><el-form-item label="重复数"
           ><el-input-number v-model="protocol.replicate_count" :min="1" /></el-form-item
-        ><el-form-item label="观察周期（天）"
-          ><el-input-number v-model="protocol.observation_period_days" :min="1" /></el-form-item
+        ><el-form-item label="计划发芽观察天数（可选）"
+          ><el-input-number
+            v-model="protocol.observation_period_days"
+            :min="1"
+            :precision="0"
+            @change="protocol.observation_period_days = $event ?? null"
+          />
+          <p class="wizard-help">
+            仅用于预计日期和超期提醒，不会自动结束观察；不确定时可留空。
+          </p></el-form-item
         ><el-form-item label="取样数 N"
           ><el-input-number v-model="protocol.sample_count" :min="1"
         /></el-form-item>

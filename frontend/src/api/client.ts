@@ -20,7 +20,7 @@ export function errorMessage(error: unknown): string {
         experiment_type: '实验类型',
         seeds_per_dish: '每皿种子数',
         replicate_count: '重复数',
-        observation_period_days: '观察周期',
+        observation_period_days: '计划发芽观察天数',
         sample_count: '取样数',
         seeds_per_dish_override: '材料每皿种子数',
         replicate_count_override: '材料重复数',

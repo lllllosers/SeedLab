@@ -300,11 +300,17 @@ def test_correction_can_fill_remaining_first_n_slots(auth_client):
     assert sum(sample["source_observation_id"] == earlier["id"] for sample in samples) == 2
 
 
-def test_completed_experiment_stops_new_observations(auth_client):
+def test_completed_experiment_stops_new_observations(auth_client, tmp_path):
     client, headers = auth_client
     base, _, _ = configured(client, headers)
     dish = start(client, headers, base).json()["dishes"][0]
-    assert client.patch(base, json={"status": "completed"}, headers=headers).status_code == 200
+    # Seed an already completed legacy experiment; elapsed plan days no longer complete it.
+    engine = make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE experiments SET status='completed' WHERE id=:id"),
+                     {"id": base.split('/')[-1]})
+    engine.dispose()
+    assert client.get(base).json()["status"] == "completed"
     assert batch(client, headers, base, MORNING,
                  [{"dish_id": dish["id"], "new_germinated_count": 0}]).status_code == 409
 

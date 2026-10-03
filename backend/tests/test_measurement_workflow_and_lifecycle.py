@@ -162,7 +162,7 @@ def test_termination_requires_reason_preserves_facts_and_is_readonly(auth_client
     assert any(r['after'] and r['after'].get('termination_reason')=='材料污染' for r in client.get('/api/audit-logs').json()['items'])
 
 
-def test_completion_preflight_pending_observing_all_dag_and_success(auth_client,tmp_path):
+def test_completion_preflight_does_not_infer_observation_completion_from_plan(auth_client,tmp_path):
     client,headers=auth_client
     base,dish,_,_=setup_experiment(client,headers,days=(0,21),replicates=2)
     check=client.get(base+'/completion-check').json()
@@ -183,10 +183,13 @@ def test_completion_preflight_pending_observing_all_dag_and_success(auth_client,
     engine.dispose()
     for task in client.get(base+'/measurement-tasks').json()['tasks']:
         assert client.post(base+'/measurements',json=payload(task,datetime.now(timezone.utc)),headers=headers).status_code==201
-    assert client.get(base+'/completion-check').json()['can_complete']
-    assert client.post(base+'/complete',headers=headers).status_code==200
-    assert client.patch(base,json={'status':'active'},headers=headers).status_code==409
-    assert any(r['after'] and r['after'].get('status')=='completed' for r in client.get('/api/audit-logs').json()['items'])
+    check=client.get(base+'/completion-check').json()
+    assert check['measurement_pending_count']==0 and check['observing_dish_count']==1
+    assert not check['can_complete']
+    assert client.post(base+'/complete',headers=headers).status_code==409
+    assert client.patch(base,json={'status':'completed'},headers=headers).status_code==409
+    assert client.get(base).json()['status']=='active'
+    assert not any(r['after'] and r['after'].get('status')=='completed' for r in client.get('/api/audit-logs').json()['items'])
 
 
 def test_reset_backups_atomicity_preservation_cli_and_login(auth_client,tmp_path,monkeypatch):

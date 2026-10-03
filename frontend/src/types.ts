@@ -51,7 +51,7 @@ export interface Experiment {
 export interface ExperimentProtocol {
   seeds_per_dish: number
   replicate_count: number
-  observation_period_days: number
+  observation_period_days: number | null
   sampling_rule: string
   sample_count: number
   sample_scope: 'per_dish' | 'per_material'

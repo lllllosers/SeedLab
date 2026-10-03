@@ -22,13 +22,18 @@ const protocol = defineModel<ExperimentProtocol>({ required: true })
         :precision="0"
         controls-position="right"
     /></el-form-item>
-    <el-form-item label="计划发芽观察期限（天）"
+    <el-form-item label="计划发芽观察天数（可选）"
       ><el-input-number
         v-model="protocol.observation_period_days"
+        @change="protocol.observation_period_days = $event ?? null"
         :min="1"
         :precision="0"
         controls-position="right"
-    /></el-form-item>
+      />
+      <p class="wizard-help">
+        仅用于预计日期和超期提醒，不会自动结束观察；不确定时可留空。
+      </p></el-form-item
+    >
   </div>
   <el-form-item label="发芽判定标准"
     ><el-input

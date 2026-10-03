@@ -159,7 +159,7 @@ class ExperimentOut(ORMModel):
 class ProtocolInput(BaseModel):
     seeds_per_dish: int = Field(gt=0)
     replicate_count: int = Field(gt=0)
-    observation_period_days: int = Field(gt=0)
+    observation_period_days: int | None = Field(default=None, gt=0)
     sampling_rule: str = Field(default="first_germinated", min_length=1, max_length=40)
     sample_count: int = Field(gt=0)
     sample_scope: Literal["per_dish", "per_material"] = "per_dish"
