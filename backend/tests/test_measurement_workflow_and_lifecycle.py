@@ -149,6 +149,7 @@ def test_termination_requires_reason_preserves_facts_and_is_readonly(auth_client
     for data in ({},{'reason':''},{'reason':'   '}):assert client.post(base+'/terminate',json=data,headers=headers).status_code==422
     result=client.post(base+'/terminate',json={'reason':'材料污染'},headers=headers)
     assert result.status_code==200 and result.json()['termination_reason']=='材料污染' and result.json()['status']=='cancelled'
+    assert client.post(base+'/complete',headers=headers).status_code==409
     assert client.patch(base+'/sowing/'+dish['id'],json={'sown_at':(datetime.now(timezone.utc)-timedelta(days=10)).isoformat()},headers=headers).status_code==409
     assert client.patch(base+'/measurements/'+item['id'],json={'notes':'不应保存'},headers=headers).status_code==409
     assert client.delete(base+'/measurements/'+item['id'],headers=headers).status_code==409
@@ -162,7 +163,7 @@ def test_termination_requires_reason_preserves_facts_and_is_readonly(auth_client
     assert any(r['after'] and r['after'].get('termination_reason')=='材料污染' for r in client.get('/api/audit-logs').json()['items'])
 
 
-def test_completion_preflight_does_not_infer_observation_completion_from_plan(auth_client,tmp_path):
+def test_completion_preflight_blocks_real_tasks_then_allows_manual_completion(auth_client,tmp_path):
     client,headers=auth_client
     base,dish,_,_=setup_experiment(client,headers,days=(0,21),replicates=2)
     check=client.get(base+'/completion-check').json()
@@ -173,10 +174,16 @@ def test_completion_preflight_does_not_infer_observation_completion_from_plan(au
     observe(client,headers,base,dish,datetime.now(timezone.utc)-timedelta(days=2))
     check=client.get(base+'/completion-check').json()
     assert check['upcoming_count']==1 and check['overdue_count']==1 and check['measurement_pending_count']==2
+    assert not check['can_complete']
+    blocked=client.post(base+'/complete',headers=headers)
+    assert blocked.status_code==409 and '测定待办' in blocked.json()['detail']
+    assert '终止实验' not in blocked.json()['detail']
     engine=fixture_engine(tmp_path)
     with engine.begin() as c:
         c.execute(text('UPDATE seedling_samples SET germinated_at=NULL'))
-    assert client.get(base+'/completion-check').json()['unschedulable_count']==2
+    check=client.get(base+'/completion-check').json()
+    assert check['unschedulable_count']==2 and not check['can_complete']
+    assert client.post(base+'/complete',headers=headers).status_code==409
     with engine.begin() as c:
         c.execute(text('UPDATE seedling_samples SET germinated_at=:date'),{'date':(datetime.now(timezone.utc)-timedelta(days=25)).replace(tzinfo=None).isoformat()})
         c.execute(text('UPDATE germination_dishes SET sown_at=:date WHERE id=:id'),{'date':(datetime.now(timezone.utc)-timedelta(days=40)).replace(tzinfo=None).isoformat(),'id':dish['id']})
@@ -185,11 +192,13 @@ def test_completion_preflight_does_not_infer_observation_completion_from_plan(au
         assert client.post(base+'/measurements',json=payload(task,datetime.now(timezone.utc)),headers=headers).status_code==201
     check=client.get(base+'/completion-check').json()
     assert check['measurement_pending_count']==0 and check['observing_dish_count']==1
-    assert not check['can_complete']
-    assert client.post(base+'/complete',headers=headers).status_code==409
-    assert client.patch(base,json={'status':'completed'},headers=headers).status_code==409
-    assert client.get(base).json()['status']=='active'
-    assert not any(r['after'] and r['after'].get('status')=='completed' for r in client.get('/api/audit-logs').json()['items'])
+    assert check['can_complete']
+    assert client.get(base).json()['status']=='active' # time alone never completes an experiment
+    completed=client.post(base+'/complete',headers=headers)
+    assert completed.status_code==200 and completed.json()['status']=='completed'
+    assert completed.json()['termination_reason'] is None and completed.json()['ended_at']
+    assert client.patch(base,json={'status':'active'},headers=headers).status_code==409
+    assert any(r['after'] and r['after'].get('status')=='completed' for r in client.get('/api/audit-logs').json()['items'])
 
 
 def test_reset_backups_atomicity_preservation_cli_and_login(auth_client,tmp_path,monkeypatch):

@@ -256,16 +256,20 @@ async function completeExperiment() {
     }>(`${base.value}/completion-check`)
     if (!data.can_complete) {
       await ElMessageBox.alert(
-        `待置床 ${data.pending_dish_count} 个、仍在观察 ${data.observing_dish_count} 个、幼苗测定 ${data.measurement_pending_count} 项。计划观察天数不代表观察已完成；如果决定结束实验，请使用“终止实验”。`,
-        '实验尚未完成',
+        `待置床 ${data.pending_dish_count} 个、幼苗测定待办 ${data.measurement_pending_count} 项。请先处理待置床培养皿并完成已有幼苗测定，再确认完成实验。`,
+        '暂不能完成实验',
         { confirmButtonText: '继续实验' },
       )
       return
     }
-    await ElMessageBox.confirm('确认完成后不能新增巡检和测定，仍可复核修改已测值。', '完成实验', {
-      confirmButtonText: '确认完成',
-      cancelButtonText: '继续实验',
-    })
+    await ElMessageBox.confirm(
+      '请确认本实验已正常完成。确认后不能新增巡检和测定，仍可复核修改已测值。',
+      '完成实验',
+      {
+        confirmButtonText: '确认完成',
+        cancelButtonText: '继续实验',
+      },
+    )
     await run(() => api.post(`${base.value}/complete`), '实验已完成')
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error))

@@ -16,19 +16,21 @@ def completion_check(db: Session, experiment_id: str):
     dishes = list(db.scalars(select(GerminationDish).join(ExperimentMaterial,
         GerminationDish.material_id == ExperimentMaterial.id).where(ExperimentMaterial.experiment_id == experiment_id)))
     pending = sum(dish.sown_at is None and dish.cancelled_at is None for dish in dishes)
-    # A planned duration is not evidence that observation has been completed.
+    # Informational only; the experimenter's completion action is the final confirmation.
     observing = sum(dish.sown_at is not None and dish.cancelled_at is None for dish in dishes)
     measurement = summary(db, experiment_id)
     outstanding = sum(measurement[key] for key in ("due_today_count", "overdue_count", "upcoming_count", "unschedulable_count"))
     return {"pending_dish_count": pending, "observing_dish_count": observing, **measurement,
             "measurement_pending_count": outstanding,
-            "can_complete": experiment.status == "active" and pending == 0 and observing == 0 and outstanding == 0}
+            "can_complete": experiment.status == "active" and pending == 0 and outstanding == 0}
 
 
 def require_complete(db: Session, experiment_id: str):
     result = completion_check(db, experiment_id)
     if not result["can_complete"]:
-        raise HTTPException(409, f"实验尚未完成：待置床 {result['pending_dish_count']} 个、仍在观察 {result['observing_dish_count']} 个、幼苗测定 {result['measurement_pending_count']} 项。计划观察天数不代表观察已完成；若决定结束实验，请使用“终止实验”。")
+        if require_entity(db, Experiment, experiment_id).status != "active":
+            raise HTTPException(409, "只有进行中的实验可以确认完成")
+        raise HTTPException(409, f"暂不能完成实验：待置床 {result['pending_dish_count']} 个、幼苗测定待办 {result['measurement_pending_count']} 项。请先处理待置床培养皿并完成已有幼苗测定，再确认完成实验。")
 
 
 def complete(db: Session, experiment_id: str, user_id: str):

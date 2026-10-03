@@ -141,3 +141,67 @@ def test_overdue_dishes_remain_pending_and_accept_zero_and_positive_with_dag_tas
     assert measurement.status_code == 201, measurement.text
     check = client.get(base + "/completion-check").json()
     assert check["observing_dish_count"] == 2 and check["can_complete"] is False
+    assert check["measurement_pending_count"] == 8
+
+
+@pytest.mark.parametrize("period_days,sown_days_ago,overdue", [
+    (None, 2, False),
+    (30, 2, False),
+    (30, 45, True),
+])
+@pytest.mark.parametrize("explicit_zero", [False, True])
+def test_manual_completion_is_independent_of_plan_and_preserves_observation_facts(
+        auth_client, period_days, sown_days_ago, overdue, explicit_zero):
+    client, headers = auth_client
+    _, lot = make_lot(client, headers)
+    data = design(lot["id"])
+    data["protocol"].update(observation_period_days=period_days, replicate_count=1)
+    created = client.post("/api/experiments/configured", json=data, headers=headers)
+    assert created.status_code == 201, created.text
+    base = f"/api/experiments/{created.json()['experiment']['id']}"
+    assert not client.get(base + "/completion-check").json()["can_complete"]
+    assert client.post(base + "/complete", headers=headers).status_code == 409
+    assert client.patch(base, json={"status": "ready"}, headers=headers).status_code == 200
+    assert not client.get(base + "/completion-check").json()["can_complete"]
+    assert client.post(base + "/complete", headers=headers).status_code == 409
+    now = datetime.now(timezone.utc)
+    sown = start(client, headers, base, at=(now - timedelta(days=sown_days_ago)).isoformat())
+    assert sown.status_code == 200, sown.text
+    dish = sown.json()["dishes"][0]
+    if explicit_zero:
+        saved = batch(client, headers, base, now.isoformat(), [
+            {"dish_id": dish["id"], "new_germinated_count": 0}])
+        assert saved.status_code == 200, saved.text
+    before = client.get(base + "/execution").json()
+    assert before["experiment"]["status"] == "active"
+    assert before["observation_period_overdue"] is overdue
+    assert before["dishes"][0]["cancelled_at"] is None
+    check = client.get(base + "/completion-check").json()
+    assert check["observing_dish_count"] == 1
+    assert check["pending_dish_count"] == check["measurement_pending_count"] == 0
+    assert check["can_complete"] is True
+    completed = client.post(base + "/complete", headers=headers)
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "completed"
+    assert completed.json()["termination_reason"] is None
+    assert completed.json()["ended_at"] is not None
+    after = client.get(base + "/execution").json()
+    assert after["experiment"]["status"] == "completed"
+    assert after["dishes"][0]["cancelled_at"] is None
+    assert after["dishes"][0]["sown_at"] == dish["sown_at"]
+    assert after["sample_count"] == 0
+    expected = 0 if explicit_zero else None
+    for result in (before, after):
+        assert result["cumulative_germinated"] == result["germination_rate"] == expected
+        assert result["materials"][0]["cumulative_germinated"] == expected
+        assert result["materials"][0]["germination_rate"] == expected
+        assert result["dishes"][0]["cumulative_germinated"] == expected
+        assert result["dishes"][0]["germination_rate"] == expected
+        assert result["dishes"][0]["remaining_ungerminated"] == (20 if explicit_zero else None)
+        assert len(result["recent_observations"]) == int(explicit_zero)
+    assert after["recent_observations"] == before["recent_observations"]
+    if explicit_zero:
+        assert after["recent_observations"][0]["new_germinated_count"] == 0
+    assert not client.get(base + "/completion-check").json()["can_complete"]
+    assert client.post(base + "/complete", headers=headers).status_code == 409
+    assert client.post(base + "/terminate", json={"reason": "不应转为终止"}, headers=headers).status_code == 409

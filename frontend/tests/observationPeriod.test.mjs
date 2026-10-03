@@ -6,6 +6,19 @@ import { todayPendingDish, observationPlanOverdue, germinationText } from '../sr
 
 const source = (path) => readFileSync(new URL('../src/' + path, import.meta.url), 'utf8')
 
+test('existing completion action explains actual tasks without directing normal completion to termination', () => {
+  const component = source('views/ExperimentDesignDetailView.vue')
+  const completion = component.slice(component.indexOf('async function completeExperiment()'),
+    component.indexOf('async function terminateExperiment()'))
+  assert.match(completion, /if \(!data\.can_complete\)/)
+  assert.match(completion, /data\.pending_dish_count/)
+  assert.match(completion, /data\.measurement_pending_count/)
+  assert.match(completion, /请先处理待置床培养皿并完成已有幼苗测定/)
+  assert.match(completion, /请确认本实验已正常完成/)
+  assert.match(completion, /api\.post\(`\$\{base\.value\}\/complete`\)/)
+  assert.doesNotMatch(completion, /终止实验|仍在观察|观察天数不代表观察已完成/)
+})
+
 test('wizard defaults to no observation plan and accepts empty or positive days', () => {
   const protocol = defaultExperimentProtocol()
   assert.equal(protocol.observation_period_days, null)
