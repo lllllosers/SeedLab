@@ -127,6 +127,13 @@ onMounted(load)
               <small>已选幼苗</small><strong>{{ execution.sample_count }}</strong>
             </div>
           </div>
+          <p v-if="execution.experiment.status !== 'active'" class="wizard-help">
+            {{
+              ['completed', 'cancelled'].includes(execution.experiment.status)
+                ? '实验已结束，无当前执行待办；历史数据仍可查看。'
+                : '实验尚未开始，无当前执行待办。'
+            }}
+          </p>
           <div class="execution-overview-toolbar">
             <div>
               <h3>实验材料进度总览</h3>

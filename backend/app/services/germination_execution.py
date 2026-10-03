@@ -317,7 +317,8 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
         "cancelled_count": sum(dish.cancelled_at is not None for dish in dishes),
         "today_observed_count": sum(row["today_observed"] for row in dish_rows if row["sown_at"] and not row["cancelled_at"]),
         "today_pending_count": sum(not row["today_observed"] for row in dish_rows
-                                   if row["sown_at"] and not row["cancelled_at"]),
+                                   if row["sown_at"] and not row["cancelled_at"])
+                               if experiment.status == "active" else 0,
         "latest_sown_estimated_finish_at": iso_utc(latest_finish),
         "pending_material_count": sum(any(not dish.sown_at and not dish.cancelled_at for dish in dishes
                                          if dish.material_id == material.id) for material in materials),

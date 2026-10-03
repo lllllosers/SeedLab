@@ -8,7 +8,7 @@ from app.models import (Experiment, ExperimentMaterial, ExperimentProtocol, Germ
                         GerminationObservation, MeasurementTimepoint, SeedlingMeasurement, SeedlingSample)
 from app.services.common import commit_or_conflict, record, require_entity
 from app.services.local_time import iso_utc
-from app.services.measurement_query import summary
+from app.services.measurement_query import slot_summary
 
 
 def completion_check(db: Session, experiment_id: str):
@@ -18,7 +18,7 @@ def completion_check(db: Session, experiment_id: str):
     pending = sum(dish.sown_at is None and dish.cancelled_at is None for dish in dishes)
     # Informational only; the experimenter's completion action is the final confirmation.
     observing = sum(dish.sown_at is not None and dish.cancelled_at is None for dish in dishes)
-    measurement = summary(db, experiment_id)
+    measurement = slot_summary(db, experiment_id)
     outstanding = sum(measurement[key] for key in ("due_today_count", "overdue_count", "upcoming_count", "unschedulable_count"))
     return {"pending_dish_count": pending, "observing_dish_count": observing, **measurement,
             "measurement_pending_count": outstanding,

@@ -27,8 +27,10 @@ def scheduled_date(germinated_at, dag: int):
 
 
 def task_data(db: Session, experiment_id: str, status: str | None = None,
-              dag: int | None = None, q: str | None = None, material_id: str | None = None) -> dict:
-    from app.services.measurement_query import slots, summary, search, task_row
+              dag: int | None = None, q: str | None = None, material_id: str | None = None,
+              *, current_tasks: bool = True) -> dict:
+    # Material history uses the same factual projection without the current-task filter.
+    from app.services.measurement_query import slots, slot_summary, task_summary, search, task_row
     from sqlalchemy import case
     experiment = require_entity(db, Experiment, experiment_id)
     if status not in {None, "pending", "due_today", "overdue", "upcoming", "completed", "unschedulable"}:
@@ -39,6 +41,8 @@ def task_data(db: Session, experiment_id: str, status: str | None = None,
         raise HTTPException(422, "该实验没有所选的发芽后测定时间")
     c = slots().c
     query = select(c).where(c.experiment_id == experiment_id)
+    if current_tasks:
+        query = query.where(experiment.status == "active")
     if material_id:
         query = query.where(c.material_id == material_id)
     if status == "pending":
@@ -54,7 +58,8 @@ def task_data(db: Session, experiment_id: str, status: str | None = None,
     rows = db.execute(query.order_by(priority, c.scheduled_date, c.experiment_number,
                                     c.replicate_no, c.sample_number, c.day_after_germination)).mappings()
     return {"experiment_status": experiment.status, "dag_days": days,
-            "summary": summary(db, experiment_id), "tasks": [task_row(row) for row in rows]}
+            "summary": (task_summary if current_tasks else slot_summary)(db, experiment_id),
+            "tasks": [task_row(row) for row in rows]}
 
 
 def history(db: Session, experiment_id: str, material_id: str) -> dict:
@@ -62,7 +67,7 @@ def history(db: Session, experiment_id: str, material_id: str) -> dict:
     material = require_entity(db, ExperimentMaterial, material_id)
     if material.experiment_id != experiment_id:
         raise HTTPException(404, "该实验没有所选材料")
-    derived = task_data(db, experiment_id, material_id=material_id)
+    derived = task_data(db, experiment_id, material_id=material_id, current_tasks=False)
     tasks = [item for item in derived["tasks"] if item["material_id"] == material_id]
     samples = {}
     for task in tasks:

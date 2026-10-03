@@ -210,6 +210,13 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
     :status="data.experiment_status"
     :days="data.dag_days"
   />
+  <p v-else-if="data && data.experiment_status !== 'active'" class="wizard-empty">
+    {{
+      ['completed', 'cancelled'].includes(data.experiment_status)
+        ? '实验已结束，无当前执行待办；请打开“测定记录”查看历史数据。'
+        : '实验尚未开始，无当前执行待办。'
+    }}
+  </p>
   <div v-else-if="data" class="measurement-workbench">
     <div class="execution-overview-stats measurement-stats">
       <div>

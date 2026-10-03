@@ -47,11 +47,21 @@ def counts(c):
         func.sum(case((c.status.in_(["overdue", "due_today"]), 1), else_=0)).label("pending_count")]
 
 
-def summary(db: Session, experiment_id: str) -> dict:
+def slot_summary(db: Session, experiment_id: str) -> dict:
+    """Count factual slot states, including missing measurements in ended experiments."""
     c = slots().c
     row = db.execute(select(*counts(c), func.count(func.distinct(case((c.status.in_(["overdue", "due_today"]), c.material_id)))).label("material_count"))
                      .where(c.experiment_id == experiment_id)).mappings().one()
     return {key: value or 0 for key, value in row.items()}
+
+
+def task_summary(db: Session, experiment_id: str) -> dict:
+    """Only active experiments contribute current execution tasks."""
+    experiment = require_entity(db, Experiment, experiment_id)
+    if experiment.status == "active":
+        return slot_summary(db, experiment_id)
+    return {key: 0 for key in ("due_today_count", "overdue_count", "upcoming_count",
+        "unschedulable_count", "completed_today_count", "pending_count", "material_count")}
 
 
 def search(c, q: str | None):
@@ -99,7 +109,7 @@ def worklist(db: Session, experiment_id: str, status="pending", dag=None, q=None
               "all": a.material_id.is_not(None)}
     if status not in having:
         raise HTTPException(422, "请选择有效的材料任务状态")
-    query = select(grouped).where(having[status])
+    query = select(grouped).where(having[status], experiment.status == "active")
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     materials = [dict(row) for row in db.execute(query.order_by(case((a.overdue_count > 0, 0), (a.due_today_count > 0, 1), else_=2),
         a.experiment_number, a.material_id).offset((page - 1) * page_size).limit(page_size)).mappings()]
@@ -109,7 +119,7 @@ def worklist(db: Session, experiment_id: str, status="pending", dag=None, q=None
     for material in materials:
         material["dag_counts"] = [{key: value for key, value in row.items() if key != "material_id"}
                                   for row in dag_counts if row["material_id"] == material["material_id"]]
-    return {"experiment_status": experiment.status, "summary": summary(db, experiment_id),
+    return {"experiment_status": experiment.status, "summary": task_summary(db, experiment_id),
             "dag_days": list(db.scalars(select(MeasurementTimepoint.day_after_germination).where(MeasurementTimepoint.experiment_id == experiment_id).order_by(MeasurementTimepoint.day_after_germination))),
             "materials": materials, "page": page, "page_size": page_size, "total_materials": total,
             "total_pages": (total + page_size - 1) // page_size}

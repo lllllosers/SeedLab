@@ -15,6 +15,9 @@ from app.models import User
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'maintenance'))
 import backfill_legacy_200_species as legacy
+from app.services.germination_execution import execution_summary
+from app.services.measurement_query import dashboard, records, slot_summary, task_summary, worklist
+from app.services.seedling_measurement import task_data
 
 
 @pytest.fixture(scope='module')
@@ -141,3 +144,50 @@ def test_validation_failure_rolls_back_all_business_rows(source_data, temporary_
         assert all(db.execute(f'SELECT count(*) FROM {table}').fetchone()[0] == 0 for table in legacy.BUSINESS_TABLES)
         assert db.execute('SELECT count(*) FROM audit_logs').fetchone()[0] == 0
         assert db.execute('SELECT count(*) FROM users').fetchone()[0] == 1
+
+
+@pytest.mark.parametrize('status', ['completed', 'cancelled'])
+def test_ended_historical_experiment_preserves_facts_and_export_without_current_tasks(
+        source_path, source_data, temporary_target, status):
+    path, owner_id = temporary_target
+    source_before = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    legacy.apply(source_data, legacy.temporary_database(path), owner_id)
+    engine = make_engine(f'sqlite:///{path.as_posix()}')
+    try:
+        with Session(engine) as db:
+            experiment = db.query(legacy.Experiment).one()
+            experiment.status = status
+            experiment.ended_at = None
+            db.commit()
+            report = legacy.reconcile_database(db, source_data, experiment, expected_status=status)
+            assert report['value_differences'] == 0
+            assert report['missing_subtraction'] == report['missing_enumeration'] == 40
+            assert report['root_zeros'] == 6 and report['shoot_zeros'] == 283
+            assert experiment.ended_at is None
+            assert slot_summary(db, experiment.id)['overdue_count'] == 40
+            assert all(value == 0 for value in task_summary(db, experiment.id).values())
+            execution = execution_summary(db, experiment.id)
+            assert execution['today_pending_count'] == 0
+            assert execution['cumulative_germinated'] is execution['germination_rate'] is None
+            assert execution['sample_count'] == 1665 and execution['sown_count'] == 200
+            assert execution['recent_observations'] == []
+            for task_status in ('pending', 'overdue', 'due_today', 'all'):
+                queue = worklist(db, experiment.id, status=task_status)
+                assert queue['materials'] == [] and queue['total_materials'] == 0
+            assert task_data(db, experiment.id)['tasks'] == []
+            assert dashboard(db) == {'due_today_count': 0, 'overdue_count': 0, 'experiments': []}
+            history = records(db, experiment.id)
+            assert history['total'] == 4955 and len(history['items']) == 50
+            assert records(db, experiment.id, dag=3)['total'] == 1655
+            assert records(db, experiment.id, dag=7)['total'] == 1655
+            assert records(db, experiment.id, dag=14)['total'] == 1645
+            exported = legacy.reconcile_workbook(legacy.build(db, [experiment.id]), source_data)
+            assert exported['value_differences'] == 0
+            assert (exported['wide_rows'], exported['long_rows'], exported['measured_slots'],
+                    exported['unmeasured_actual_slots'], exported['absent_sample_measurement_slots']) == (
+                        2000, 6000, 4955, 40, 1005)
+            assert exported['all_dag_empty_actual_rows'] == 10
+            assert exported['root_zeros'] == 6 and exported['shoot_zeros'] == 283
+    finally:
+        engine.dispose()
+    assert hashlib.sha256(source_path.read_bytes()).hexdigest() == source_before == legacy.SOURCE_SHA256

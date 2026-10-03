@@ -197,6 +197,11 @@ def test_completion_preflight_blocks_real_tasks_then_allows_manual_completion(au
     completed=client.post(base+'/complete',headers=headers)
     assert completed.status_code==200 and completed.json()['status']=='completed'
     assert completed.json()['termination_reason'] is None and completed.json()['ended_at']
+    current = client.get(base+'/measurement-worklist',params={'status':'all'}).json()
+    assert current['materials']==[] and all(value==0 for value in current['summary'].values())
+    assert client.get(base+'/measurement-tasks').json()['tasks']==[]
+    assert client.get(base+'/execution').json()['today_pending_count']==0
+    assert client.get(base+'/measurement-records').json()['total']==2
     assert client.patch(base,json={'status':'active'},headers=headers).status_code==409
     assert any(r['after'] and r['after'].get('status')=='completed' for r in client.get('/api/audit-logs').json()['items'])
 

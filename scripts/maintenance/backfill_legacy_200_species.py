@@ -220,7 +220,8 @@ def source_measurements(data: LegacyData) -> dict:
             for s in data.samples for day, (root, shoot) in zip(DAYS, s.lengths) if root is not None and shoot is not None}
 
 
-def reconcile_database(db: Session, data: LegacyData, experiment: Experiment) -> dict:
+def reconcile_database(db: Session, data: LegacyData, experiment: Experiment,
+                       *, expected_status: str = "active") -> dict:
     expected_counts = {"taxa": 198, "seed_lots": 200, "experiments": 1, "experiment_materials": 200,
                        "germination_dishes": 200, "germination_observations": 0,
                        "seedling_samples": 1665, "seedling_measurements": 4955, "measurement_timepoints": 3}
@@ -228,7 +229,7 @@ def reconcile_database(db: Session, data: LegacyData, experiment: Experiment) ->
               for table in expected_counts}
     require(counts == expected_counts, f"临时库数量核账不一致：{counts}")
     require(experiment.code == "GER-202608-001" and experiment.experiment_type == "GER"
-            and experiment.status == "active" and experiment.planned_start_date == START,
+            and experiment.status == expected_status and experiment.planned_start_date == START,
             "实验编号、类型、状态或计划开始日期不一致")
     materials = list(db.scalars(select(ExperimentMaterial)))
     dishes = list(db.scalars(select(GerminationDish)))

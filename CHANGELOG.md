@@ -2,9 +2,16 @@
 
 SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2`、`v0.4.0` 和 `v0.4.1`。
 
+## 0.5.1 — Ended Experiment Task Semantics（2026-10-03）
+
+- 当前巡检和幼苗测定待办仅来自进行中的实验；已完成、已终止实验不再显示当前巡检、逾期或后续测定任务。
+- 计划槽位事实统计与当前任务统计分离，正常完成前仍检查所有实际测定待办；历史缺失、空白、真实 0、实际幼苗、已有测定和正式导出保持不变。
+- 已结束实验的测定页引导查看历史记录，允许未知历史结束时间保持为空。不新增字段或迁移，Alembic head 仍为 d2e7a46b910c。
+- 本修复尚待审查；不继续生产历史导入工具，不重建 portable，不创建 tag 或 GitHub Release。
+
 ## 0.5.0 — Experiment Identity, Legacy Validation & Planned Result Export（2026-10-03）
 
-阶段已收口，当前准备发布候选；尚未创建 v0.5.0 tag 或 GitHub Release。
+已通过正式投产验收并建立 v0.5.0 稳定 tag；未创建 GitHub Release。
 
 - 新增独立且创建后不可修改的 GER 实验类型，集中提供中文名称“种子萌发试验”；创建向导保留自由命名并提供非强制提示。
 - 新实验按类型和年月生成 GER-YYYYMM-NNN；年月优先取计划开始日期，未填时取实验室时区当前年月。编号创建后永久不变，唯一约束冲突回滚整个创建请求。
