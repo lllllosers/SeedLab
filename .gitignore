@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 /config/seedlab.json
 /config/installation.json
 bootstrap.token
@@ -9,6 +11,7 @@ __pycache__/
 .test-temp*/
 .tmp-*/
 .ruff_cache/
+.mypy_cache/
 .coverage
 .coverage.*
 /htmlcov/
@@ -18,12 +21,20 @@ __pycache__/
 /frontend/test-results/
 *.db
 *.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.log
 data/
 uploads/
 logs/
 backups/
 frontend/node_modules/
 frontend/dist/
+.vite/
+.browser-profile*/
+browser-profiles/
 *.egg-info/
 /build/
 /dist/

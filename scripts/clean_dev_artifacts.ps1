@@ -93,14 +93,14 @@ foreach ($base in @($repoRoot, (Join-Path $repoRoot 'backend'))) {
 # Walk source folders without entering user data or dependencies,
 # unknown temporary directories, or links. Migration sources remain tracked and
 # protected; only exact cache names are removed inside their folders.
-$protectedNames = @('.git', '.venv', 'node_modules', 'data', 'uploads', 'logs', 'backups', '.agents', '.codex')
+$protectedNames = @('.git', '.venv', 'node_modules', 'build', 'dist', 'data', 'uploads', 'logs', 'backups', '.agents', '.codex')
 $pending = [System.Collections.Generic.Stack[string]]::new()
 $pending.Push($repoRoot)
 while ($pending.Count -gt 0) {
     $directory = $pending.Pop()
     foreach ($item in Get-ChildItem -LiteralPath $directory -Force) {
         if ($item.PSIsContainer) {
-            if ($item.Name -in @('__pycache__', '.pytest_cache', '.ruff_cache')) {
+            if ($item.Name -in @('__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache')) {
                 Remove-ApprovedItem $item
             } elseif ($protectedNames -contains $item.Name -or
                       $item.Name -like '.tmp-*' -or

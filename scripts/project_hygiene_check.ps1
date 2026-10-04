@@ -54,7 +54,7 @@ print(str(Path(url.database).resolve()) if url.get_backend_name() == "sqlite" an
         Write-Output ("{0}: {1} files, {2} bytes" -f $relative, $matches.Count, ([long]$bytes))
     }
     $dataPrefix = (Join-Path $repoRoot 'backend\data') + '\'
-    $databases = @($files | Where-Object { $_.FullName.StartsWith($dataPrefix, [StringComparison]::OrdinalIgnoreCase) -and $_.Name -match '\.db($|-wal$|-shm$)' })
+    $databases = @($files | Where-Object { $_.FullName.StartsWith($dataPrefix, [StringComparison]::OrdinalIgnoreCase) -and $_.Name -match '\.(db|sqlite|sqlite3)($|-(wal|shm|journal)$)' })
     Write-Output '[DATABASES] backend/data database files'
     $databases | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
     Write-Output '[VERIFICATION] Historical database candidates (requires manual review)'
@@ -76,7 +76,7 @@ print(str(Path(url.database).resolve()) if url.get_backend_name() == "sqlite" an
     $sourceFiles = @($files | Where-Object { $_.FullName -notmatch '[\\/](\.venv|node_modules|\.git)[\\/]' })
     Write-Output '[ARTIFACTS] Temporary/cache/build file counts outside dependencies'
     foreach ($pattern in @('[\\/]\.test-temp', '[\\/]\.tmp-', '[\\/]pytest-', '[\\/]\.pytest_cache[\\/]',
-        '[\\/]\.ruff_cache[\\/]', '[\\/]__pycache__[\\/]', '\.pyc$', '[\\/]frontend[\\/]dist[\\/]',
+        '[\\/]\.(ruff|mypy)_cache[\\/]', '[\\/]__pycache__[\\/]', '\.pyc$', '[\\/]frontend[\\/]dist[\\/]',
         '[\\/](coverage|htmlcov|playwright-report|test-results)[\\/]', '[\\/]\.coverage($|\.)')) {
         $matches = @($sourceFiles | Where-Object { $_.FullName -match $pattern })
         Write-Output ("{0}: {1} files, {2} bytes" -f $pattern, $matches.Count, ([long](($matches | Measure-Object Length -Sum).Sum)))
@@ -84,7 +84,7 @@ print(str(Path(url.database).resolve()) if url.get_backend_name() == "sqlite" an
     Write-Output '[ARTIFACT DIRECTORIES] Includes empty directories'
     $inventoryDirectories | Where-Object {
         $_ -notmatch '[\\/](\.venv|node_modules|\.git)[\\/]' -and
-        $_ -match '[\\/](\.test-temp[^\\/]*|\.tmp-[^\\/]*|pytest-[^\\/]*|__pycache__|\.pytest_cache|\.ruff_cache|dist|coverage|htmlcov|playwright-report|test-results)$'
+        $_ -match '[\\/](\.test-temp[^\\/]*|\.tmp-[^\\/]*|pytest-[^\\/]*|__pycache__|\.pytest_cache|\.ruff_cache|\.mypy_cache|dist|coverage|htmlcov|playwright-report|test-results|browser-profiles|\.browser-profile[^\\/]*)$'
     }
     Write-Output '[LARGEST] Top 20 files'
     $files | Sort-Object Length -Descending | Select-Object -First 20 FullName, Length | Format-Table -AutoSize
