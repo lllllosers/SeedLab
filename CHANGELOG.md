@@ -1,13 +1,13 @@
 # Changelog
 
-SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2`、`v0.4.0` 和 `v0.4.1`。
+SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2`、`v0.4.0`、`v0.4.1`、`v0.5.0` 和 `v0.5.1`。
 
 ## 0.5.1 — Ended Experiment Task Semantics（2026-10-03）
 
 - 当前巡检和幼苗测定待办仅来自进行中的实验；已完成、已终止实验不再显示当前巡检、逾期或后续测定任务。
 - 计划槽位事实统计与当前任务统计分离，正常完成前仍检查所有实际测定待办；历史缺失、空白、真实 0、实际幼苗、已有测定和正式导出保持不变。
 - 已结束实验的测定页引导查看历史记录，允许未知历史结束时间保持为空。不新增字段或迁移，Alembic head 仍为 d2e7a46b910c。
-- 本修复尚待审查；不继续生产历史导入工具，不重建 portable，不创建 tag 或 GitHub Release。
+- v0.5.1 已正式投产。独立 legacy importer 1.0.0 已完成200份材料的正式导入并核账；本轮只整理项目卫生，保留已验收产物，不重建或新增版本。
 
 ## 0.5.0 — Experiment Identity, Legacy Validation & Planned Result Export（2026-10-03）
 

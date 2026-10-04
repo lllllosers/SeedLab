@@ -1,4 +1,4 @@
-"""Development launcher; production packaging is a later phase."""
+"""Source-tree launcher for the Windows control center."""
 from pathlib import Path
 import os
 import subprocess

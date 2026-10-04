@@ -1,22 +1,20 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前修复分支版本为 **v0.5.1（待审查）**，修正已结束实验的当前待办语义；正式稳定基线为已通过投产验收的 v0.5.0 tag，未创建对应 GitHub Release。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式版本为 **v0.5.1**，已在目标电脑投产，200份历史材料已通过受控legacy importer正式导入并核账。主程序基线为 `04fe5719daa9b859005fc922daae3d4a975bf004` / `v0.5.1`；本轮维护仅做项目卫生，不开发新功能。系统已具备材料一体导入、中文名拼音排序、实验现场编号、多日分批置床、大规模发芽巡检、物种与批次分页和管理、多实验联合导出及发芽率汇总，并提供实验配置、幼苗选样、来源追踪、账号管理和审计。
 
 Stage 3 已随 v0.4.0 正式发布，包含幼苗测定、实验生命周期、材料导入衔接与项目卫生工具；Stage 4 尚未开始。幼苗根苗长测定采用 DAG（Days After Germination，发芽后测定时间）：将单株首次在巡检中判定发芽的时间 `germinated_at` 转为实验室本地日期，再加动态配置的 DAG 自然日。培养皿置床时间 `sown_at` 另行保留，用于巡检，不作为幼苗测定基准。测定任务由样本与时间点实时派生；根长、苗长均以 mm 记录，区分真实 0、无法测量和尚未测定。统计分析与派生指标留待 Stage 4。
 
-## 生产试运行与 portable
+## 正式部署与 portable
 
-Stage 3.5 已收口为 v0.4.1。系统提供实验业务闭环、DAG 幼苗测定、Vue 与 API 单端口部署、Windows 运行控制中心、本机/局域网/远程 HTTPS 入口、portable、正式业务数据库在线备份和数据库检查。控制中心提供启停、重启、托盘、日志及首次管理员提示，自动备份默认保留 14 份。SakuraFrp 由独立客户端管理，数据库恢复和升级器尚未正式实现。
+v0.5.1 沿用已验证的部署与控制中心能力。系统提供实验业务闭环、DAG 幼苗测定、Vue 与 API 单端口部署、Windows 运行控制中心、本机/局域网/远程 HTTPS 入口、portable、正式业务数据库在线备份和数据库检查。控制中心提供启停、重启、托盘、日志及首次管理员提示，自动备份默认保留 14 份。SakuraFrp 由独立客户端管理，数据库恢复和升级器尚未正式实现。
 
 控制中心首次部署通过五步向导选择独立数据目录（推荐程序目录同级 SeedLabData），设置访问方式和自动备份，初始化新空库。实验数据、运行配置、日志及备份保存在所选位置；程序目录仅保存安装定位文件。首位管理员在网页 /setup 创建，以后启动复用同一数据目录和账号。部署身份独立，不接管其他实例；端口占用时阻止继续，修改端口后再部署。访问设置保存重启后须通过真实服务核验。
 
 正式备份仅面向不可替代的业务数据库 seedlab.db；源码由 Git/GitHub 管理，测试库、构建产物、运行配置和日志不建立额外备份体系。build/、dist/ 保持构建产物命名，均被 Git 忽略且可重新生成。
 
-本次候选便携包名称为 **SeedLab-v0.5.0-portable.zip**。解压完整文件夹后双击 SeedLab Control Center.exe，日常运行无需另装 Python、Node 或 Git。开发者手工准备 backend[test,control,packaging] 和前端依赖后运行 `scripts/build_portable.ps1 -OutputName portable-v050`，输出位于 dist/portable-v050/；脚本不联网安装，分发包不包含业务数据。详见 [打包说明](packaging/README.md)、[普通使用说明](packaging/使用说明.txt) 和 [生产部署设计](docs/10_生产部署与控制中心设计.md)。
+当前正式便携包为 **SeedLab-v0.5.1-portable.zip**，保留在 `dist/portable-v051`；独立importer保留在 `dist/legacy-importer-v1`；六文件现场交付目录为 `dist/delivery-v051`。正常运行无需Python、Node或Git。正式Data Root位于目标电脑，不在开发仓库。已导入的历史库不得再次导入。
 
-用户已确认新目录管理员初始化、账号复用、本机、LAN 保存重启及同机访问、实例隔离。第二设备 LAN、真实 SakuraFrp HTTPS 及无开发工具的新 Windows 机器尚未完成环境验收；Windows 代码签名尚未配置。
-
-**Stage 4 统计分析尚未开始。200 份材料的历史回填能力已在一次性临时库验证，尚未导入正式业务库；正式回填和最终完整 Project Hygiene 后续单独处理。**
+用户已确认正式部署、dry-run、apply、PRE/POST备份、正式页面与导出通过。主程序与importer的精确commit、SHA和边界见[v0.5.1说明](docs/releases/v0.5.1.md)、[importer维护索引](docs/11_历史生产导入维护工具.md)和[验收记录](docs/12_历史生产导入验收记录.md)。构建方法见[打包说明](packaging/README.md)，日常使用见[用户说明](packaging/使用说明.txt)。Stage 4统计分析、干重、数据库恢复和升级器尚未实现。
 
 源码控制中心安装 `backend[test,control]` 后运行 run_control_center.bat。开发者需要显式使用现有 .env / backend/data 时可加 --skip-first-run；测试可通过 --data-root 指定隔离目录。普通首次部署拒绝 TEMP 数据位置，原有开发双服务流程保持不变。
 
@@ -67,7 +65,7 @@ cd ..
 
 未产生真实置床、观测、幼苗或测定事实的草稿/已就绪实验可永久删除，包括已经确认编号的未置床计划培养皿。进行中实验完成前检查待置床、观察期和全部未完成 DAG；提前结束必须填写原因并“终止实验”，数据保留且执行只读。已完成实验仍可复核修改已有测定，但不能新增或清除。操作记录提供分页、对象、操作者、完整时间和修改前后值。
 
-开发环境重置工具先用 SQLite 在线备份，随后在单一事务内删除业务数据，保留账号、登录会话与迁移版本；仅 `SEEDLAB_ENV=development` 可用。仓库根目录执行 `scripts/reset_dev_data.ps1 -DryRun` 预览，双击 `reset_dev_data.bat` 须明确确认后才能删除。请先阅读[人工测试与开发数据重置](docs/09_人工测试与开发数据重置.md)，当前人工测试库不会自动重置。成功重置后只保留最新 3 份有效的 `dev-reset-*.db`，手工验收快照不自动删除。
+开发环境重置工具先用 SQLite 在线备份，随后在单一事务内删除业务数据，保留账号、登录会话与迁移版本；仅 `SEEDLAB_ENV=development` 可用。仓库根目录执行 `scripts/reset_dev_data.ps1 -DryRun` 预览，双击 `reset_dev_data.bat` 须明确确认后才能删除。请先阅读[人工测试与开发数据重置](docs/09_人工测试与开发数据重置.md)，当前人工测试库不会自动重置。成功重置后只保留最新 3 份有效的 `dev-reset-*.db`，手工验收快照不自动删除。正式投产后的本轮卫生清理已单独核对并移除旧开发库和测试快照，未执行业务reset。
 
 ### 创建实验与基础台账
 
@@ -81,7 +79,7 @@ cd ..
 
 ## v0.5.0 实验身份、历史验证与科研导出（2026-10-03 阶段收口）
 
-v0.5.0 已通过投产验收并建立稳定 tag，增加实验身份、未记录发芽语义、临时历史回填验证与科研结果导出结构；未创建 GitHub Release。当前 v0.5.1 修复分支只调整已结束实验的当前任务语义，保留历史缺失和正式导出；完成前仍检查真实待办，不新增迁移，不继续生产 importer，不重建已验收 portable。
+v0.5.0 建立实验身份、未记录发芽语义与计划结果导出；当前正式 v0.5.1 增加已结束实验当前待办修复。完成前仍检查真实事实待办，历史缺失和正式导出保留；未新增迁移。
 
 - 创建实验明确选择“种子萌发试验”（GER），名称由用户自由填写，命名示例仅作提示。
 - 新实验编号为 `GER-YYYYMM-NNN`，按类型和月份独立流水。年月优先取计划开始日期，未填时使用实验室时区（默认 Asia/Shanghai）的当前年月。创建后修改名称或计划日期不会改变编号，类型不可修改。
@@ -89,7 +87,7 @@ v0.5.0 已通过投产验收并建立稳定 tag，增加实验身份、未记录
 - 实验内材料确认后固定为 001、002；培养皿单重复 001，多重复 001-1；幼苗单重复 001-01，多重复 001-1-01。页面、搜索与正式 Excel 使用现场编号，内部培养皿长 code 和 UUID 不展示。
 - 没有发芽巡检记录时，累计发芽数、发芽率和剩余数量为未记录，API 返回空值、页面显示未记录或空位、Excel 留空；明确巡检 0 才显示累计 0 和发芽率 0%。
 - 正式科研宽表按计划幼苗槽位导出，长表按计划幼苗 × 本实验配置的 DAG 导出；共用只读槽位服务，保留没有实际幼苗的材料，不在数据库创建空槽位。历史数据对应宽表 2000 行、长表 6000 行，区分已测定、无测定记录和无实际幼苗。未来分析须从设计全集 LEFT JOIN 真实事实。
-- 200份材料的历史回填仅在一次性临时测试库验证，未进行正式生产导入。实验保持进行中；根苗长实际测定严格为 `measured_at = germinated_at + DAG`，没有提前或推迟，不作推定。干重、Stage 4 和最终 Project Hygiene 尚未开始。见[历史回填能力验证](docs/10_历史回填能力验证.md)。
+- 200份材料已正式导入目标电脑，历史实验为已完成，未知结束时间保持为空；根苗长实际测定严格为 `measured_at = germinated_at + DAG`。当前任务为0，真实幼苗1665株、测定4955条、真实幼苗缺测40槽位与正式2000/6000行导出保持。旧临时回填入口仍用于[历史回归测试](docs/14_历史数据与导出回归契约.md)，不能用于生产。
 
 发芽观察结束闭环、最终 0 发芽确认及自动结束实验没有在本阶段实现；数据库恢复和升级器也仍未实现。
 
@@ -99,18 +97,20 @@ v0.5.0 已通过投产验收并建立稳定 tag，增加实验身份、未记录
 backend/   FastAPI、业务模型、Alembic 迁移与 pytest 测试
 frontend/  Vue 页面、路由、状态和样式
 docs/      总体设计、数据模型、实验配置与执行业务规则、路线图与运行说明
-scripts/   开发启动、测试、只读卫生检查、安全缓存清理与开发重置入口
+scripts/   开发启动、测试、构建、卫生维护及历史回归夹具
+packaging/ portable打包入口、spec及用户说明
+control_center/ Windows运行控制中心
 ```
 
-详细设计见 [docs/01_系统总体设计.md](docs/01_系统总体设计.md)、[docs/02_核心数据模型.md](docs/02_核心数据模型.md)、[docs/03_开发路线图.md](docs/03_开发路线图.md)、[docs/05_实验配置业务规则.md](docs/05_实验配置业务规则.md)、[docs/06_发芽实验执行业务规则.md](docs/06_发芽实验执行业务规则.md)、[docs/07_账号初始化与权限管理.md](docs/07_账号初始化与权限管理.md) 与 [docs/08_幼苗测定业务规则.md](docs/08_幼苗测定业务规则.md)。
+文档导航见[docs/README.md](docs/README.md)。详细设计见 [docs/01_系统总体设计.md](docs/01_系统总体设计.md)、[docs/02_核心数据模型.md](docs/02_核心数据模型.md)、[docs/03_开发路线图.md](docs/03_开发路线图.md)、[docs/05_实验配置业务规则.md](docs/05_实验配置业务规则.md)、[docs/06_发芽实验执行业务规则.md](docs/06_发芽实验执行业务规则.md)、[docs/07_账号初始化与权限管理.md](docs/07_账号初始化与权限管理.md) 与 [docs/08_幼苗测定业务规则.md](docs/08_幼苗测定业务规则.md)。
 
 ## 版本与分支
 
-版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。`v0.4.0` 标记 Stage 3 / Seedling Measurement Workflow，`v0.4.1` 标记 Stage 3.5 / Production Trial Deployment。main / v0.5.0 为已通过投产验收的稳定基线；当前修复分支准备 v0.5.1，尚未合并、打 tag 或创建 Release。Stage 4 尚未开始。
+版本唯一来源：`backend/app/version.py`，通过 `/api/health` 对前端和外部工具提供。`main` 为发布主线；`v0.1.0` 标记 Stage 0 Foundation，`v0.2.0` 标记 Stage 1 实验配置，`v0.3.0` 标记 Stage 2 Germination Execution，`v0.3.1` 标记 Stage 2.5 Account Bootstrap and Management，`v0.3.2` 标记 Manual Workflow & Usability Closeout。`v0.4.0` 标记 Stage 3 / Seedling Measurement Workflow，`v0.4.1` 标记 Stage 3.5 / Production Trial Deployment。main / v0.5.1 为正式稳定基线。`legacy-importer-v1.0.0` 锁定独立importer实现，maintenance分支保存后续验收记录；详见[v0.5.1说明](docs/releases/v0.5.1.md)。Stage 4 尚未开始。
 
 ## 项目卫生维护
 
-在仓库根目录运行 `scripts/project_hygiene_check.ps1` 可只读查看实际配置数据库、备份、缓存、目录体积及 Git 状态。`scripts/clean_dev_artifacts.ps1 -DryRun` 预览白名单缓存清理，移除 `-DryRun` 才执行；不会清理数据库、用户数据、备份或依赖环境。`.venv` 和 `frontend/node_modules` 是被 Git 忽略的本地开发环境，保留以便继续开发。详见[人工测试与开发数据重置](docs/09_人工测试与开发数据重置.md)。
+在仓库根目录运行 `scripts/project_hygiene_check.ps1` 可只读查看实际配置数据库、备份、缓存、目录体积及 Git 状态。`scripts/clean_dev_artifacts.ps1 -DryRun` 预览白名单缓存清理，移除 `-DryRun` 才执行；不会清理数据库、用户数据、备份或依赖环境。`.venv` 和 `frontend/node_modules` 是被 Git 忽略的本地开发环境，保留以便继续开发。详见[人工测试与开发数据重置](docs/09_人工测试与开发数据重置.md)和[本轮卫生记录](docs/13_Project_Hygiene.md)。
 
 ## 开发者与许可
 
