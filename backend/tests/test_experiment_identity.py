@@ -17,6 +17,7 @@ from app.db.session import make_engine
 from app.models import Experiment
 from app.services.experiment_identity import experiment_batch_month, next_experiment_code
 from app.services.ordering import dish_display_number, sample_display_number
+from app.services.database_upgrade import prepare_database_for_startup, read_revision
 from test_experiment_config import design, make_lot
 from test_seedling_measurement import setup_experiment, observe
 
@@ -181,10 +182,14 @@ def test_v041_upgrade_and_roundtrip_preserve_existing_identities(tmp_path, monke
             conn.exec_driver_sql("INSERT INTO seed_lots(id,created_at,code,taxon_id,is_active) VALUES ('lot','2026-09-01','LOT-2026-001','taxon',1)")
             conn.exec_driver_sql("INSERT INTO experiment_materials(id,created_at,experiment_id,seed_lot_id,display_order,experiment_number) VALUES ('material','2026-09-01','exp','lot',0,1)")
             conn.exec_driver_sql("INSERT INTO germination_dishes(id,created_at,material_id,code,replicate_no,label,seed_count) VALUES ('dish','2026-09-01','material','EXP-2026-001-M001-R01',1,'R1',20)")
+            conn.exec_driver_sql("INSERT INTO germination_observations(id,created_at,dish_id,observed_at,new_germinated_count,notes) VALUES ('observation','2026-09-01','dish','2026-09-01',1,'原巡检事实')")
             conn.exec_driver_sql("INSERT INTO seedling_samples(id,created_at,dish_id,sample_number,germinated_at) VALUES ('sample','2026-09-01','dish',1,'2026-09-01')")
+            conn.exec_driver_sql("UPDATE seedling_samples SET source_observation_id='observation'")
             conn.exec_driver_sql("INSERT INTO measurement_timepoints(id,created_at,experiment_id,day_after_germination) VALUES ('point','2026-09-01','exp',3)")
             conn.exec_driver_sql("INSERT INTO seedling_measurements(id,created_at,sample_id,timepoint_id,root_length_mm,shoot_length_mm,root_unavailable,shoot_unavailable,measured_at) VALUES ('measurement','2026-09-04','sample','point',0,2,0,0,'2026-09-04')")
-    command.upgrade(config, 'head')
+            conn.exec_driver_sql("INSERT INTO audit_logs(id,created_at,action,entity_type,entity_id) VALUES ('audit','2026-09-01','create','Experiment','exp')")
+    result = prepare_database_for_startup(url, 'alembic', backup_root=tmp_path / 'backups')
+    assert result.migrated and read_revision(result.snapshot, immutable=True) == 'c6d91f28a405'
     command.current(config)
     command.check(config)
     with engine.connect() as conn:
@@ -194,6 +199,9 @@ def test_v041_upgrade_and_roundtrip_preserve_existing_identities(tmp_path, monke
             assert conn.exec_driver_sql('SELECT code,experiment_type FROM experiments').all() == [('EXP-2026-001', 'GER')]
             assert conn.exec_driver_sql('SELECT root_length_mm,shoot_length_mm FROM seedling_measurements').all() == [(0, 2)]
             assert conn.exec_driver_sql('SELECT code FROM germination_dishes').scalar() == 'EXP-2026-001-M001-R01'
+            assert conn.exec_driver_sql('SELECT new_germinated_count,notes FROM germination_observations').all() == [(1, '原巡检事实')]
+            assert conn.exec_driver_sql('SELECT source_observation_id FROM seedling_samples').scalar() == 'observation'
+            assert conn.exec_driver_sql('SELECT action,entity_type,entity_id FROM audit_logs').all() == [('create','Experiment','exp')]
     for invalid in ('ALT', None):
         with pytest.raises(IntegrityError), engine.begin() as conn:
             conn.exec_driver_sql("INSERT INTO experiments(id,created_at,code,name,status,experiment_type) VALUES ('bad','2026-09-01','BAD','拒绝类型','draft',?)", (invalid,))

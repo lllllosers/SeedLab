@@ -133,7 +133,7 @@ def test_unwritable_or_failed_migration_never_commits_installation(runtime, monk
     with pytest.raises(InstallationError): initialize_data_root(runtime, DeploymentSettings(), store)
     assert not store.path.exists() and not runtime.data_root.exists()
     monkeypatch.setattr(module, "probe_writable", original_probe)
-    monkeypatch.setattr(module, "upgrade_database", lambda *args: (_ for _ in ()).throw(RuntimeError("migration failed")))
+    monkeypatch.setattr(module, "upgrade_database", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("migration failed")))
     with pytest.raises(RuntimeError): initialize_data_root(runtime, DeploymentSettings(), store)
     assert not store.path.exists() and runtime.config_file.exists()
 
@@ -155,6 +155,25 @@ def test_existing_valid_data_requires_consent_and_preserves_config_users(runtime
     initialize_data_root(runtime, DeploymentSettings(), store, reuse=True)
     assert runtime.config_file.read_bytes() == before
     assert inspect_data_root(runtime, allow_temporary=True).has_users
+
+
+def test_reuse_backup_failure_preserves_deployment_and_explains_next_step(runtime, monkeypatch):
+    from alembic import command
+    from app.services.migrations import migration_config
+    from app.services.sqlite_backup import BackupService
+    store = locator(runtime)
+    initialize_data_root(runtime, DeploymentSettings(), store)
+    config = migration_config(runtime.migration_root)
+    config.attributes["database_url"] = "sqlite:///" + runtime.database.as_posix()
+    command.downgrade(config, "c6d91f28a405")
+    before = runtime.database.read_bytes(), runtime.config_file.read_bytes(), store.path.read_bytes()
+    def refused(*args, **kwargs):
+        raise OSError("injected backup write failure")
+    monkeypatch.setattr(BackupService, "snapshot", refused)
+    with pytest.raises(InstallationError, match="检查备份目录权限和可用空间"):
+        initialize_data_root(runtime, DeploymentSettings(), store, reuse=True)
+    assert before == (runtime.database.read_bytes(), runtime.config_file.read_bytes(), store.path.read_bytes())
+    assert inspect_data_root(runtime, allow_temporary=True).revisions == ("c6d91f28a405",)
 
 
 @pytest.mark.parametrize("failure", ["database", "config", "revision"])

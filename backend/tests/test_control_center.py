@@ -60,6 +60,15 @@ class Child:
         pytest.fail("Must not kill a child during ordinary graceful stop")
 
 
+def test_database_safety_failure_reaches_the_control_center(manager, qt_app):
+    reason = "当前程序不支持这份实验数据库，请使用兼容的程序；原数据不会被升级或覆盖。"
+    child = Child()
+    child.stdout = StringIO("数据库启动未通过：" + reason + "\n")
+    manager._capture_output(child)
+    qt_app.processEvents()
+    assert manager._failure_reason == reason
+
+
 def test_command_defaults_and_unique_temp_control_path(paths):
     one, two = paths.new_stop_file(), paths.new_stop_file()
     assert one != two and not one.exists()
