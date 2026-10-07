@@ -1,6 +1,6 @@
 # SeedLab 文档导航
 
-当前稳定版本为 **v0.5.1**。Architecture Foundation 的 **AF-0—AF-5 已验收并合入 main**；**AF-6** 在独立分支收口架构验证与现行文档。当前结论为 **AF-6 NOT READY**：原正式实例及数据库已删除，没有可验证来源的生产副本，最终副本验收 UNAVAILABLE；其余隔离回归不能代替该硬门。退出条件见[路线图](03_开发路线图.md)，副本验证方法见[生产运维](10_生产部署与控制中心设计.md#生产数据库副本验收)。既有 URL、界面、流程、API、业务 schema 与科研语义保持；没有第二实验类型、Analysis 页面或统计实现。AF-1 源码能力尚未进入现有正式 portable。版本及精确产物身份见[发布说明](releases/v0.5.1.md)。
+当前稳定版本为 **v0.5.1**。Architecture Foundation 的 **AF-0—AF-5 已验收并合入 main**；**AF-6** 在独立分支完成架构验证与现行文档收口，当前为 **16 / 16 effective exit criteria PASS，AF-6 READY FOR ACCEPTANCE**，等待人工验收。原正式实例/数据库已主动销毁且无可验证生产副本，项目方已正式 supersede 原 clone gate，将 Criterion #13 替换为 production-equivalent isolated validation；不声称 production clone PASS，不将 fixture 称为 production clone。退出条件见[路线图](03_开发路线图.md)，替代证据契约见[生产运维](10_生产部署与控制中心设计.md#生产等效隔离验收)。既有 URL、界面、流程、API、业务 schema 与科研语义保持；没有第二实验类型、Analysis 页面或统计实现。AF-1 源码能力尚未进入现有正式 portable。版本及精确产物身份见[发布说明](releases/v0.5.1.md)。
 
 本页是 docs 的唯一入口。每个主题以以下指定文档为权威来源，其他页面只做摘要或引用；业务与实现不一致时先核对代码、回归测试及已确认事实，不能通过重构改变事实。
 

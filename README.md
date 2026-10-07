@@ -2,7 +2,7 @@
 
 SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前稳定生产版本为 **v0.5.1**，已支持材料台账、一体导入、GER 种子萌发试验、分日置床、发芽巡检、前 N 株幼苗选样、根苗长测定、科研工作簿、账号及审计。幼苗测定采用 DAG（发芽后测定时间），保留实测 0、无法测量和尚无数据的区别。
 
-**Architecture Foundation / AF-0—AF-5 已验收并合入 main**。当前 **AF-6** 在独立分支完成架构核验、回归保护与文档收口，保留现有 URL、界面、流程、API、科研数据语义、schema、VERSION 及正式 v0.5.1 产物。**AF-6 NOT READY**：原正式实例及数据库已被用户删除，尚无可验证来源的正式数据库副本；生产副本验收为 UNAVAILABLE，不能以隔离测试库替代。这是验收证据缺失，不是代码回归或架构实现失败。AF-1 源码的新能力尚未发布到现有 portable。阶段范围与退出条件从[文档唯一入口](docs/README.md)进入。
+**Architecture Foundation / AF-0—AF-5 已验收并合入 main**。当前 **AF-6** 在独立分支完成架构核验、回归保护与文档收口，保留现有 URL、界面、流程、API、科研数据语义、schema、VERSION 及正式 v0.5.1 产物。项目方已正式 supersede 原生产副本退出条件：原正式实例及数据库已主动销毁，且不存在来源可验证的生产副本；Criterion #13 改为 **production-equivalent isolated validation**，证据满足。当前为 **16 / 16 effective exit criteria PASS，AF-6 READY FOR ACCEPTANCE**，等待人工验收；不表示 production clone PASS，也不将 fixture 称为 production clone。AF-1 源码的新能力尚未发布到现有 portable。阶段范围与退出条件从[文档唯一入口](docs/README.md)进入。
 
 ## 使用与开发
 
