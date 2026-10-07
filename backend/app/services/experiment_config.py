@@ -2,23 +2,23 @@
 
 from datetime import timedelta
 
-from fastapi import HTTPException
+from app.contracts.errors import ConflictError, NotFoundError, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import ConfiguredExperimentInput, MaterialInput, MaterialPatch, ProtocolInput
+from app.contracts.experiments import ConfiguredExperimentInput, MaterialInput, MaterialPatch, ProtocolInput
 from app.models import Experiment, ExperimentMaterial, ExperimentProtocol, GerminationDish, MeasurementTimepoint, SeedLot, Taxon, User
-from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
+from app.services.application_support import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.experiment_identity import next_experiment_code, experiment_batch_month
-from app.api.schemas import ExperimentOut
+from app.contracts.experiments import ExperimentOut
 from app.services.ordering import material_key
 
 
 def editable(experiment: Experiment) -> None:
     if experiment.numbering_locked_at:
-        raise HTTPException(409, "置床编号已确认；尚未置床时可先选择“重新调整实验”")
+        raise ConflictError("置床编号已确认；尚未置床时可先选择“重新调整实验”")
     if experiment.status not in {"draft", "ready"}:
-        raise HTTPException(409, "实验已经开始或结束，不能再修改材料、重复数和测定时间")
+        raise ConflictError("实验已经开始或结束，不能再修改材料、重复数和测定时间")
 
 
 def protocol_for(db: Session, experiment_id: str) -> ExperimentProtocol | None:
@@ -40,9 +40,9 @@ def days_for(db: Session, experiment_id: str) -> list[MeasurementTimepoint]:
 
 def normalize_days(days: list[int]) -> list[int]:
     if any(isinstance(day, bool) or not isinstance(day, int) or day < 0 for day in days):
-        raise HTTPException(422, "DAG 必须是大于或等于 0 的整数")
+        raise ValidationError("DAG 必须是大于或等于 0 的整数")
     if len(days) != len(set(days)):
-        raise HTTPException(422, "同一实验不能设置重复的 DAG 时间点")
+        raise ValidationError("同一实验不能设置重复的 DAG 时间点")
     return sorted(days)
 
 
@@ -53,13 +53,13 @@ def effective(material: ExperimentMaterial | MaterialInput, protocol: Experiment
         "effective_sample_count": material.sample_count_override or protocol.sample_count,
     }
     if any(value is None or value <= 0 for value in values.values()):
-        raise HTTPException(422, "请先填写完整且大于 0 的默认实验方案")
+        raise ValidationError("请先填写完整且大于 0 的默认实验方案")
     capacity = values["effective_seeds_per_dish"]
     if protocol.sample_scope == "per_material":
         capacity *= values["effective_replicate_count"]
     if values["effective_sample_count"] > capacity:
         scope = "每个培养皿" if protocol.sample_scope == "per_dish" else "每个实验材料"
-        raise HTTPException(422, f"{scope}的取样数不能超过理论可取样种子数 {capacity}")
+        raise ValidationError(f"{scope}的取样数不能超过理论可取样种子数 {capacity}")
     return values
 
 
@@ -68,13 +68,13 @@ def validate_all(protocol: ExperimentProtocol | ProtocolInput, materials: list[E
         "seeds_per_dish", "replicate_count", "sampling_rule",
         "sample_count", "sample_scope", "germination_criterion"
     )):
-        raise HTTPException(422, "请先填写完整的默认实验方案")
+        raise ValidationError("请先填写完整的默认实验方案")
     if protocol.sampling_rule != "first_germinated":
-        raise HTTPException(422, "当前仅支持按发芽顺序取前 N 株")
+        raise ValidationError("当前仅支持按发芽顺序取前 N 株")
     if protocol.sample_scope not in {"per_dish", "per_material"}:
-        raise HTTPException(422, "取样范围无效")
+        raise ValidationError("取样范围无效")
     if not protocol.germination_criterion.strip():
-        raise HTTPException(422, "请填写发芽判定标准")
+        raise ValidationError("请填写发芽判定标准")
     for material in materials:
         effective(material, protocol)
 
@@ -103,7 +103,7 @@ def workload(experiment: Experiment | ConfiguredExperimentInput, protocol: Exper
 def validate_lot(db: Session, lot_id: str) -> SeedLot:
     lot = require_entity(db, SeedLot, lot_id)
     if not lot.is_active:
-        raise HTTPException(422, f"种子批次 {lot.code} 已停用，不能加入实验")
+        raise ValidationError(f"种子批次 {lot.code} 已停用，不能加入实验")
     return lot
 
 
@@ -151,10 +151,10 @@ def configuration(db: Session, experiment_id: str) -> dict:
 
 def preview(data: ConfiguredExperimentInput, db: Session) -> dict:
     if len(data.name.strip()) < 2:
-        raise HTTPException(422, "实验名称至少需要 2 个字符")
+        raise ValidationError("实验名称至少需要 2 个字符")
     normalize_days(data.dag_days)
     if len({item.seed_lot_id for item in data.materials}) != len(data.materials):
-        raise HTTPException(422, "同一种子批次不能重复加入实验")
+        raise ValidationError("同一种子批次不能重复加入实验")
     for item in data.materials:
         validate_lot(db, item.seed_lot_id)
     return workload(data, data.protocol, data.materials, data.dag_days)
@@ -205,7 +205,7 @@ def add_material(db: Session, experiment_id: str, data: MaterialInput, user_id: 
     validate_lot(db, data.seed_lot_id)
     current = materials_for(db, experiment_id)
     if any(item.seed_lot_id == data.seed_lot_id for item in current):
-        raise HTTPException(409, "该种子批次已加入本实验")
+        raise ConflictError("该种子批次已加入本实验")
     protocol = protocol_for(db, experiment_id)
     if protocol:
         validate_all(protocol, [data])
@@ -222,7 +222,7 @@ def update_material(db: Session, experiment_id: str, material_id: str, data: Mat
     editable(require_entity(db, Experiment, experiment_id))
     item = require_entity(db, ExperimentMaterial, material_id)
     if item.experiment_id != experiment_id:
-        raise HTTPException(404, "实验材料不存在")
+        raise NotFoundError("实验材料不存在")
     protocol = protocol_for(db, experiment_id)
     before = material_dict(db, item, protocol)
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -241,11 +241,11 @@ def remove_material(db: Session, experiment_id: str, material_id: str, user_id: 
     editable(experiment)
     item = require_entity(db, ExperimentMaterial, material_id)
     if item.experiment_id != experiment_id:
-        raise HTTPException(404, "实验材料不存在")
+        raise NotFoundError("实验材料不存在")
     if experiment.status == "ready" and len(materials_for(db, experiment_id)) == 1:
-        raise HTTPException(422, "已就绪实验必须保留至少一个材料；可先改回草稿")
+        raise ValidationError("已就绪实验必须保留至少一个材料；可先改回草稿")
     if db.scalar(select(GerminationDish.id).where(GerminationDish.material_id == item.id).limit(1)):
-        raise HTTPException(409, "该材料已有执行数据，不能移除")
+        raise ConflictError("该材料已有执行数据，不能移除")
     before = material_dict(db, item, protocol_for(db, experiment_id))
     db.delete(item)
     for order, other in enumerate(material for material in materials_for(db, experiment_id) if material.id != item.id):
@@ -255,7 +255,7 @@ def remove_material(db: Session, experiment_id: str, material_id: str, user_id: 
 
 
 def reorder_materials(db: Session, experiment_id: str, material_ids: list[str], user_id: str) -> list[dict]:
-    raise HTTPException(409, "实验材料已按中文名自动排序，不能手动调整顺序")
+    raise ConflictError("实验材料已按中文名自动排序，不能手动调整顺序")
 
 
 def replace_days(db: Session, experiment_id: str, days: list[int], user_id: str) -> list[int]:
@@ -263,7 +263,7 @@ def replace_days(db: Session, experiment_id: str, days: list[int], user_id: str)
     editable(experiment)
     normalized = normalize_days(days)
     if experiment.status == "ready" and not normalized:
-        raise HTTPException(422, "已就绪实验必须保留至少一个 DAG 时间点；可先改回草稿")
+        raise ValidationError("已就绪实验必须保留至少一个 DAG 时间点；可先改回草稿")
     old = days_for(db, experiment_id)
     before = [item.day_after_germination for item in old]
     if before == normalized:
@@ -287,15 +287,15 @@ def set_status(db: Session, experiment: Experiment, target: str) -> None:
         from app.services.experiment_lifecycle import require_complete
         require_complete(db, experiment.id)
     if target == "cancelled" and target != experiment.status:
-        raise HTTPException(409, "请通过“终止实验”填写原因后结束进行中的实验")
+        raise ConflictError("请通过“终止实验”填写原因后结束进行中的实验")
     if experiment.numbering_locked_at and target == "draft":
-        raise HTTPException(409, "置床编号已确认；若尚未置床，请使用“重新调整实验”")
+        raise ConflictError("置床编号已确认；若尚未置床，请使用“重新调整实验”")
     allowed = {"draft": {"ready", "cancelled"}, "ready": {"draft", "cancelled"},
                "active": {"completed", "cancelled"}, "completed": set(), "cancelled": set()}
     if target == experiment.status:
         return
     if target not in allowed[experiment.status]:
-        raise HTTPException(409, "当前实验不能直接进入该状态，请先完成实验配置并正式开始实验")
+        raise ConflictError("当前实验不能直接进入该状态，请先完成实验配置并正式开始实验")
     if target in {"ready", "active"}:
         protocol = protocol_for(db, experiment.id)
         materials = materials_for(db, experiment.id)
@@ -317,6 +317,6 @@ def set_status(db: Session, experiment: Experiment, target: str) -> None:
         if not days:
             missing.append("设置至少一个发芽后测定时间（DAG）")
         if missing:
-            raise HTTPException(422, "标记为已就绪前，请先" + "、".join(missing))
+            raise ValidationError("标记为已就绪前，请先" + "、".join(missing))
         validate_all(protocol, materials)
     experiment.status = target

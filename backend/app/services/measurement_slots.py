@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 
-from fastapi import HTTPException
+from app.contracts.errors import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -112,32 +112,32 @@ def _build(db: Session, experiment_ids: list[str]) -> CanonicalSlots:
     for material in materials:
         protocol = protocols.get(material.experiment_id)
         if protocol is None or protocol.sampling_rule != "first_germinated" or protocol.sample_scope not in {"per_dish", "per_material"}:
-            raise HTTPException(422, "部分实验尚未填写支持的取样方式和取样范围，请完善实验方案后再导出科研结果")
+            raise ValidationError("部分实验尚未填写支持的取样方式和取样范围，请完善实验方案后再导出科研结果")
         target = material.sample_count_override or protocol.sample_count
         replicates = material.replicate_count_override or protocol.replicate_count
         if not target or not replicates:
-            raise HTTPException(422, "部分实验尚未填写取样数和重复数，请完善实验方案后再导出科研结果")
+            raise ValidationError("部分实验尚未填写取样数和重复数，请完善实验方案后再导出科研结果")
         by_replicate = dishes_by_material[material.id]
         material_samples = samples_by_material[material.id]
         if any(number > replicates for number in by_replicate):
-            raise HTTPException(422, "培养皿重复数与实验方案不一致，请核对方案后再导出，避免遗漏实际幼苗")
+            raise ValidationError("培养皿重复数与实验方案不一致，请核对方案后再导出，避免遗漏实际幼苗")
         if protocol.sample_scope == "per_dish":
             for replicate in range(1, replicates + 1):
                 dish = by_replicate.get(replicate)
                 actual = samples_by_dish[dish.id] if dish else {}
                 if any(number > target for number in actual):
-                    raise HTTPException(422, "实际幼苗序号超过每皿取样数，请核对实验方案后再导出，避免遗漏实际幼苗")
+                    raise ValidationError("实际幼苗序号超过每皿取样数，请核对实验方案后再导出，避免遗漏实际幼苗")
                 for number in range(1, target + 1):
                     sample_slots.append(PlannedSeedlingSlot(material, protocol.sample_scope, number, replicate,
                                                              replicates, dish, actual.get(number)))
         else:
             if len(material_samples) > target:
-                raise HTTPException(422, "实际幼苗数超过每材料取样数，请核对实验方案后再导出，避免遗漏实际幼苗")
+                raise ValidationError("实际幼苗数超过每材料取样数，请核对实验方案后再导出，避免遗漏实际幼苗")
             if replicates == 1:
                 dish = by_replicate.get(1)
                 actual = samples_by_dish[dish.id] if dish else {}
                 if any(number > target for number in actual):
-                    raise HTTPException(422, "实际幼苗序号超过取样数，请核对实验方案后再导出")
+                    raise ValidationError("实际幼苗序号超过取样数，请核对实验方案后再导出")
                 for number in range(1, target + 1):
                     sample_slots.append(PlannedSeedlingSlot(material, protocol.sample_scope, number, 1, 1,
                                                              dish, actual.get(number)))
@@ -154,7 +154,7 @@ def _build(db: Session, experiment_ids: list[str]) -> CanonicalSlots:
     for measurement in measurements:
         point = point_by_id.get(measurement.timepoint_id)
         if point is None or point.experiment_id != sample_experiments[measurement.sample_id]:
-            raise HTTPException(422, "实际测定时间点与幼苗所属实验不一致，请核对记录后再导出")
+            raise ValidationError("实际测定时间点与幼苗所属实验不一致，请核对记录后再导出")
     measurement_slots = tuple(CanonicalMeasurementSlot(slot, point,
         measurements_by_key.get((slot.sample.id, point.id)) if slot.sample else None)
         for slot in sample_slots for point in points_by_experiment[slot.material.experiment_id])

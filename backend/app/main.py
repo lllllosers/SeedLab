@@ -5,6 +5,8 @@ from fastapi import FastAPI, Request
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api import auth, catalog, configuration, execution, experiments, material_import, measurement, setup, system, workbook_export
+from app.api.errors import application_error_handler
+from app.contracts.errors import ApplicationError
 from app.core.bootstrap import ensure_bootstrap_token
 from app.core.config import Settings, get_settings
 from app.core.web import ProductionWeb
@@ -33,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if development else None, lifespan=lifespan,
     )
     application.state.settings = settings
+    application.add_exception_handler(ApplicationError, application_error_handler)
     for router in (setup.router, auth.router, catalog.router, configuration.router,
                    execution.router, measurement.router, experiments.router, system.router,
                    material_import.router, workbook_export.router):

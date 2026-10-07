@@ -2,7 +2,7 @@
 from collections import Counter
 from datetime import date, datetime, timedelta
 
-from fastapi import HTTPException
+from app.contracts.errors import ValidationError
 from openpyxl import load_workbook
 import pytest
 from sqlalchemy import func, inspect, select
@@ -198,7 +198,7 @@ def test_inconsistent_sampling_design_cannot_silently_drop_actual_seedlings(desi
         obtained(db, dish, number)
     db.commit()
     before = counts(db)
-    with pytest.raises(HTTPException, match='避免遗漏实际幼苗'):
+    with pytest.raises(ValidationError, match='避免遗漏实际幼苗'):
         build_measurement_slots(db, [experiment.id])
     assert counts(db) == before
 
@@ -207,7 +207,7 @@ def test_incomplete_design_has_actionable_error_instead_of_disappearing_material
     db, experiment, protocol, _, _, _ = design
     protocol.sample_count = None
     db.commit()
-    with pytest.raises(HTTPException, match='完善实验方案'):
+    with pytest.raises(ValidationError, match='完善实验方案'):
         build(db, [experiment.id])
 
 

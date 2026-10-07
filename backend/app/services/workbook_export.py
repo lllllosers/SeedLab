@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from collections import defaultdict
 from io import BytesIO
 
-from fastapi import HTTPException
+from app.contracts.errors import NotFoundError, ValidationError
 from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,10 +24,10 @@ def _date(value):
 
 def build(db: Session, experiment_ids: list[str]) -> BytesIO:
     if not experiment_ids or len(experiment_ids) != len(set(experiment_ids)):
-        raise HTTPException(422, "请至少选择一个不重复的实验")
+        raise ValidationError("请至少选择一个不重复的实验")
     experiments = {item.id: item for item in db.scalars(select(Experiment).where(Experiment.id.in_(experiment_ids)))}
     if len(experiments) != len(experiment_ids):
-        raise HTTPException(404, "部分实验不存在，请刷新列表后重试")
+        raise NotFoundError("部分实验不存在，请刷新列表后重试")
     rows = db.execute(select(ExperimentMaterial, SeedLot, Taxon)
                       .join(SeedLot, ExperimentMaterial.seed_lot_id == SeedLot.id)
                       .join(Taxon, SeedLot.taxon_id == Taxon.id)
@@ -35,7 +35,7 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
     rows = sorted(rows, key=lambda row: (*material_key(row[2], row[1]), experiments[row[0].experiment_id].code,
                                           row[0].id))
     if not rows:
-        raise HTTPException(422, "所选实验还没有材料，无法生成工作簿")
+        raise ValidationError("所选实验还没有材料，无法生成工作簿")
     canonical = build_measurement_slots(db, experiment_ids)
     slots_by_material = defaultdict(list)
     stages_by_slot = defaultdict(list)

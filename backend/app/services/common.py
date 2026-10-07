@@ -1,9 +1,11 @@
+"""Compatibility helpers for non-growth callers; growth uses application_support."""
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import AuditLog
+from app.contracts.errors import ConflictError, NotFoundError
+from app.services import application_support
+from app.services.application_support import record
 
 
 def next_code(db: Session, model: type, prefix: str, width: int = 4) -> str:
@@ -12,28 +14,22 @@ def next_code(db: Session, model: type, prefix: str, width: int = 4) -> str:
     return f"{prefix}{highest + 1:0{width}d}"
 
 
-def record(db: Session, user_id: str, action: str, entity_type: str, entity_id: str, before: dict | None, after: dict | None) -> None:
-    db.add(AuditLog(user_id=user_id, action=action, entity_type=entity_type, entity_id=entity_id, before=before, after=after))
-
-
 def commit_or_conflict(db: Session) -> None:
     try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(409, "编号或名称已存在，或数据正在被引用") from exc
+        application_support.commit_or_conflict(db)
+    except ConflictError as exc:
+        raise HTTPException(409, exc.detail) from exc.__cause__
 
 
 def flush_or_conflict(db: Session) -> None:
     try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(409, "编号或名称已存在，或数据正在被引用") from exc
+        application_support.flush_or_conflict(db)
+    except ConflictError as exc:
+        raise HTTPException(409, exc.detail) from exc.__cause__
 
 
 def require_entity(db: Session, model: type, entity_id: str):
-    item = db.get(model, entity_id)
-    if item is None:
-        raise HTTPException(404, "找不到所选内容，请刷新页面后重试")
-    return item
+    try:
+        return application_support.require_entity(db, model, entity_id)
+    except NotFoundError as exc:
+        raise HTTPException(404, exc.detail) from exc.__cause__

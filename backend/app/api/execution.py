@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from app.api.schemas import (BatchObservationInput, ObservationInput, ObservationPatch,
+from app.contracts.germination import (BatchObservationInput, ObservationInput, ObservationPatch,
                              SowDishesInput, CorrectSowingInput, CancelDishInput)
 from app.core.auth import current_user
 from app.db.session import get_db

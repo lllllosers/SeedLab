@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import ExperimentIn, ExperimentOut, ExperimentPatch, TerminateExperiment
+from app.contracts.experiments import ExperimentIn, ExperimentOut, ExperimentPatch, TerminateExperiment
 from app.core.auth import current_user
 from app.db.session import get_db
 from app.models import Experiment, User

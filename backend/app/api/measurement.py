@@ -2,7 +2,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.schemas import MeasurementInput, MeasurementPatch, PositionLabelPatch
+from app.contracts.measurement import MeasurementInput, MeasurementPatch, PositionLabelPatch
 from app.core.auth import current_user
 from app.db.session import get_db
 from app.models import User

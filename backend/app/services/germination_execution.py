@@ -3,15 +3,15 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException
+from app.contracts.errors import ConflictError, NotFoundError, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import BatchObservationInput, ObservationPatch
+from app.contracts.germination import BatchObservationInput, ObservationPatch
 from app.core.experiment_types import EXPERIMENT_TYPES
 from app.models import (Experiment, ExperimentMaterial, GerminationDish, GerminationObservation,
                         SeedlingSample, SeedLot, Taxon)
-from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
+from app.services.application_support import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.experiment_config import days_for, effective, materials_for, protocol_for
 from app.services.ordering import field_number
 from app.services.local_time import iso_utc, local_date, today, utc_naive
@@ -46,7 +46,7 @@ def reconcile_samples(db: Session, material: ExperimentMaterial, user_id: str) -
     """Fill first-N slots in stable observation order without deleting sample identities."""
     protocol = protocol_for(db, material.experiment_id)
     if protocol is None:
-        raise HTTPException(422, "请先填写实验方案，再记录发芽巡检")
+        raise ValidationError("请先填写实验方案，再记录发芽巡检")
     target = effective(material, protocol)["effective_sample_count"]
     dishes = list(db.scalars(select(GerminationDish).where(GerminationDish.material_id == material.id)
                               .order_by(GerminationDish.replicate_no)))
@@ -69,11 +69,11 @@ def reconcile_samples(db: Session, material: ExperimentMaterial, user_id: str) -
     if protocol.sample_scope == "per_material":
         budget = target - sum(legacy_by_dish.values())
         if budget < 0:
-            raise HTTPException(409, "既有样本数超过当前材料取样上限")
+            raise ConflictError("既有样本数超过当前材料取样上限")
     else:
         budgets = {dish.id: target - legacy_by_dish[dish.id] for dish in dishes}
         if any(value < 0 for value in budgets.values()):
-            raise HTTPException(409, "既有样本数超过当前培养皿取样上限")
+            raise ConflictError("既有样本数超过当前培养皿取样上限")
 
     for observation in observations:
         dish = dish_by_id[observation.dish_id]
@@ -85,7 +85,7 @@ def reconcile_samples(db: Session, material: ExperimentMaterial, user_id: str) -
             budgets[dish.id] -= desired
         existing = len(sourced[observation.id])
         if existing > desired:
-            raise HTTPException(409, "此次修改会使已选幼苗不再属于前 N 株；请保留已有样本")
+            raise ConflictError("此次修改会使已选幼苗不再属于前 N 株；请保留已有样本")
         for _ in range(desired - existing):
             next_number[dish.id] += 1
             sample = SeedlingSample(dish_id=dish.id, sample_number=next_number[dish.id],
@@ -103,31 +103,31 @@ def batch_create_observations(db: Session, experiment_id: str, data: BatchObserv
     try:
         experiment = require_entity(db, Experiment, experiment_id)
         if experiment.status != "active":
-            raise HTTPException(409, "只有进行中的实验可以新增发芽巡检")
+            raise ConflictError("只有进行中的实验可以新增发芽巡检")
         observed_at = utc_naive(data.observed_at)
         entries = [entry for entry in data.entries if entry.new_germinated_count is not None]
         if len({entry.dish_id for entry in entries}) != len(entries):
-            raise HTTPException(422, "同一批巡检中培养皿不能重复")
+            raise ValidationError("同一批巡检中培养皿不能重复")
         material_ids = set()
         created = []
         for entry in entries:
             dish = require_entity(db, GerminationDish, entry.dish_id)
             material = require_entity(db, ExperimentMaterial, dish.material_id)
             if material.experiment_id != experiment_id:
-                raise HTTPException(404, "培养皿不属于当前实验")
+                raise NotFoundError("培养皿不属于当前实验")
             if dish.cancelled_at is not None:
-                raise HTTPException(409, "已取消的培养皿不能记录发芽巡检")
+                raise ConflictError("已取消的培养皿不能记录发芽巡检")
             if dish.sown_at is None:
-                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 缺少实际置床时间")
+                raise ValidationError(f"培养皿 {dish_user_number(db, dish)} 缺少实际置床时间")
             if observed_at < utc_naive(dish.sown_at):
-                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 的巡检时间不能早于置床时间")
+                raise ValidationError(f"培养皿 {dish_user_number(db, dish)} 的巡检时间不能早于置床时间")
             current = cumulative(db, dish.id)
             if current + entry.new_germinated_count > dish.seed_count:
-                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 已累计发芽 {current} 粒，本次最多还能记录 {dish.seed_count - current} 粒")
+                raise ValidationError(f"培养皿 {dish_user_number(db, dish)} 已累计发芽 {current} 粒，本次最多还能记录 {dish.seed_count - current} 粒")
             if db.scalar(select(GerminationObservation.id).where(
                     GerminationObservation.dish_id == dish.id,
                     GerminationObservation.observed_at == observed_at)):
-                raise HTTPException(409, f"培养皿 {dish_user_number(db, dish)} 在这个时间已有巡检记录，请修改原记录或选择其他时间")
+                raise ConflictError(f"培养皿 {dish_user_number(db, dish)} 在这个时间已有巡检记录，请修改原记录或选择其他时间")
             observation = GerminationObservation(dish_id=dish.id, observed_at=observed_at,
                                                  new_germinated_count=entry.new_germinated_count,
                                                  notes=entry.notes)
@@ -154,7 +154,7 @@ def require_observation(db: Session, experiment_id: str, observation_id: str) ->
     dish = require_entity(db, GerminationDish, observation.dish_id)
     material = require_entity(db, ExperimentMaterial, dish.material_id)
     if material.experiment_id != experiment_id:
-        raise HTTPException(404, "巡检记录不属于当前实验")
+        raise NotFoundError("巡检记录不属于当前实验")
     return experiment, dish, observation
 
 
@@ -163,19 +163,19 @@ def correct_observation(db: Session, experiment_id: str, observation_id: str,
     try:
         experiment, dish, observation = require_observation(db, experiment_id, observation_id)
         if experiment.status not in {"active", "completed"}:
-            raise HTTPException(409, "当前实验状态不允许修正巡检记录")
+            raise ConflictError("当前实验状态不允许修正巡检记录")
         patch = data.model_dump(exclude_unset=True)
         if "new_germinated_count" in patch and patch["new_germinated_count"] is None:
-            raise HTTPException(422, "本次新增发芽数不可为空；0 表示已巡检且无新增")
+            raise ValidationError("本次新增发芽数不可为空；0 表示已巡检且无新增")
         before = observation_snapshot(observation)
         if "new_germinated_count" in patch:
             source_count = db.scalar(select(func.count(SeedlingSample.id)).where(
                 SeedlingSample.source_observation_id == observation.id)) or 0
             if patch["new_germinated_count"] < source_count:
-                raise HTTPException(409, f"此次巡检已选出 {source_count} 株幼苗，本次新增发芽数不能小于 {source_count}")
+                raise ConflictError(f"此次巡检已选出 {source_count} 株幼苗，本次新增发芽数不能小于 {source_count}")
             other_total = cumulative(db, dish.id) - observation.new_germinated_count
             if other_total + patch["new_germinated_count"] > dish.seed_count:
-                raise HTTPException(422, f"培养皿 {dish_user_number(db, dish)} 的其他巡检已记录 {other_total} 粒，本次最多还能填写 {dish.seed_count - other_total} 粒")
+                raise ValidationError(f"培养皿 {dish_user_number(db, dish)} 的其他巡检已记录 {other_total} 粒，本次最多还能填写 {dish.seed_count - other_total} 粒")
         for key, value in patch.items():
             setattr(observation, key, value)
         flush_or_conflict(db)
@@ -193,9 +193,9 @@ def delete_observation(db: Session, experiment_id: str, observation_id: str, use
     try:
         experiment, dish, observation = require_observation(db, experiment_id, observation_id)
         if experiment.status not in {"active", "completed"}:
-            raise HTTPException(409, "当前实验状态不允许删除巡检记录")
+            raise ConflictError("当前实验状态不允许删除巡检记录")
         if db.scalar(select(SeedlingSample.id).where(SeedlingSample.source_observation_id == observation.id).limit(1)):
-            raise HTTPException(409, "此次巡检已产生幼苗样本，不能删除")
+            raise ConflictError("此次巡检已产生幼苗样本，不能删除")
         before = observation_snapshot(observation)
         db.delete(observation)
         flush_or_conflict(db)

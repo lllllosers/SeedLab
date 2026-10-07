@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import ConfiguredExperimentInput, DagInput, MaterialInput, MaterialOrderInput, MaterialPatch, ProtocolInput
+from app.contracts.experiments import ConfiguredExperimentInput, DagInput, MaterialInput, MaterialOrderInput, MaterialPatch, ProtocolInput
 from app.core.auth import current_user
 from app.db.session import get_db
 from app.models import Experiment, ExperimentMaterial, SeedLot, Taxon, User

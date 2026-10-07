@@ -2,13 +2,13 @@
 from datetime import date
 import re
 
-from fastapi import HTTPException
+from app.contracts.errors import ValidationError
 from sqlalchemy import Integer, String, and_, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import (Experiment, ExperimentMaterial, GerminationDish, MeasurementTimepoint,
                         SeedlingMeasurement, SeedlingSample, SeedLot, Taxon)
-from app.services.common import require_entity
+from app.services.application_support import require_entity
 from app.services.local_time import iso_utc, today
 from app.services.ordering import field_number_expression, sample_number_expression
 
@@ -108,7 +108,7 @@ def worklist(db: Session, experiment_id: str, status="pending", dag=None, q=None
     having = {"pending": a.pending_count > 0, "overdue": a.overdue_count > 0, "due_today": a.due_today_count > 0,
               "all": a.material_id.is_not(None)}
     if status not in having:
-        raise HTTPException(422, "请选择有效的材料任务状态")
+        raise ValidationError("请选择有效的材料任务状态")
     query = select(grouped).where(having[status], experiment.status == "active")
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     materials = [dict(row) for row in db.execute(query.order_by(case((a.overdue_count > 0, 0), (a.due_today_count > 0, 1), else_=2),
@@ -129,7 +129,7 @@ def records(db: Session, experiment_id: str, q=None, material_ids=None, dag=None
             date_from: date | None = None, date_to: date | None = None, page=1, page_size=50):
     require_entity(db, Experiment, experiment_id)
     if date_from and date_to and date_from > date_to:
-        raise HTTPException(422, "开始日期不能晚于结束日期")
+        raise ValidationError("开始日期不能晚于结束日期")
     c = slots().c
     filters = [c.experiment_id == experiment_id, c.measurement_id.is_not(None)]
     if q and q.strip(): filters.append(search(c, q))
