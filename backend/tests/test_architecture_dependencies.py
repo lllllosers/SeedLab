@@ -10,10 +10,10 @@ APP = Path(__file__).resolve().parents[1] / "app"
 GROWTH_SERVICES = (
     "germination_config", "germination_workflow", "experiment_identity", "experiment_lifecycle",
     "germination_execution", "sowing_workflow", "seedling_measurement",
-    "measurement_query", "measurement_slots", "workbook_export", "application_support",
+    "measurement_query", "measurement_slots", "measurement_schedule", "workbook_export", "application_support",
 )
 FORBIDDEN = ("app.api", "app.main", "fastapi", "starlette", "app.core.auth",
-             "app.core.web", "app.services.common")
+             "app.core.web", "app.services.common", "app.analysis")
 CORE_MODULES = ("core/experiment_types.py", "services/experiment_identity.py",
                 "services/experiment_lifecycle.py")
 CORE_FORBIDDEN = FORBIDDEN + (
@@ -24,6 +24,11 @@ CORE_FORBIDDEN = FORBIDDEN + (
     "app.contracts.germination", "app.contracts.measurement",
 )
 LIFECYCLE_FIELDS = {"status", "started_at", "ended_at", "termination_reason"}
+ANALYSIS_FORBIDDEN = tuple(prefix for prefix in FORBIDDEN if prefix != 'app.analysis') + (
+    "app.services", "app.models", "app.db", "sqlalchemy", "app.experiment_composition")
+MUTATION_CALLS = {"add", "add_all", "delete", "flush", "commit", "rollback", "merge",
+                  "bulk_save_objects", "bulk_insert_mappings", "bulk_update_mappings",
+                  "insert", "update", "text", "exec_driver_sql"}
 
 
 def import_base(node, module):
@@ -102,6 +107,19 @@ def assert_lifecycle_writes(source: str, module: str):
                     and len(node.args) >= 2 and isinstance(node.args[0], ast.Name) and node.args[0].id in experiments:
                 assert not (isinstance(node.args[1], ast.Constant) and node.args[1].value in LIFECYCLE_FIELDS), \
                     f"{module}:{node.lineno}: Experiment lifecycle write outside authority"
+
+
+def assert_readonly_projection(source: str):
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call):
+            name = node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id \
+                if isinstance(node.func, ast.Name) else ''
+            assert name not in MUTATION_CALLS, f"projection mutation call: {name}"
+            assert name not in {"ExperimentMaterial", "GerminationDish", "SeedlingSample", "SeedlingMeasurement",
+                                "MeasurementTimepoint", "ExperimentProtocol"}, "projection constructs fake ORM"
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] \
+            if isinstance(node, (ast.AnnAssign, ast.AugAssign)) else []
+        assert not any(isinstance(target, ast.Attribute) for target in targets), "projection writes entity attribute"
 
 
 @pytest.mark.parametrize("name", GROWTH_SERVICES)
@@ -186,3 +204,38 @@ def test_lifecycle_guard_allows_other_entities_and_default_creation():
     assert_lifecycle_writes("def update(job):\n    job.status = 'completed'\n"
                             "def create():\n    experiment = Experiment(name='草稿实验')",
                             "app.services.material_import")
+
+
+@pytest.mark.parametrize('path', sorted((APP / 'analysis').glob('*.py')), ids=lambda p: p.stem)
+def test_analysis_only_depends_on_neutral_dataset_contracts(path):
+    assert_dependencies(path.read_text(encoding='utf-8'), f'app.analysis.{path.stem}', ANALYSIS_FORBIDDEN)
+
+
+@pytest.mark.parametrize('module', ['app.services.experiment_lifecycle', 'app.services.germination_workflow',
+                                   'app.services.seedling_measurement'])
+@pytest.mark.parametrize('source', ['import app.analysis.datasets', 'from app import analysis',
+                                   'from ..analysis.datasets import read_dataset'])
+def test_guard_rejects_core_ger_measurement_to_analysis(module, source):
+    with pytest.raises(AssertionError, match='forbidden dependencies'):
+        assert_dependencies(source, module)
+
+
+@pytest.mark.parametrize('source', ['from app.api import measurement', 'from fastapi import Depends',
+                                   'import starlette', 'from app.services.seedling_measurement import create',
+                                   'from app.services.measurement_slots import MeasurementDatasetReader',
+                                   'from app.models import SeedlingSample', 'from sqlalchemy.orm import Session'])
+def test_guard_rejects_analysis_transport_orm_and_implementation_imports(source):
+    with pytest.raises(AssertionError, match='forbidden dependencies'):
+        assert_dependencies(source, 'app.analysis.datasets', ANALYSIS_FORBIDDEN)
+
+
+def test_canonical_projection_has_no_fact_mutation_or_fake_orm():
+    assert_readonly_projection((APP / 'services/measurement_slots.py').read_text(encoding='utf-8'))
+
+
+@pytest.mark.parametrize('source', ['db.add(sample)', 'db.commit()', 'delete(SeedlingSample)',
+                                   'db.execute(update(SeedlingMeasurement))', 'db.exec_driver_sql(sql)',
+                                   'sample.root_length_mm = 0', 'fake = SeedlingSample(sample_number=1)'])
+def test_readonly_guard_rejects_injected_fact_mutations(source):
+    with pytest.raises(AssertionError, match='projection'):
+        assert_readonly_projection(source)

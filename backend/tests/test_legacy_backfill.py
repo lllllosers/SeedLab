@@ -19,6 +19,22 @@ from app.services.germination_execution import execution_summary
 from app.services.measurement_query import dashboard, records, slot_summary, task_summary, worklist
 from app.services.seedling_measurement import task_data
 from app.services.migrations import check_database_schema
+from app.analysis import read_dataset
+from app.services.measurement_slots import MeasurementDatasetReader
+
+
+def assert_historical_dataset(db, experiment_id):
+    dataset = read_dataset(MeasurementDatasetReader(db), [experiment_id])
+    assert len({slot.material_id for slot in dataset.seedling_slots}) == 200
+    assert len(dataset.seedling_slots) == 2000 and len(dataset.rows) == 6000
+    assert sum(slot.sample_id is not None for slot in dataset.seedling_slots) == 1665
+    assert sum(row.measurement_exists for row in dataset.rows) == 4955
+    assert sum(not row.measurement_exists and row.slot.sample_id is not None for row in dataset.rows) == 40
+    assert sum(row.slot.sample_id is None for row in dataset.rows) == 1005
+    assert sum(row.root_length_mm == 0 for row in dataset.rows) == 6
+    assert sum(row.shoot_length_mm == 0 for row in dataset.rows) == 283
+    assert all(row.scheduled_date is None for row in dataset.rows if row.slot.sample_id is None)
+    assert not db.new and not db.dirty and not db.deleted
 
 
 @pytest.fixture(scope='module')
@@ -127,7 +143,11 @@ def test_default_dry_run_apply_and_repeat_rejection(source_path, source_data, te
         assert experiment.experiment_type == 'GER'
         assert db.query(legacy.ExperimentProtocol).one().observation_period_days is None
         assert legacy.reconcile_database(db, source_data, experiment)['value_differences'] == 0
+        assert_historical_dataset(db, experiment.id)
         report = legacy.reconcile_workbook(legacy.build(db, [experiment.id]), source_data)
+        from test_measurement_dataset import workbook_digest
+        # Full six-sheet content digest captured before AF-4's dataset adapter.
+        assert workbook_digest(legacy.build(db, [experiment.id])) == '7b5ff6d69409b209bd86b060cd19b7ffa4c2da1459c424624d11ef578b121c60'
         assert report['value_differences'] == 0
         assert report['all_dag_empty_actual_rows'] == 10 and report['all_dag_empty_rows'] == 345
         assert (report['planned_sample_slots'], report['planned_measurement_slots'], report['obtained_sample_slots'],
@@ -171,6 +191,7 @@ def test_ended_historical_experiment_preserves_facts_and_export_without_current_
             assert report['missing_subtraction'] == report['missing_enumeration'] == 40
             assert report['root_zeros'] == 6 and report['shoot_zeros'] == 283
             assert experiment.ended_at is None
+            assert_historical_dataset(db, experiment.id)
             assert slot_summary(db, experiment.id)['overdue_count'] == 40
             assert all(value == 0 for value in task_summary(db, experiment.id).values())
             execution = execution_summary(db, experiment.id)

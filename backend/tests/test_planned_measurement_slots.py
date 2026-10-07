@@ -251,6 +251,10 @@ def test_selected_empty_experiment_keeps_configured_dag_header_without_inventing
     ('America/New_York', '2026-03-08T06:30:00+00:00', '2026-03-08'),
     ('America/New_York', '2026-11-01T05:30:00+00:00', '2026-11-01'),
     ('UTC', '2026-02-28T23:59:00', '2026-02-28'),
+    ('Asia/Shanghai', '2028-02-28T15:59:59+00:00', '2028-02-28'),
+    ('Asia/Shanghai', '2028-02-28T16:00:00+00:00', '2028-02-29'),
+    ('Asia/Shanghai', '2028-02-29T23:59:59+08:00', '2028-02-29'),
+    ('UTC', '2028-02-29T23:45:01-05:00', '2028-03-01'),
     ('Asia/Shanghai', None, None),
 ])
 def test_python_and_sql_dag_calendar_parity(design, monkeypatch, zone, timestamp, expected_day):
@@ -264,6 +268,10 @@ def test_python_and_sql_dag_calendar_parity(design, monkeypatch, zone, timestamp
         db.add_all([sample, point])
         db.commit()
         projection = slots().c
+        from app.services.measurement_slots import build_measurement_dataset
+        dataset = build_measurement_dataset(db, [experiment.id])
+        canonical_days = {r.stage.day_after_germination: r.scheduled_date
+                          for r in dataset.rows if r.slot.sample_id == sample.id}
         rows = db.execute(select(projection).where(projection.sample_id == sample.id)
                           .order_by(projection.day_after_germination)).mappings().all()
         assert [row['day_after_germination'] for row in rows] == [0, 3, 7, 14]
@@ -272,6 +280,7 @@ def test_python_and_sql_dag_calendar_parity(design, monkeypatch, zone, timestamp
             expected = (date.fromisoformat(expected_day) + timedelta(days=dag)).isoformat() if expected_day else None
             python_day = scheduled_date(sample.germinated_at, dag)
             assert row['scheduled_date'] == (python_day.isoformat() if python_day else None) == expected
+            assert canonical_days[dag] == python_day
         if when is None:
             assert all(row['status'] == 'unschedulable' for row in rows)
     finally:
