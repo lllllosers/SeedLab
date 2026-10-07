@@ -231,12 +231,15 @@ def test_database_constraints_and_migration_roundtrip(tmp_path, monkeypatch):
     with engine.connect() as conn:
         assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "d2e7a46b910c"
         assert conn.exec_driver_sql("PRAGMA foreign_key_check").all() == []
-    with pytest.raises(IntegrityError), engine.begin() as conn:
-        conn.execute(text("UPDATE seedling_measurements SET root_length_mm=NULL, root_unavailable=0"))
-    with pytest.raises(IntegrityError), engine.begin() as conn:
-        conn.execute(text("UPDATE seedling_measurements SET root_length_mm=1, root_unavailable=1"))
-    with pytest.raises(IntegrityError), engine.begin() as conn:
-        conn.execute(text("UPDATE seedling_measurements SET shoot_length_mm=NULL, shoot_unavailable=0"))
+    for part in ('root', 'shoot'):
+        for value, unavailable in ((0, False), (None, True)):
+            with engine.begin() as conn:
+                conn.execute(text(f"UPDATE seedling_measurements SET {part}_length_mm=:value, {part}_unavailable=:na"),
+                             {'value': value, 'na': unavailable})
+        for value, unavailable in ((None, False), (1, True), (-1, False), (-1, True)):
+            with pytest.raises(IntegrityError), engine.begin() as conn:
+                conn.execute(text(f"UPDATE seedling_measurements SET {part}_length_mm=:value, {part}_unavailable=:na"),
+                             {'value': value, 'na': unavailable})
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(text("UPDATE seedling_measurements SET measured_at=NULL"))
     with engine.begin() as conn:

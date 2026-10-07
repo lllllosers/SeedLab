@@ -18,6 +18,7 @@ import backfill_legacy_200_species as legacy
 from app.services.germination_execution import execution_summary
 from app.services.measurement_query import dashboard, records, slot_summary, task_summary, worklist
 from app.services.seedling_measurement import task_data
+from app.services.migrations import check_database_schema
 
 
 @pytest.fixture(scope='module')
@@ -116,8 +117,14 @@ def test_default_dry_run_apply_and_repeat_rejection(source_path, source_data, te
     result = capsys.readouterr().out
     assert 'GER-202608-001' in result and '"wide_rows": 2000' in result and '"long_rows": 6000' in result
     engine = make_engine(f'sqlite:///{path.as_posix()}')
+    check_database_schema(f'sqlite:///{path.as_posix()}', legacy.BACKEND / 'alembic')
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql('SELECT version_num FROM alembic_version').scalar() == 'd2e7a46b910c'
+        assert connection.exec_driver_sql('PRAGMA integrity_check').all() == [('ok',)]
+        assert connection.exec_driver_sql('PRAGMA foreign_key_check').all() == []
     with Session(engine) as db:
         experiment = db.query(legacy.Experiment).one()
+        assert experiment.experiment_type == 'GER'
         assert db.query(legacy.ExperimentProtocol).one().observation_period_days is None
         assert legacy.reconcile_database(db, source_data, experiment)['value_differences'] == 0
         report = legacy.reconcile_workbook(legacy.build(db, [experiment.id]), source_data)

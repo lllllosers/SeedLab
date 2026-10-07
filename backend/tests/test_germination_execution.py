@@ -269,15 +269,25 @@ def test_correction_deletion_and_audit_preserve_selected_samples(auth_client):
     r1 = start(client, headers, base).json()["dishes"][0]["id"]
     first = batch(client, headers, base, MORNING, [{"dish_id": r1, "new_germinated_count": 2}]).json()["created"][0]
     path = f"{base}/observations/{first['id']}"
+    original_samples = client.get(f"{base}/samples").json()
+    original_dates = [(task['sample_id'], task['day_after_germination'], task['scheduled_date'])
+                      for task in client.get(f"{base}/measurement-tasks").json()['tasks']]
     assert client.patch(path, json={"new_germinated_count": 1}, headers=headers).status_code == 409
     assert client.patch(path, json={"new_germinated_count": 6}, headers=headers).status_code == 422
-    assert client.patch(path, json={"notes": "复核胚根"}, headers=headers).json()["notes"] == "复核胚根"
+    corrected = client.patch(path, json={"notes": "复核胚根", "observed_at": "2026-09-03T09:00:00+08:00"},
+                             headers=headers).json()
+    assert corrected["notes"] == "复核胚根"
+    # The current patch schema only accepts count/notes; extra timestamps are ignored.
+    assert corrected["observed_at"] == first["observed_at"]
     assert client.delete(path, headers=headers).status_code == 409
     later = batch(client, headers, base, "2026-09-03T08:30:00+08:00",
                   [{"dish_id": r1, "new_germinated_count": 0}]).json()["created"][0]
     assert client.patch(f"{base}/observations/{later['id']}", json={"new_germinated_count": None}, headers=headers).status_code == 422
     assert client.delete(f"{base}/observations/{later['id']}", headers=headers).status_code == 204
     assert client.get(f"{base}/execution").json()["dishes"][0]["cumulative_germinated"] == 2
+    assert client.get(f"{base}/samples").json() == original_samples
+    assert [(task['sample_id'], task['day_after_germination'], task['scheduled_date'])
+            for task in client.get(f"{base}/measurement-tasks").json()['tasks']] == original_dates
     audit = client.get("/api/audit-logs", params={"page_size": 100}).json()["items"]
     obs_actions = [row["action"] for row in audit if row["entity_type"] == "GerminationObservation"]
     assert {"create", "update", "delete"} <= set(obs_actions)
@@ -293,10 +303,14 @@ def test_correction_can_fill_remaining_first_n_slots(auth_client):
     batch(client, headers, base, "2026-09-02T14:00:00+08:00",
           [{"dish_id": dish_id, "new_germinated_count": 1}])
     assert client.get(f"{base}/execution").json()["sample_count"] == 2
+    original_samples = {sample['id']: sample for sample in client.get(f"{base}/samples").json()}
     assert client.patch(f"{base}/observations/{earlier['id']}",
                         json={"new_germinated_count": 2}, headers=headers).status_code == 200
     samples = client.get(f"{base}/samples").json()
     assert len(samples) == 3
+    assert {sample['id']: sample for sample in samples if sample['id'] in original_samples} == original_samples
+    added = next(sample for sample in samples if sample['id'] not in original_samples)
+    assert added['source_observation_id'] == earlier['id'] and added['germinated_at'] == earlier['observed_at']
     assert sum(sample["source_observation_id"] == earlier["id"] for sample in samples) == 2
 
 

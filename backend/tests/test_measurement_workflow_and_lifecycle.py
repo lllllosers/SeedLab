@@ -124,14 +124,15 @@ def test_six_thousand_slots_use_fixed_query_count(auth_client,tmp_path):
     engine.dispose()
 
 
-@pytest.mark.parametrize('locked',[False,True])
-def test_unused_ready_and_locked_plan_can_be_deleted(auth_client,locked):
+@pytest.mark.parametrize('status,locked',[('draft',False),('ready',False),('ready',True)])
+def test_unused_draft_ready_and_locked_plan_can_be_deleted(auth_client,status,locked):
     client,headers=auth_client
     taxon=client.post('/api/taxa',json={'scientific_name':'Unused species'},headers=headers).json()
     lot=client.post('/api/seed-lots',json={'taxon_id':taxon['id']},headers=headers).json()
     response=client.post('/api/experiments/configured',json={'experiment_type':'GER','name':'未执行的方案','protocol':{'seeds_per_dish':10,'replicate_count':2,'observation_period_days':5,'sampling_rule':'first_germinated','sample_count':2,'sample_scope':'per_dish','germination_criterion':'胚根露出'},'materials':[{'seed_lot_id':lot['id']}],'dag_days':[0,3]},headers=headers)
     base='/api/experiments/'+response.json()['experiment']['id']
-    assert client.patch(base,json={'status':'ready'},headers=headers).status_code==200
+    if status == 'ready':
+        assert client.patch(base,json={'status':'ready'},headers=headers).status_code==200
     if locked: assert client.post(base+'/confirm-numbers',headers=headers).status_code==200
     assert client.delete(base,headers=headers).status_code==204
     assert client.get(base).status_code==404
