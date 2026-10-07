@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { effectiveMaterial } from '../src/utils/effectiveMaterial.ts'
+import { effectiveMaterial } from '../src/features/germination/utils/effectiveMaterial.ts'
 
 test('review shows final protocol values for defaults and material changes', () => {
   const protocol = { seeds_per_dish: 5, replicate_count: 2, sample_count: 3 }

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import type { SeedLot, Taxon } from '../types'
-import { dateText } from '../utils'
+import { dateText } from '../shared/format'
 import { ElMessage } from 'element-plus'
 import { Box, Notebook } from '@element-plus/icons-vue'
-import PageBackButton from '../components/PageBackButton.vue'
+import PageBackButton from '../shared/components/PageBackButton.vue'
 
 const route = useRoute()
 const item = ref<Taxon | null>(null),

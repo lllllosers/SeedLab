@@ -2,9 +2,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import type { Taxon } from '../types'
-import { useClientPagination } from '../composables/useClientPagination'
+import { useClientPagination } from '../shared/composables/useClientPagination'
 import { Plus, Search } from '@element-plus/icons-vue'
 
 const router = useRouter()

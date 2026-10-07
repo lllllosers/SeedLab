@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { historyValue, isResolved, measurementStatusLabels, measurementValue } from '../src/utils/measurement.ts'
+import { historyValue, isResolved, measurementStatusLabels, measurementValue } from '../src/features/measurement/utils/measurement.ts'
 
 test('measurement display keeps zero, missing, and unavailable distinct', () => {
   assert.equal(measurementValue(0, false, true), '0')

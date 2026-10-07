@@ -2,8 +2,8 @@ import { auditDetails } from '../src/utils/audit.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { createMeasurementPayload, updateMeasurementPayload, focusNextRoot, nextPendingTask, taskSearchMatches } from '../src/utils/measurement.ts'
-import { sowingSearchMatches } from '../src/utils/sowingSearch.ts'
+import { createMeasurementPayload, updateMeasurementPayload, focusNextRoot, nextPendingTask, taskSearchMatches } from '../src/features/measurement/utils/measurement.ts'
+import { sowingSearchMatches } from '../src/features/germination/utils/sowingSearch.ts'
 const form={root:'0',shoot:'',rootNA:false,shootNA:true,measuredAt:'2026-09-30T10:30',notes:'核对'}
 test('create carries identity, PATCH carries only editable values and keeps 0/NA',()=>{
  const update=updateMeasurementPayload(form), create=createMeasurementPayload({sample_id:'s',timepoint_id:'t'},form)
@@ -21,7 +21,7 @@ test('normal search accepts numbers, hyphens and Chinese while preserving curren
  const before=structuredClone(form)
  for(const q of ['001','001-1','阿尔泰','Aster','幼苗 03'])assert.equal(taskSearchMatches(task,q),true)
  assert.deepEqual(form,before)
- const source=readFileSync(new URL('../src/views/GerminationExecution/SeedlingMeasurementWorkbench.vue',import.meta.url),'utf8')
+ const source=readFileSync(new URL('../src/features/measurement/components/SeedlingMeasurementWorkbench.vue',import.meta.url),'utf8')
  assert.match(source,/v-model="search"/)
  const searchWatcher=source.slice(source.indexOf('watch([search'),source.indexOf('watch(page'))
  assert.doesNotMatch(searchWatcher,/reset|confirmDiscard|selected/)

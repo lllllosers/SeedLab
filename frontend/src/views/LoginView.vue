@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuth } from '../stores/auth'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import { ArrowRight } from '@element-plus/icons-vue'
 
 const router = useRouter()

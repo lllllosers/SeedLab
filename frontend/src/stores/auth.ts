@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { api, setCsrfToken } from '../api/client'
+import { api, setCsrfToken } from '../shared/api/client'
 import type { User } from '../types'
 
 interface AuthResult {

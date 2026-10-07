@@ -2,7 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import { useAuth } from '../stores/auth'
 import type { User } from '../types'
 

@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import { useAuth } from '../stores/auth'
 import type { User } from '../types'
 

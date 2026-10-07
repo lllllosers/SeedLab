@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../stores/auth'
 import { ElMessage } from 'element-plus'
-import { errorMessage } from '../api/client'
+import { errorMessage } from '../shared/api/client'
 import {
   DataAnalysis,
   Collection,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { germinationText } from '../src/utils/germination.ts'
+import { germinationText } from '../src/features/germination/utils/germination.ts'
 
 test('unrecorded inspection stays distinct from explicitly recorded zero', () => {
   assert.equal(germinationText(null), '未记录')

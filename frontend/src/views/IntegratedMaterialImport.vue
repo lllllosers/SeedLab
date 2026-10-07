@@ -3,8 +3,8 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Download, Document } from '@element-plus/icons-vue'
-import { saveMaterialPrefill, type MaterialImportResult } from '../utils/materialPrefill'
-import { api, errorMessage } from '../api/client'
+import { saveMaterialPrefill, type MaterialImportResult } from '../features/germination'
+import { api, errorMessage } from '../shared/api/client'
 
 type RowStatus = 'registered' | 'new' | 'updatable' | 'confirm' | 'error'
 interface PreviewRow {

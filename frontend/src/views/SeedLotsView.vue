@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type TableInstance } from 'element-plus'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import type { SeedLot, Taxon } from '../types'
-import { dateText } from '../utils'
+import { dateText } from '../shared/format'
 import { Plus, Search } from '@element-plus/icons-vue'
-import { useClientPagination } from '../composables/useClientPagination'
+import { useClientPagination } from '../shared/composables/useClientPagination'
 
 const lots = ref<SeedLot[]>([]),
   taxa = ref<Taxon[]>([]),

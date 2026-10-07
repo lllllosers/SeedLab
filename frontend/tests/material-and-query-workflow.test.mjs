@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { measurementQueryParams, normalizedDag } from '../src/utils/measurementQuery.ts'
-import { orderedMaterials, selectedMaterialPage } from '../src/utils/materialSelection.ts'
-import { saveMaterialPrefill, readMaterialPrefill, resolveMaterialPrefill, clearMaterialPrefill, MATERIAL_PREFILL_KEY } from '../src/utils/materialPrefill.ts'
-import { updateMeasurementPayload } from '../src/utils/measurement.ts'
+import { measurementQueryParams, normalizedDag } from '../src/features/measurement/utils/measurementQuery.ts'
+import { orderedMaterials, selectedMaterialPage } from '../src/features/germination/utils/materialSelection.ts'
+import { saveMaterialPrefill, readMaterialPrefill, resolveMaterialPrefill, clearMaterialPrefill, MATERIAL_PREFILL_KEY } from '../src/features/germination/utils/materialPrefill.ts'
+import { updateMeasurementPayload } from '../src/features/measurement/utils/measurement.ts'
 
 const lots = Array.from({length:200}, (_,n)=>({id:String(n),sort_rank:n+1,code:`LOT-${n}`,taxon_common_name:`材料${n}`}))
 const source=(path)=>readFileSync(new URL('../src/'+path,import.meta.url),'utf8')
@@ -18,7 +18,7 @@ test('selected material preview has stable numbering, deduplicated add/remove an
  const removed=selected.filter(lot=>lot.id!=='0')
  assert.equal(selectedMaterialPage(removed,1,25)[0].lot.id,'1')
  assert.equal(orderedMaterials([...removed,lots[0]])[0].id,'0')
- const component=source('views/ExperimentWizard/MaterialsStep.vue')
+ const component=source('features/germination/components/creation/MaterialsStep.vue')
  assert.ok(component.indexOf('selected-material-preview')<component.indexOf('<el-dialog'))
  assert.match(component,/selectionSize = ref\(25\)/);assert.match(component,/未参与实验材料/)
  assert.doesNotMatch(component,/selected-material-collapse/)
@@ -36,10 +36,10 @@ test('record query changes and clears remain independent of edit validation, inc
  assert.equal(measurementQueryParams({...base,dag:0}).get('dag'),'0')
  assert.equal(normalizedDag(-1),null)
  assert.throws(()=>updateMeasurementPayload(edit),/根长|苗长/)
- const component=source('views/GerminationExecution/MeasurementRecords.vue')
+ const component=source('features/measurement/components/MeasurementRecords.vue')
  assert.doesNotMatch(component,/validate|updateMeasurementPayload|createMeasurementPayload/)
  assert.match(component,/共 {{ total }} 条记录/)
- const editor=source('views/GerminationExecution/MeasurementEditor.vue')
+ const editor=source('features/measurement/components/MeasurementEditor.vue')
  assert.ok(editor.indexOf('updateMeasurementPayload(form.value)')>editor.indexOf('async function save()'))
 })
 
@@ -56,13 +56,13 @@ test('all/new import handoff uses session storage, rechecks available lots and c
  saveMaterialPrefill(storage,result,'created');assert.deepEqual(readMaterialPrefill(storage).seed_lot_ids,['2'])
  clearMaterialPrefill(storage);assert.equal(saveMaterialPrefill(storage,{...result,created_seed_lot_ids:[]},'created'),false)
  storage.setItem(MATERIAL_PREFILL_KEY,'bad');assert.equal(readMaterialPrefill(storage),null);assert.equal(map.size,0)
- const wizard=source('views/ExperimentWizardView.vue')
+ const wizard=source('features/germination/pages/ExperimentWizardView.vue')
  assert.match(wizard,/onBeforeRouteLeave/);assert.doesNotMatch(wizard,/from_import|localStorage/)
  assert.match(wizard,/clearMaterialPrefill\(sessionStorage\)/)
 })
 
 test('workspace has shrinking grids, selected row highlight and collapsed history',()=>{
- const css=source('style.css'),bench=source('views/GerminationExecution/SeedlingMeasurementWorkbench.vue')
+ const css=source('style.css'),bench=source('features/measurement/components/SeedlingMeasurementWorkbench.vue')
  assert.match(css,/minmax\(0, 1\.2fr\) minmax\(0, 1fr\)/)
  assert.match(css,/@media \(max-width: 1699px\)/)
  assert.match(css,/\.table-subtitle\s*\{\s*display: block/)

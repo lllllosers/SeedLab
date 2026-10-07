@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { materialProgressTasks, measurementProgressLabels, measurementProgressTagTypes, measurementValue, progressStatusText } from '../src/utils/measurement.ts'
-const source = (name) => readFileSync(new URL('../src/views/GerminationExecution/' + name, import.meta.url), 'utf8')
+import { materialProgressTasks, measurementProgressLabels, measurementProgressTagTypes, measurementValue, progressStatusText } from '../src/features/measurement/utils/measurement.ts'
+const source = (name) => readFileSync(new URL(`../src/features/${name === 'GerminationQuickEntry.vue' ? 'germination' : 'measurement'}/components/` + name, import.meta.url), 'utf8')
 
 test('inspection headers name seed counts and germination without changing values', () => {
   const component = source('GerminationQuickEntry.vue')

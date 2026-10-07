@@ -1,4 +1,4 @@
-import { dateTimeText, statusLabels } from '../utils.ts'
+import { dateTimeText, statusLabels } from '../shared/format.ts'
 import type { Audit } from '../types'
 const labels: Record<string, string> = {
   field_number: '现场编号',

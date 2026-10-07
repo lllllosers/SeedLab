@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 const source = (path) => readFileSync(new URL('../src/' + path, import.meta.url), 'utf8')
 
 test('ended experiment execution explains zero tasks and retains history navigation', () => {
-  const page = source('views/GerminationExecutionView.vue')
+  const page = source('features/germination/pages/GerminationExecutionView.vue')
   assert.match(page, /v-if="execution\.experiment\.status !== 'active'"/)
   assert.match(page, /实验已结束，无当前执行待办；历史数据仍可查看。/)
   assert.match(page, /v-if="execution\.experiment\.status === 'active'"[\s\S]*?:execution="execution"/)
@@ -13,7 +13,7 @@ test('ended experiment execution explains zero tasks and retains history navigat
 })
 
 test('inactive measurement workbench hides editors and task cards while records remain accessible', () => {
-  const page = source('views/GerminationExecution/SeedlingMeasurementWorkbench.vue')
+  const page = source('features/measurement/components/SeedlingMeasurementWorkbench.vue')
   const guard = page.indexOf(`v-else-if="data && data.experiment_status !== 'active'"`)
   const workbench = page.indexOf('class="measurement-workbench"')
   assert.ok(guard > 0 && workbench > guard)

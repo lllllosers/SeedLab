@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { computed, nextTick, ref } from 'vue'
-import { useClientPagination } from '../src/composables/useClientPagination.ts'
+import { useClientPagination } from '../src/shared/composables/useClientPagination.ts'
 
 test('filter and sort complete results before pagination', async () => {
   const source = ref(Array.from({ length: 120 }, (_, index) => ({ name: `材料${String(index + 1).padStart(3, '0')}` })))

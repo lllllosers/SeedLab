@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { defaultExperimentProtocol, validDishPlan } from '../src/utils/experimentProtocol.ts'
-import { todayPendingDish, observationPlanOverdue, germinationText } from '../src/utils/germination.ts'
+import { defaultExperimentProtocol, validDishPlan } from '../src/features/germination/utils/experimentProtocol.ts'
+import { todayPendingDish, observationPlanOverdue, germinationText } from '../src/features/germination/utils/germination.ts'
 
 const source = (path) => readFileSync(new URL('../src/' + path, import.meta.url), 'utf8')
 
 test('existing completion action explains actual tasks without directing normal completion to termination', () => {
-  const component = source('views/ExperimentDesignDetailView.vue')
+  const component = source('features/germination/pages/ExperimentDesignDetailView.vue')
   const completion = component.slice(component.indexOf('async function completeExperiment()'),
     component.indexOf('async function terminateExperiment()'))
   assert.match(completion, /if \(!data\.can_complete\)/)
@@ -29,7 +29,7 @@ test('wizard defaults to no observation plan and accepts empty or positive days'
   for (const days of [0, -1, 1.5]) assert.equal(validDishPlan({ ...protocol, observation_period_days: days }), false)
   for (const values of [{ seeds_per_dish: 0 }, { replicate_count: 0 }, { germination_criterion: ' ' }])
     assert.equal(validDishPlan({ ...protocol, ...values }), false)
-  const wizard = source('views/ExperimentWizardView.vue')
+  const wizard = source('features/germination/pages/ExperimentWizardView.vue')
   assert.match(wizard, /defaultExperimentProtocol\(\)/)
   assert.match(wizard, /step\.value === 2 && !validDishPlan\(protocol\.value\)/)
   assert.doesNotMatch(wizard, /!protocol\.value\.observation_period_days|observation_period_days:\s*14/)
@@ -46,7 +46,7 @@ test('pending inspection depends only on sowing, cancellation and inspection tod
     assert.equal(todayPendingDish({ ...row, sown_at: null }), false)
     assert.equal(todayPendingDish({ ...row, cancelled_at: '2026-09-01T00:00:00Z' }), false)
   }
-  const component = source('views/GerminationExecution/GerminationQuickEntry.vue')
+  const component = source('features/germination/components/GerminationQuickEntry.vue')
   assert.match(component, /mode\.value === 'pending' && !todayPendingDish\(dish\)/)
   assert.match(component, /mode\.value === 'ended' && !observationPlanOverdue\(dish\.observation_period_end_at\)/)
   assert.match(component, /label="超过计划观察期限" value="ended"/)
@@ -56,7 +56,7 @@ test('pending inspection depends only on sowing, cancellation and inspection tod
 })
 
 test('creation and editing explain optional days and preserve null on clearing', () => {
-  for (const path of ['views/ExperimentWizard/ProtocolStep.vue', 'views/ExperimentDesignDetailView.vue']) {
+  for (const path of ['features/germination/components/creation/ProtocolStep.vue', 'features/germination/pages/ExperimentDesignDetailView.vue']) {
     const component = source(path)
     assert.match(component, /计划发芽观察天数（可选）/)
     assert.match(component, /仅用于预计日期和超期提醒，不会自动结束观察；不确定时可留空。/)

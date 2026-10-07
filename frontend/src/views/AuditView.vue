@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { api, errorMessage } from '../api/client'
-import type { Audit, Paged } from '../types'
-import { actionLabels, dateTimeText, entityLabels } from '../utils'
+import { api, errorMessage } from '../shared/api/client'
+import type { Audit } from '../types'
+import type { Paged } from '../shared/types'
+import { actionLabels, dateTimeText, entityLabels } from '../shared/format'
 import { auditDetails } from '../utils/audit'
 const items = ref<Audit[]>([]),
   total = ref(0),

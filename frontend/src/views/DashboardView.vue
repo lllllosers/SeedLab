@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import { useAuth } from '../stores/auth'
 import type { Dashboard } from '../types'
-import { actionLabels, dateText, entityLabels, statusLabels } from '../utils'
+import { actionLabels, dateText, entityLabels, statusLabels } from '../shared/format'
 import { ElMessage } from 'element-plus'
 import {
   ArrowRight,

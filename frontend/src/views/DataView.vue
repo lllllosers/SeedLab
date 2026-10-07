@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { api, errorMessage } from '../api/client'
+import { api, errorMessage } from '../shared/api/client'
 import { Download, Files } from '@element-plus/icons-vue'
 import IntegratedMaterialImport from './IntegratedMaterialImport.vue'
-import type { Experiment } from '../types'
+import type { Experiment } from '../features/experiments/index'
 const experiments = ref<Experiment[]>([])
 const selectedExperiments = ref<string[]>([])
 const exporting = ref(false),
