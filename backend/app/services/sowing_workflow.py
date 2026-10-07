@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.models import Experiment, ExperimentMaterial, GerminationDish, GerminationObservation
 from app.services.application_support import commit_or_conflict, flush_or_conflict, record, require_entity
-from app.services.experiment_config import days_for, effective, materials_for, protocol_for, validate_all
+from app.services.germination_config import days_for, effective, materials_for, protocol_for, validate_all
 from app.services.germination_execution import dishes_for, execution_summary, iso_utc, utc_naive
 from app.services.ordering import field_number
+from app.services import experiment_lifecycle as lifecycle
 
 
 def confirm_numbers(db: Session, experiment_id: str, user_id: str) -> dict:
@@ -67,7 +68,7 @@ def unlock_numbers(db: Session, experiment_id: str, user_id: str) -> dict:
         for material in materials_for(db, experiment_id):
             material.experiment_number = None
         experiment.numbering_locked_at = None
-        experiment.status = "draft"
+        lifecycle.reopen_after_cleanup(experiment)
         record(db, user_id, "update", "Experiment", experiment.id,
                {"numbering_confirmed": True}, {"numbering_confirmed": False, "status": "draft"})
         commit_or_conflict(db)
@@ -103,12 +104,7 @@ def sow_dishes(db: Session, experiment_id: str, dish_ids: list[str], sown_at: da
             dish.sown_at = actual
             record(db, user_id, "update", "GerminationDish", dish.id,
                    {"sown_at": None}, {"sown_at": iso_utc(actual)})
-        if experiment.status == "ready":
-            experiment.status = "active"
-        if experiment.started_at is None or actual < utc_naive(experiment.started_at):
-            experiment.started_at = actual
-        record(db, user_id, "update", "Experiment", experiment.id, None,
-               {"status": experiment.status, "started_at": iso_utc(experiment.started_at)})
+        lifecycle.activate_from_fact(db, experiment, actual, user_id)
         commit_or_conflict(db)
     except Exception:
         db.rollback()
@@ -134,7 +130,7 @@ def correct_sowing(db: Session, experiment_id: str, dish_id: str, sown_at: datet
         old_start = iso_utc(experiment.started_at)
         dish.sown_at = actual
         all_sown = [item.sown_at for item in dishes_for(db, experiment_id) if item.sown_at]
-        experiment.started_at = min(all_sown) if all_sown else None
+        lifecycle.correct_started_at(experiment, min(all_sown) if all_sown else None)
         record(db, user_id, "update", "GerminationDish", dish.id,
                {"sown_at": before}, {"sown_at": iso_utc(actual)})
         if old_start != iso_utc(experiment.started_at):

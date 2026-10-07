@@ -92,7 +92,7 @@ def test_allocator_has_independent_type_and_month_parameters():
 @pytest.mark.parametrize('configured', [False, True])
 def test_concurrent_candidate_collision_rolls_back_entire_request(auth_client, tmp_path, monkeypatch, configured):
     from app.api import experiments
-    from app.services import experiment_config
+    from app.services import germination_config as experiment_config
     client, headers = auth_client
     _, lot = make_lot(client, headers)
     target = experiment_config if configured else experiments

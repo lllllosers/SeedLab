@@ -11,6 +11,7 @@ from app.core.bootstrap import ensure_bootstrap_token
 from app.core.config import Settings, get_settings
 from app.core.web import ProductionWeb
 from app.db.session import make_engine
+from app.experiment_composition import build_experiment_registry
 from app.version import VERSION
 
 
@@ -35,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if development else None, lifespan=lifespan,
     )
     application.state.settings = settings
+    application.state.experiment_types = build_experiment_registry()
     application.add_exception_handler(ApplicationError, application_error_handler)
     for router in (setup.router, auth.router, catalog.router, configuration.router,
                    execution.router, measurement.router, experiments.router, system.router,

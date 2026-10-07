@@ -1,4 +1,4 @@
-"""Experiment design rules. No execution records are created in Stage 1."""
+"""GER design rules; generic lifecycle transitions belong to Experiment Core."""
 
 from datetime import timedelta
 
@@ -280,43 +280,3 @@ def replace_days(db: Session, experiment_id: str, days: list[int], user_id: str)
            {"dag_days": before}, {"dag_days": normalized})
     commit_or_conflict(db)
     return normalized
-
-
-def set_status(db: Session, experiment: Experiment, target: str) -> None:
-    if target == "completed" and target != experiment.status:
-        from app.services.experiment_lifecycle import require_complete
-        require_complete(db, experiment.id)
-    if target == "cancelled" and target != experiment.status:
-        raise ConflictError("请通过“终止实验”填写原因后结束进行中的实验")
-    if experiment.numbering_locked_at and target == "draft":
-        raise ConflictError("置床编号已确认；若尚未置床，请使用“重新调整实验”")
-    allowed = {"draft": {"ready", "cancelled"}, "ready": {"draft", "cancelled"},
-               "active": {"completed", "cancelled"}, "completed": set(), "cancelled": set()}
-    if target == experiment.status:
-        return
-    if target not in allowed[experiment.status]:
-        raise ConflictError("当前实验不能直接进入该状态，请先完成实验配置并正式开始实验")
-    if target in {"ready", "active"}:
-        protocol = protocol_for(db, experiment.id)
-        materials = materials_for(db, experiment.id)
-        days = days_for(db, experiment.id)
-        missing = []
-        if protocol is None:
-            missing.append("填写默认实验方案")
-        else:
-            fields = {
-                "seeds_per_dish": "每皿种子数", "replicate_count": "重复数",
-                "sampling_rule": "取样方式",
-                "sample_count": "取样数", "sample_scope": "取样范围",
-                "germination_criterion": "发芽判定标准",
-            }
-            missing.extend(f"填写{label}" for key, label in fields.items()
-                           if not getattr(protocol, key))
-        if not materials:
-            missing.append("添加至少一个实验材料")
-        if not days:
-            missing.append("设置至少一个发芽后测定时间（DAG）")
-        if missing:
-            raise ValidationError("标记为已就绪前，请先" + "、".join(missing))
-        validate_all(protocol, materials)
-    experiment.status = target

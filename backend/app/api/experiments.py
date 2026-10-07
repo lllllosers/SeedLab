@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -6,10 +6,10 @@ from app.contracts.experiments import ExperimentIn, ExperimentOut, ExperimentPat
 from app.core.auth import current_user
 from app.db.session import get_db
 from app.models import Experiment, User
-from app.models.entities import now_utc
+from app.core.experiment_types import ExperimentTypeRegistry
+from app.api.experiment_dependencies import get_experiment_registry
 from app.services.common import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.experiment_identity import next_experiment_code, experiment_batch_month
-from app.services.experiment_config import editable, set_status
 from app.services import experiment_lifecycle as lifecycle
 
 
@@ -47,44 +47,27 @@ def get_experiment(item_id: str, db: Session = Depends(get_db), _user: User = De
 
 
 @router.patch("/{item_id}", response_model=ExperimentOut)
-def update_experiment(item_id: str, data: ExperimentPatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    item = require_entity(db, Experiment, item_id)
-    if item.status in {"completed", "cancelled"}:
-        raise HTTPException(409, "已结束的实验信息只供查阅；已完成实验的测定纠错请进入测定记录")
-    before = snapshot(item)
-    patch = data.model_dump(exclude_unset=True)
-    for key, value in patch.items():
-        if key in {"name", "status"} and value is None:
-            raise HTTPException(422, "实验名称和当前状态不能为空")
-        if key == "planned_start_date":
-            editable(item)
-        if key != "status":
-            setattr(item, key, value)
-    if "status" in patch:
-        set_status(db, item, patch["status"])
-        if item.status in {"completed", "cancelled"} and item.ended_at is None:
-            item.ended_at = now_utc()
-    flush_or_conflict(db)
-    after = snapshot(item)
-    if before != after:
-        record(db, user.id, "update", "Experiment", item.id, before, after)
-    commit_or_conflict(db)
-    return item
+def update_experiment(item_id: str, data: ExperimentPatch, db: Session = Depends(get_db), user: User = Depends(current_user),
+                      registry: ExperimentTypeRegistry = Depends(get_experiment_registry)):
+    return lifecycle.update(db, item_id, data, user.id, registry)
 
 
 @router.delete("/{item_id}", status_code=204)
-def delete_experiment(item_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    lifecycle.delete_unused(db, item_id, user.id)
+def delete_experiment(item_id: str, db: Session = Depends(get_db), user: User = Depends(current_user),
+                     registry: ExperimentTypeRegistry = Depends(get_experiment_registry)):
+    lifecycle.delete_unused(db, item_id, user.id, registry)
 
 
 @router.get("/{item_id}/completion-check")
-def completion_check(item_id: str, db: Session = Depends(get_db), _user: User = Depends(current_user)):
-    return lifecycle.completion_check(db, item_id)
+def completion_check(item_id: str, db: Session = Depends(get_db), _user: User = Depends(current_user),
+                     registry: ExperimentTypeRegistry = Depends(get_experiment_registry)):
+    return lifecycle.completion_check(db, item_id, registry)
 
 
 @router.post("/{item_id}/complete", response_model=ExperimentOut)
-def complete(item_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return lifecycle.complete(db, item_id, user.id)
+def complete(item_id: str, db: Session = Depends(get_db), user: User = Depends(current_user),
+                     registry: ExperimentTypeRegistry = Depends(get_experiment_registry)):
+    return lifecycle.complete(db, item_id, user.id, registry)
 
 
 @router.post("/{item_id}/terminate", response_model=ExperimentOut)

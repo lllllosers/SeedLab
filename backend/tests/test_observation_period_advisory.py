@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api.schemas import MaterialInput, ProtocolInput
-from app.services.experiment_config import workload
+from app.services.germination_config import workload
 
 from test_experiment_config import design, make_lot
 from test_germination_execution import batch, start

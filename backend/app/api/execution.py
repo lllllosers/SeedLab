@@ -13,7 +13,7 @@ from app.db.session import get_db
 from app.models import Experiment, ExperimentMaterial, GerminationDish, SeedlingSample, User
 from app.services import germination_execution as execution
 from app.services import sowing_workflow as sowing
-from app.services import experiment_config as design
+from app.services import germination_config as design
 from app.services.common import require_entity
 from app.services.ordering import display_number, dish_display_number, field_number, sample_display_number
 

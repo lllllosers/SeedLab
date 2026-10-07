@@ -6,18 +6,20 @@ from app.contracts.experiments import ConfiguredExperimentInput, DagInput, Mater
 from app.core.auth import current_user
 from app.db.session import get_db
 from app.models import Experiment, ExperimentMaterial, SeedLot, Taxon, User
-from app.services import experiment_config as design
+from app.services import germination_config as design
 from app.services.common import require_entity
 from app.services.ordering import material_key
-from app.core.experiment_types import EXPERIMENT_TYPES
+from app.core.experiment_types import ExperimentTypeRegistry
+from app.api.experiment_dependencies import get_experiment_registry
 
 
 router = APIRouter(prefix="/experiments", tags=["experiment configuration"])
 
 
 @router.get("/types")
-def experiment_types(_user: User = Depends(current_user)):
-    return [{"value": value, "label": label} for value, label in EXPERIMENT_TYPES.items()]
+def experiment_types(_user: User = Depends(current_user),
+                     registry: ExperimentTypeRegistry = Depends(get_experiment_registry)):
+    return [{"value": entry.code, "label": entry.label} for entry in registry.entries()]
 
 
 @router.get("/available-seed-lots")
