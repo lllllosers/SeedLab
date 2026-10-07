@@ -39,8 +39,8 @@ SeedLab/
 
 ## 当前产物与品牌维护
 
-三套已验收目录保留在被Git忽略的dist中：`portable-v051`、`legacy-importer-v1`、`delivery-v051`。它们不属于备份，不作为源码或测试输入提交Git。本轮完整保留现有文件和哈希。版本、commit与正式SHA统一见[v0.5.1说明](../docs/releases/v0.5.1.md)。
+三套已验收目录保留在被Git忽略的dist中：`portable-v051`、`legacy-importer-v1`、`delivery-v051`。它们不属于备份，不提交Git；历史回归可只读使用其中固定SHA的Excel源，不运行正式部署或importer。本轮完整保留现有文件和哈希。版本、commit与正式SHA统一见[v0.5.1说明](../docs/releases/v0.5.1.md)。
 
 `control_center/assets/seedlab.svg` 为品牌图形源；未来需要重生成时可运行 `scripts/build_brand_icon.py`，生成七尺寸ICO与通知PNG。本轮不改品牌资产。
 
-importer的正式源码、spec和构建入口位于独立tag与maintenance分支，未合入主程序。见[importer维护索引](../docs/11_历史生产导入维护工具.md)。旧portable验收证据集中在[归档记录](../docs/archive/portable-v040-v041验收记录.md)，不在当前构建说明重复维护。
+importer的正式源码、spec和构建入口位于独立tag与maintenance分支，未合入主程序。精确实现与原验收提交见[v0.5.1 追溯索引](../docs/releases/v0.5.1.md#importer与历史验收追溯)。旧 portable 开发验收过程由 Git 历史保留，正式交付说明统一位于[releases](../docs/README.md#发布历史)。
