@@ -1,6 +1,6 @@
 # SeedLab 文档导航
 
-当前稳定生产版本为 **v0.5.1**。Architecture Foundation 的 **AF-0—AF-3 已验收并合入 main**；当前 **AF-4：Measurement / Dataset / Analysis 边界**在独立分支完成后等待人工验收。AF-4 只有只读数据集边界，没有统计实现；API、业务 schema 与科研语义保持；AF-1 源码能力尚未进入现有正式 portable。版本及精确产物身份见[发布说明](releases/v0.5.1.md)。
+当前稳定生产版本为 **v0.5.1**。Architecture Foundation 的 **AF-0—AF-4 已验收并合入 main**；当前 **AF-5：Frontend Feature Boundary**在独立分支整理真实 feature 所有权及静态 UI 分发，完成后等待人工验收。既有 URL、界面、流程、API、业务 schema 与科研语义保持；没有第二实验类型、Analysis 页面或统计实现。AF-1 源码能力尚未进入现有正式 portable。版本及精确产物身份见[发布说明](releases/v0.5.1.md)。
 
 本页是 docs 的唯一入口。每个主题以以下指定文档为权威来源，其他页面只做摘要或引用；业务与实现不一致时先核对代码、回归测试及已确认事实，不能通过重构改变事实。
 
