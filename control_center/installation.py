@@ -8,10 +8,8 @@ import sqlite3
 import tempfile
 import socket
 
-from alembic.script import ScriptDirectory
-from alembic.util import CommandError
-
-from app.services.migrations import migration_config, upgrade_database
+from app.services.database_upgrade import (UpgradeError, inspect_schema,
+    prepare_database_for_startup as upgrade_database)
 from app.services.sqlite_backup import check_database, ordinary_path
 from .config_store import ConfigStore, DeploymentSettings
 from app.services.runtime_identity import deployment_identity
@@ -136,11 +134,11 @@ def inspect_data_root(paths, *, allow_temporary=False):
         with closing(sqlite3.connect(paths.database.as_uri() + "?mode=ro", uri=True)) as connection:
             revisions = tuple(row[0] for row in connection.execute("SELECT version_num FROM alembic_version"))
             has_users = connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
-        script = ScriptDirectory.from_config(migration_config(paths.migration_root))
-        if len(revisions) != 1 or script.get_revision(revisions[0]) is None:
-            raise InstallationError("无法识别现有数据库版本，请保留文件并检查程序版本。")
+        inspect_schema("sqlite:///" + paths.database.as_posix(), paths.migration_root, allow_create=False)
         return DataInspection(True, settings, has_users, revisions)
-    except (OSError, ValueError, sqlite3.Error, CommandError) as error:
+    except UpgradeError as error:
+        raise InstallationError(str(error)) from error
+    except (OSError, ValueError, sqlite3.Error) as error:
         if isinstance(error, InstallationError):
             raise
         raise InstallationError("现有数据目录检查未通过，请保留文件并检查数据库及运行设置。") from error
@@ -168,7 +166,11 @@ def initialize_data_root(paths, settings, installation, *, reuse=False, progress
         progress("正在保存运行设置…")
         ConfigStore(paths.config_file).save(settings)
     progress("正在准备实验数据库…")
-    upgrade_database("sqlite:///" + paths.database.as_posix(), paths.migration_root)
+    try:
+        upgrade_database("sqlite:///" + paths.database.as_posix(), paths.migration_root,
+                         backup_root=paths.backups, allow_create=not inspection.existing)
+    except UpgradeError as error:
+        raise InstallationError(str(error)) from error
     progress("正在检查数据库…")
     if not check_database(paths.database).valid:
         raise InstallationError("数据库检查未通过，部署未完成。请保留当前文件并检查日志。")

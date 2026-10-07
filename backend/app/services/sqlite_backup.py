@@ -14,6 +14,11 @@ from uuid import uuid4
 LAB_TIMEZONE = timezone(timedelta(hours=8), "Asia/Shanghai")
 AUTO_NAME = re.compile(r"seedlab-auto-(\d{8})-(\d{6})(?:-[0-9a-f]{8})?\.db\Z")
 MANUAL_NAME = re.compile(r"seedlab-manual-(\d{8})-(\d{6})(?:-[0-9a-f]{8})?\.db\Z")
+UPGRADE_NAME = re.compile(r"seedlab-before-upgrade-(\d{8})-(\d{6})-from-[\w.-]+-to-[\w.-]+-app-[\w.-]+-[0-9a-f]{8}(?:-[0-9a-f]{8})?\.db\Z")
+RECOVERY_NAME = re.compile(r"seedlab-failed-recovery-(\d{8})-(\d{6})(?:-[0-9a-f]{8})?\.db\Z")
+# Only automatic snapshots are eligible for pruning. Recovery evidence is retained.
+BACKUP_PATTERNS = {"auto": AUTO_NAME, "manual": MANUAL_NAME,
+                   "before-upgrade": UPGRADE_NAME, "failed-recovery": RECOVERY_NAME}
 
 
 @dataclass(frozen=True)
@@ -71,14 +76,16 @@ class BackupService:
         return True
 
     def prepare(self):
-        for name in ("auto", "manual", "before-upgrade"):
+        for name in BACKUP_PATTERNS:
             self._safe_directory(self.root / name, create=True)
 
     def candidates(self, kind):
+        if kind not in BACKUP_PATTERNS:
+            raise ValueError("Unsupported backup kind")
         directory = self.root / kind
         if not self._safe_directory(directory):
             return []
-        pattern = AUTO_NAME if kind == "auto" else MANUAL_NAME
+        pattern = BACKUP_PATTERNS[kind]
         result = []
         for path in directory.iterdir():
             if self._eligible(path, pattern):
@@ -112,14 +119,21 @@ class BackupService:
                 removed.append(path)
         return removed
 
-    def snapshot(self, source, kind="manual"):
-        if kind not in ("auto", "manual"):
+    def snapshot(self, source, kind="manual", *, source_revision=None,
+                 target_revision=None, application_version=None):
+        if kind not in BACKUP_PATTERNS:
             raise ValueError("Unsupported backup kind")
         if source is None:
             raise ValueError("No local SQLite database")
         self.prepare()
         directory = self.root / kind
         name = f"seedlab-{kind}-{self.now():%Y%m%d-%H%M%S}"
+        if kind == "before-upgrade":
+            values = (source_revision, target_revision, application_version)
+            if not all(isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", value)
+                       for value in values):
+                raise ValueError("Upgrade snapshot requires valid revision and application identities")
+            name += f"-from-{source_revision}-to-{target_revision}-app-{application_version}-{uuid4().hex[:8]}"
         target = directory / (name + ".db")
         while target.exists() or target.is_symlink():
             target = directory / (name + "-" + uuid4().hex[:8] + ".db")

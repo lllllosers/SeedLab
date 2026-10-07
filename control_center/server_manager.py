@@ -372,6 +372,8 @@ class ServerProcessManager(QObject):
             with process.stdout:
                 for line in process.stdout:
                     self.server_log.info(line.rstrip())
+                    if line.startswith("数据库启动未通过："):
+                        self._output_error.emit(line.partition("：")[2].strip())
                     for marker, reason in (("数据库升级失败", "数据库升级失败，请查看日志并保留现有数据库。"),
                                            ("前端生产文件缺失", "前端生产文件缺失，请先构建前端。"),
                                            ("address already in use", f"端口 {self.port} 已被其他程序占用。")):

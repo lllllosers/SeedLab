@@ -1,13 +1,13 @@
 """One server entry point; suitable for a future standalone SeedLabServer.exe."""
 import argparse
 import asyncio
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 import os
 import json
 from pathlib import Path
 
 def upgrade_database(*args, **kwargs):
-    from app.services.migrations import upgrade_database as upgrade
+    from app.services.database_upgrade import prepare_database_for_startup as upgrade
     return upgrade(*args, **kwargs)
 
 
@@ -23,6 +23,8 @@ def parse_args(arguments=None):
     parser.add_argument("--migration-root", type=Path)
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--access-mode", choices=("local", "lan", "remote"))
+    parser.add_argument("--recover-from", type=Path, help="停止服务后，从选定备份恢复数据库，不启动服务")
+    parser.add_argument("--confirm-stopped", action="store_true", help="明确确认 SeedLab 和数据库工具已停止")
     args = parser.parse_args(arguments)
     if not 1 <= args.port <= 65535:
         parser.error("端口须为 1 至 65535。")
@@ -51,6 +53,17 @@ async def serve_with_stop_file(server, stop_file):
 def main(arguments=None):
     args = parse_args(arguments)
     from app.core.config import ROOT, Settings, get_settings
+    if args.recover_from is not None:
+        if (args.data_root is None or args.database is None or
+                args.database.absolute() != (args.data_root / "data/seedlab.db").absolute()):
+            print("恢复须明确指定完整数据目录及其中的实验数据库，原文件尚未替换。", flush=True)
+            return 1
+        from app.recovery import main as recover
+        command = ["--data-root", str(args.data_root), "--snapshot", str(args.recover_from),
+                   "--migration-root", str(args.migration_root or ROOT / "backend/alembic")]
+        if args.confirm_stopped:
+            command.append("--confirm-stopped")
+        return recover(command)
     # Explicit production roots bypass repository .env; source-run defaults keep
     # the established development paths, anchored without changing cwd.
     defaults = Settings(_env_file=None) if args.database is not None else Settings()
@@ -83,13 +96,27 @@ def main(arguments=None):
         SEEDLAB_COOKIE_SECURE=args.cookie_secure or str(defaults.seedlab_cookie_secure).lower())
     get_settings.cache_clear()
     print(f"前端目录：{web}\n正在检查并升级数据库……", flush=True)
-    try:
-        upgrade_database(database_url, migration_root)
-    except Exception:
-        import traceback
-        traceback.print_exc()
-        print("数据库升级失败，服务未启动。请检查日志并保留现有数据库。", flush=True)
-        return 1
+    from app.services.database_upgrade import database_lease, UpgradeError
+    with ExitStack() as startup:
+        try:
+            lease = startup.enter_context(database_lease(database_url))
+            upgrade_database(database_url, migration_root, lease=lease,
+                backup_root=data_root / "backups" if data_root else None,
+                allow_create=not (data_root and (data_root / "config/seedlab.json").exists()))
+        except UpgradeError as error:
+            print(f"数据库启动未通过：{error}", flush=True)
+            return 1
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            print("数据库升级失败，服务未启动。请检查日志并保留现有数据库。", flush=True)
+            return 1
+        return run_prepared_server(args, data_root, stop)
+
+
+def run_prepared_server(args, data_root, stop):
+    # The caller holds the database lease until Uvicorn has fully stopped.
+    from app.core.config import get_settings
     from app.services.runtime_identity import deployment_identity, IdentityError
     mode = args.access_mode or ("lan" if args.host == "0.0.0.0" else
                                 "remote" if args.cookie_secure == "true" else "local")
