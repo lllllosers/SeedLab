@@ -2,11 +2,11 @@
 
 SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前稳定生产版本为 **v0.5.1**，已支持材料台账、一体导入、GER 种子萌发试验、分日置床、发芽巡检、前 N 株幼苗选样、根苗长测定、科研工作簿、账号及审计。幼苗测定采用 DAG（发芽后测定时间），保留实测 0、无法测量和尚无数据的区别。
 
-**Architecture Foundation / AF-0—AF-4 已验收并合入 main**。当前 **AF-5** 分支整理前端 Experiment / GER / Measurement 所有权及静态类型 UI 分发，完成后等待人工验收；保留现有 URL、界面、流程、API、科研数据语义、schema、VERSION 及正式 v0.5.1 产物。AF-1 源码的新能力尚未发布到现有 portable。阶段范围与操作契约从[文档唯一入口](docs/README.md)进入。
+**Architecture Foundation / AF-0—AF-5 已验收并合入 main**。当前 **AF-6** 在独立分支完成架构核验、回归保护与文档收口，保留现有 URL、界面、流程、API、科研数据语义、schema、VERSION 及正式 v0.5.1 产物。**AF-6 NOT READY**：原正式实例及数据库已被用户删除，尚无可验证来源的正式数据库副本；生产副本验收为 UNAVAILABLE，不能以隔离测试库替代。这是验收证据缺失，不是代码回归或架构实现失败。AF-1 源码的新能力尚未发布到现有 portable。阶段范围与退出条件从[文档唯一入口](docs/README.md)进入。
 
 ## 使用与开发
 
-正式 portable 解压后运行 SeedLab Control Center.exe，日常运行无需 Python、Node 或 Git。程序与生产数据目录分离；目标电脑投产及历史 200 材料导入已完成，正式 Data Root 不在开发仓库。精确版本、tag、产物 SHA 及独立 importer 追溯见[v0.5.1 发布说明](docs/releases/v0.5.1.md)。
+正式 portable 解压后运行 SeedLab Control Center.exe，日常运行无需 Python、Node 或 Git。程序与生产数据目录分离；目标电脑曾完成投产及历史 200 材料导入，该历史事实保留，不能据此假定原正式实例仍存在。精确版本、tag、产物 SHA 及独立 importer 追溯见[v0.5.1 发布说明](docs/releases/v0.5.1.md)。
 
 - 实验室部署与操作：[使用说明](packaging/使用说明.txt)。
 - Windows 开发依赖、首次账号、启动与测试：[开发与运行说明](docs/04_开发与运行说明.md)。
