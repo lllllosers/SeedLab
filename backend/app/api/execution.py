@@ -3,19 +3,18 @@ import io
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
-from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.contracts.germination import (BatchObservationInput, ObservationInput, ObservationPatch,
                              SowDishesInput, CorrectSowingInput, CancelDishInput)
 from app.core.auth import current_user
 from app.db.session import get_db
-from app.models import Experiment, ExperimentMaterial, GerminationDish, SeedlingSample, User
+from app.models import Experiment, User
 from app.services import germination_execution as execution
 from app.services import sowing_workflow as sowing
 from app.services import germination_config as design
 from app.services.common import require_entity
-from app.services.ordering import display_number, dish_display_number, field_number, sample_display_number
+from app.services.ordering import display_number, dish_display_number
 
 
 router = APIRouter(prefix="/experiments", tags=["germination execution"])
@@ -108,21 +107,4 @@ def delete_observation(experiment_id: str, observation_id: str,
 
 @router.get("/{experiment_id}/samples")
 def list_samples(experiment_id: str, db: Session = Depends(get_db), _user: User = Depends(current_user)):
-    execution.execution_summary(db, experiment_id)
-    rows = db.execute(select(SeedlingSample, GerminationDish, ExperimentMaterial).join(
-        GerminationDish, SeedlingSample.dish_id == GerminationDish.id).join(
-        ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id).where(
-        ExperimentMaterial.experiment_id == experiment_id).order_by(
-        ExperimentMaterial.experiment_number, GerminationDish.replicate_no, SeedlingSample.sample_number)).all()
-    counts = dict(db.execute(select(GerminationDish.material_id, func.max(GerminationDish.replicate_no))
-                            .join(ExperimentMaterial).where(ExperimentMaterial.experiment_id == experiment_id)
-                            .group_by(GerminationDish.material_id)).all())
-    return [{"id": sample.id, "dish_id": dish.id, "dish_code": dish.code,
-             "sample_number": sample.sample_number,
-             "field_number": field_number(material, counts[material.id], dish.replicate_no),
-             "sample_display_number": sample_display_number(material.experiment_number, dish.replicate_no,
-                                                            counts[material.id], sample.sample_number),
-             "germinated_at": execution.iso_utc(sample.germinated_at),
-             "source_observation_id": sample.source_observation_id,
-             "position_label": sample.position_label}
-            for sample, dish, material in rows]
+    return execution.list_samples(db, experiment_id)

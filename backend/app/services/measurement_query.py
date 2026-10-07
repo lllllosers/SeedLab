@@ -10,6 +10,7 @@ from app.models import (Experiment, ExperimentMaterial, GerminationDish, Measure
                         SeedlingMeasurement, SeedlingSample, SeedLot, Taxon)
 from app.services.application_support import require_entity
 from app.services.local_time import iso_utc, today
+from app.services.measurement_schedule import scheduled_date_expression
 from app.services.ordering import field_number_expression, sample_number_expression
 
 
@@ -18,7 +19,7 @@ def slots():
     replicates = select(d.material_id.label("material_id"), func.max(d.replicate_no).label("count")).group_by(d.material_id).subquery()
     number = func.printf("%03d", m.experiment_number)
     field = field_number_expression(m.experiment_number, d.replicate_no, replicates.c.count)
-    planned = func.date(func.seedlab_local_date(s.germinated_at), "+" + cast(p.day_after_germination, String) + " days")
+    planned = scheduled_date_expression(s.germinated_at, p.day_after_germination)
     measured_date = func.seedlab_local_date(v.measured_at)
     state = case((v.id.is_not(None), "completed"), (s.germinated_at.is_(None), "unschedulable"),
                  (planned < today().isoformat(), "overdue"), (planned == today().isoformat(), "due_today"), else_="upcoming")

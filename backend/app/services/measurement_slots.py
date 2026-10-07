@@ -5,10 +5,13 @@ material without obtained seedlings still belongs to the experimental population
 Slots are projections, never persisted entities or lifecycle/failure judgments.
 """
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from app.contracts.errors import ValidationError
+from app.contracts.measurement_dataset import (MeasurementDataset, MeasurementDatasetRow,
+                                              MeasurementSlot, MeasurementStage)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +19,7 @@ from app.models import (ExperimentMaterial, ExperimentProtocol, GerminationDish,
                         MeasurementTimepoint, SeedlingMeasurement, SeedlingSample)
 from app.services.local_time import utc_naive
 from app.services.ordering import dish_display_number, sample_display_number
+from app.services.measurement_schedule import scheduled_date
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,60 @@ class CanonicalSlots:
     seedling_slots: tuple[PlannedSeedlingSlot, ...]
     measurement_slots: tuple[CanonicalMeasurementSlot, ...]
     timepoints: tuple[MeasurementTimepoint, ...]
+
+
+@dataclass(frozen=True)
+class MeasurementDatasetReader:
+    """Session-bound projection adapter. Analysis uses its structural read port."""
+    _db: Session
+
+    def read(self, experiment_ids: Sequence[str]) -> MeasurementDataset:
+        return build_measurement_dataset(self._db, list(experiment_ids))
+
+
+def build_measurement_dataset(db: Session, experiment_ids: list[str]) -> MeasurementDataset:
+    """Detach immutable values from the existing canonical slot algorithm.
+
+    Neither ORM instances nor a Session escape into dataset rows. no_autoflush
+    covers scalar reads as well as queries, including callers' pending changes.
+    Ordering, planned population and validation belong to build_measurement_slots.
+    """
+    with db.no_autoflush:
+        canonical = build_measurement_slots(db, experiment_ids)
+        slots = tuple(MeasurementSlot(
+            experiment_id=slot.material.experiment_id, material_id=slot.material.id,
+            material_number=slot.material.experiment_number, sample_scope=slot.sample_scope,
+            planned_number=slot.planned_number, replicate_no=slot.replicate_no,
+            replicate_count=slot.replicate_count, dish_id=slot.dish.id if slot.dish else None,
+            actual_replicate_no=slot.dish.replicate_no if slot.dish else None,
+            sample_id=slot.sample.id if slot.sample else None,
+            sample_number=slot.sample.sample_number if slot.sample else None,
+            dish_number=slot.dish_number, seedling_number=slot.seedling_number,
+            position_label=slot.sample.position_label if slot.sample else None,
+            germinated_at=slot.sample.germinated_at if slot.sample else None,
+            source_observation_id=slot.sample.source_observation_id if slot.sample else None,
+        ) for slot in canonical.seedling_slots)
+        by_key = {slot.key: slot for slot in slots}
+        stages = tuple(MeasurementStage(point.experiment_id, point.id, point.day_after_germination)
+                       for point in canonical.timepoints)
+        by_point = {stage.timepoint_id: stage for stage in stages}
+        rows = []
+        for source in canonical.measurement_slots:
+            slot = by_key[source.seedling.key]
+            stage = by_point[source.timepoint.id]
+            measurement = source.measurement
+            rows.append(MeasurementDatasetRow(
+                slot=slot, stage=stage,
+                scheduled_date=scheduled_date(slot.germinated_at, stage.day_after_germination),
+                measurement_id=measurement.id if measurement else None,
+                root_length_mm=measurement.root_length_mm if measurement else None,
+                shoot_length_mm=measurement.shoot_length_mm if measurement else None,
+                root_unavailable=measurement.root_unavailable if measurement else None,
+                shoot_unavailable=measurement.shoot_unavailable if measurement else None,
+                measured_at=measurement.measured_at if measurement else None,
+                notes=measurement.notes if measurement else None,
+            ))
+        return MeasurementDataset(slots, tuple(rows), stages)
 
 
 def build_measurement_slots(db: Session, experiment_ids: list[str]) -> CanonicalSlots:

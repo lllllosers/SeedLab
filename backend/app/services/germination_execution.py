@@ -13,7 +13,7 @@ from app.models import (Experiment, ExperimentMaterial, GerminationDish, Germina
                         SeedlingSample, SeedLot, Taxon)
 from app.services.application_support import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.germination_config import days_for, effective, materials_for, protocol_for
-from app.services.ordering import field_number
+from app.services.ordering import field_number, sample_display_number
 from app.services.local_time import iso_utc, local_date, today, utc_naive
 
 
@@ -327,3 +327,24 @@ def execution_summary(db: Session, experiment_id: str) -> dict:
         "sample_count": len(samples),
         "materials": material_rows, "dishes": dish_rows, "recent_observations": recent,
     }
+
+
+def list_samples(db: Session, experiment_id: str) -> list[dict]:
+    execution_summary(db, experiment_id)
+    rows = db.execute(select(SeedlingSample, GerminationDish, ExperimentMaterial).join(
+        GerminationDish, SeedlingSample.dish_id == GerminationDish.id).join(
+        ExperimentMaterial, GerminationDish.material_id == ExperimentMaterial.id).where(
+        ExperimentMaterial.experiment_id == experiment_id).order_by(
+        ExperimentMaterial.experiment_number, GerminationDish.replicate_no, SeedlingSample.sample_number)).all()
+    counts = dict(db.execute(select(GerminationDish.material_id, func.max(GerminationDish.replicate_no))
+                            .join(ExperimentMaterial).where(ExperimentMaterial.experiment_id == experiment_id)
+                            .group_by(GerminationDish.material_id)).all())
+    return [{"id": sample.id, "dish_id": dish.id, "dish_code": dish.code,
+             "sample_number": sample.sample_number,
+             "field_number": field_number(material, counts[material.id], dish.replicate_no),
+             "sample_display_number": sample_display_number(material.experiment_number, dish.replicate_no,
+                                                            counts[material.id], sample.sample_number),
+             "germinated_at": iso_utc(sample.germinated_at),
+             "source_observation_id": sample.source_observation_id,
+             "position_label": sample.position_label}
+            for sample, dish, material in rows]

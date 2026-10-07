@@ -12,9 +12,8 @@ from sqlalchemy.orm import Session
 from app.models import (Experiment, ExperimentMaterial, GerminationDish,
                         GerminationObservation, SeedLot, Taxon)
 from app.services.ordering import display_number, field_number, material_key
-from app.services.measurement_slots import build_measurement_slots
+from app.services.measurement_slots import build_measurement_dataset
 from app.services.local_time import local_date, local_datetime
-from app.services.seedling_measurement import scheduled_date
 from app.version import VERSION
 
 
@@ -36,13 +35,13 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                                           row[0].id))
     if not rows:
         raise ValidationError("所选实验还没有材料，无法生成工作簿")
-    canonical = build_measurement_slots(db, experiment_ids)
+    canonical = build_measurement_dataset(db, experiment_ids)
     slots_by_material = defaultdict(list)
     stages_by_slot = defaultdict(list)
     for slot in canonical.seedling_slots:
-        slots_by_material[slot.material.id].append(slot)
-    for stage in canonical.measurement_slots:
-        stages_by_slot[stage.seedling.key].append(stage)
+        slots_by_material[slot.material_id].append(slot)
+    for stage in canonical.rows:
+        stages_by_slot[stage.slot.key].append(stage)
     workbook = Workbook()
     materials_sheet = workbook.active
     materials_sheet.title = "01_材料总表"
@@ -61,7 +60,7 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                        "中文名", "学名", "发芽判定时间", "DAG", "计划测定日期", "实际测定时间",
                        "延迟天数", "根长（mm）", "根长状态", "苗长（mm）", "苗长状态", "备注",
                        "数据状态", "计划取样序号", "取样范围", "计划培养皿重复"))
-    all_dag = sorted({point.day_after_germination for point in canonical.timepoints})
+    all_dag = sorted({point.day_after_germination for point in canonical.stages})
     wide_sheet.append(("汇总编号", "来源实验", "原实验编号", "培养皿现场编号", "幼苗编号", "位置标签", "中文名", "学名") +
                       tuple(column for day in all_dag for column in (f"RL{day}", f"SL{day}")) +
                       ("发芽判定时间", "是否已有实际幼苗", "计划取样序号", "取样范围", "计划培养皿重复"))
@@ -105,18 +104,17 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
                                           observation.new_germinated_count, count,
                                           round(count / dish.seed_count * 100, 2)))
         for slot in slots_by_material[material.id]:
-            sample = slot.sample
-            germinated_at = sample.germinated_at if sample else None
+            germinated_at = slot.germinated_at
             germinated_text = local_datetime(germinated_at).isoformat() if germinated_at else None
-            position = sample.position_label if sample else None
+            position = slot.position_label
             scope_text = "每皿" if slot.sample_scope == "per_dish" else "每材料"
             values = {}
             for stage in stages_by_slot[slot.key]:
-                measurement = stage.measurement
-                day = stage.timepoint.day_after_germination
+                measurement = stage if stage.measurement_exists else None
+                day = stage.stage.day_after_germination
                 root = float(measurement.root_length_mm) if measurement and measurement.root_length_mm is not None else None
                 shoot = float(measurement.shoot_length_mm) if measurement and measurement.shoot_length_mm is not None else None
-                planned = scheduled_date(germinated_at, day)
+                planned = stage.scheduled_date
                 long_sheet.append((summary_number, source_name, original_number, slot.dish_number,
                     slot.seedling_number, position, taxon.common_name, taxon.scientific_name,
                     germinated_text, day, _date(planned),
@@ -130,7 +128,7 @@ def build(db: Session, experiment_ids: list[str]) -> BytesIO:
             wide_sheet.append((summary_number, source_name, original_number, slot.dish_number, slot.seedling_number,
                 position, taxon.common_name, taxon.scientific_name) +
                 tuple(value for day in all_dag for value in values.get(day, (None, None))) +
-                (germinated_text, "是" if sample else "否", slot.planned_number, scope_text, slot.replicate_no))
+                (germinated_text, "是" if slot.sample_id is not None else "否", slot.planned_number, scope_text, slot.replicate_no))
     explanation.append(("项目", "说明"))
     notes = [
         ("导出时间", datetime.now(timezone.utc).isoformat()),

@@ -1,6 +1,5 @@
 """Derived DAG work queue and immutable sample identity with auditable measurements."""
 
-from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from app.contracts.errors import ConflictError, NotFoundError, ValidationError
@@ -12,6 +11,7 @@ from app.models import (Experiment, ExperimentMaterial, GerminationDish, Measure
                         SeedlingMeasurement, SeedlingSample)
 from app.services.application_support import commit_or_conflict, flush_or_conflict, record, require_entity
 from app.services.local_time import iso_utc, local_date, utc_naive
+from app.services.measurement_schedule import scheduled_date
 
 
 def _measurement_state(item: SeedlingMeasurement) -> dict:
@@ -20,10 +20,6 @@ def _measurement_state(item: SeedlingMeasurement) -> dict:
             "shoot_length_mm": float(item.shoot_length_mm) if item.shoot_length_mm is not None else None,
             "root_unavailable": item.root_unavailable, "shoot_unavailable": item.shoot_unavailable,
             "measured_at": iso_utc(item.measured_at), "notes": item.notes}
-
-
-def scheduled_date(germinated_at, dag: int):
-    return local_date(germinated_at) + timedelta(days=dag) if germinated_at else None
 
 
 def task_data(db: Session, experiment_id: str, status: str | None = None,
