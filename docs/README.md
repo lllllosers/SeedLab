@@ -1,6 +1,6 @@
 # SeedLab 文档导航
 
-当前稳定版本为 **v0.5.1**。Architecture Foundation 的 **AF-0—AF-5 已验收并合入 main**；**AF-6** 在独立分支完成架构验证与现行文档收口，当前为 **16 / 16 effective exit criteria PASS，AF-6 READY FOR ACCEPTANCE**，等待人工验收。原正式实例/数据库已主动销毁且无可验证生产副本，项目方已正式 supersede 原 clone gate，将 Criterion #13 替换为 production-equivalent isolated validation；不声称 production clone PASS，不将 fixture 称为 production clone。退出条件见[路线图](03_开发路线图.md)，替代证据契约见[生产运维](10_生产部署与控制中心设计.md#生产等效隔离验收)。既有 URL、界面、流程、API、业务 schema 与科研语义保持；没有第二实验类型、Analysis 页面或统计实现。AF-1 源码能力尚未进入现有正式 portable。版本及精确产物身份见[发布说明](releases/v0.5.1.md)。
+当前稳定生产版本为 **v0.5.1**；**Architecture Foundation 1.0 已人工验收并合入 main `d99e9365`**。当前开发阶段为 **Production Operations v0.6.0**，源码版本为 0.6.0，尚未正式发布。升级器、程序槽位和管理员恢复规则见[生产运维](10_生产部署与控制中心设计.md#managed-deploymentv060)，阶段范围见[路线图](03_开发路线图.md)。真实 Production Mirror 已由用户装入生产数据库安全备份；开发和自动测试不得修改它。既有业务 API、schema 与科研语义保持，没有新实验类型或统计实现。精确冻结产物身份见[发布说明](releases/v0.5.1.md)。Foundation 当时的替代退出条件及来源边界继续作为历史验收契约保留。
 
 本页是 docs 的唯一入口。每个主题以以下指定文档为权威来源，其他页面只做摘要或引用；业务与实现不一致时先核对代码、回归测试及已确认事实，不能通过重构改变事实。
 
@@ -8,7 +8,7 @@
 
 - [系统总体设计](01_系统总体设计.md)：当前调用关系、真实文件所有权、资产分类及后续风险。
 - [核心数据模型](02_核心数据模型.md)：当前实体、数据库约束与迁移链。
-- [开发路线图](03_开发路线图.md)：AF-0—AF-6 的简要方向与阶段边界。
+- [开发路线图](03_开发路线图.md)：已验收 Foundation 与当前 Production Operations 的范围。
 
 ## 业务规则
 

@@ -2,11 +2,11 @@
 
 SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前稳定生产版本为 **v0.5.1**，已支持材料台账、一体导入、GER 种子萌发试验、分日置床、发芽巡检、前 N 株幼苗选样、根苗长测定、科研工作簿、账号及审计。幼苗测定采用 DAG（发芽后测定时间），保留实测 0、无法测量和尚无数据的区别。
 
-**Architecture Foundation / AF-0—AF-5 已验收并合入 main**。当前 **AF-6** 在独立分支完成架构核验、回归保护与文档收口，保留现有 URL、界面、流程、API、科研数据语义、schema、VERSION 及正式 v0.5.1 产物。项目方已正式 supersede 原生产副本退出条件：原正式实例及数据库已主动销毁，且不存在来源可验证的生产副本；Criterion #13 改为 **production-equivalent isolated validation**，证据满足。当前为 **16 / 16 effective exit criteria PASS，AF-6 READY FOR ACCEPTANCE**，等待人工验收；不表示 production clone PASS，也不将 fixture 称为 production clone。AF-1 源码的新能力尚未发布到现有 portable。阶段范围与退出条件从[文档唯一入口](docs/README.md)进入。
+**SeedLab Architecture Foundation 1.0 已人工验收并合入 main `d99e9365`**。当前开发阶段为 **Production Operations v0.6.0**：独立 Launcher / Updater、程序版本槽位、v0.5.1 首次升级助手、离线升级包及管理员密码恢复。业务 schema 和科研语义保持，源码 VERSION 为 0.6.0，尚未 tag 或正式发布。阶段范围从[文档唯一入口](docs/README.md)进入。
 
 ## 使用与开发
 
-正式 portable 解压后运行 SeedLab Control Center.exe，日常运行无需 Python、Node 或 Git。程序与生产数据目录分离；目标电脑曾完成投产及历史 200 材料导入，该历史事实保留，不能据此假定原正式实例仍存在。精确版本、tag、产物 SHA 及独立 importer 追溯见[v0.5.1 发布说明](docs/releases/v0.5.1.md)。
+正式生产电脑仍运行冻结 v0.5.1，正式数据库与约 200 份历史材料仍在生产电脑。当前 Production Mirror 由该冻结程序和用户提供的真实生产数据库安全备份组成，与源码隔离。开发及自动测试只使用系统临时目录；镜像升级须另行人工授权，不能用 fixture 冒充生产副本。v0.6.0 首次升级双击 Upgrade Assistant，成功后日常入口为 SeedLab Launcher；已纳管部署从控制中心“系统升级”选择本地 ZIP。日常运行无需 Python、Node 或 Git。精确冻结产物身份见[v0.5.1 发布说明](docs/releases/v0.5.1.md)。
 
 - 实验室部署与操作：[使用说明](packaging/使用说明.txt)。
 - Windows 开发依赖、首次账号、启动与测试：[开发与运行说明](docs/04_开发与运行说明.md)。
@@ -22,6 +22,7 @@ SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前稳�
 backend/         FastAPI / SQLAlchemy / Alembic / pytest；SQLite WAL
 frontend/        Vue 3 / TypeScript / Vite / Element Plus / Pinia
 control_center/  Windows PySide6 运行控制中心
+production_ops/  独立 Launcher / Updater 与共享离线部署核心
 scripts/         启动、测试、构建、维护与临时历史回归夹具
 packaging/       portable 入口、spec 和使用说明
 docs/            当前权威文档与 releases
