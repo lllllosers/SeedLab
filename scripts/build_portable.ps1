@@ -6,6 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if ($OutputName -eq 'portable-v051') { throw 'Frozen v0.5.1 artifacts must never be rebuilt or overwritten.' }
 $taskPython = Join-Path $taskRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $taskPython -PathType Leaf)) { throw 'Missing .venv. Install backend[test,control,packaging] first.' }
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'npm is needed for building only.' }
@@ -66,6 +67,8 @@ try {
     }
     foreach ($taskName in @('LICENSE','AUTHORS.md')) { Copy-Item -LiteralPath (Join-Path $taskRoot $taskName) -Destination $taskPackage }
     Copy-Item -LiteralPath (Join-Path $taskRoot 'packaging\使用说明.txt') -Destination $taskPackage
+    & $taskPython -B (Join-Path $taskRoot 'scripts\write_build_info.py') --program $taskPackage
+    if ($LASTEXITCODE -ne 0) { throw 'Build identity generation failed.' }
     & $taskPython -B -c "from app.services.migrations import migration_heads; assert migration_heads(r'$taskPackage\app\migrations') == migration_heads(r'$taskRoot\backend\alembic')"
     if ($LASTEXITCODE -ne 0) { throw 'Packaged migration resources failed head verification.' }
     & $taskPython (Join-Path $taskRoot 'scripts\check_portable.py') --directory $taskPackage

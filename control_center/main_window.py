@@ -22,10 +22,11 @@ from .widgets.operations_panels import NetworkPanel, BackupPanel, SettingsPanel,
 from .startup import StartupManager
 from .widgets.startup_panel import StartupPanel
 from .brand import PRODUCT_TITLE, product_icon
+from .widgets.production_panels import UpgradePanel, AdminRecoveryPanel
 
 
-NAVIGATION = ("概览", "运行管理", "网络访问", "数据与备份", "日志与诊断", "设置与关于")
-NAV_ICONS = ("nav-overview", "nav-power", "nav-network", "nav-database", "nav-log", "nav-settings")
+NAVIGATION = ("概览", "运行管理", "网络访问", "数据与备份", "系统升级", "日志与诊断", "设置与关于")
+NAV_ICONS = ("nav-overview", "nav-power", "nav-network", "nav-database", "nav-update", "nav-log", "nav-settings")
 
 
 def button(text, slot, primary=False):
@@ -111,6 +112,7 @@ class MainWindow(QMainWindow):
         self._build_management()
         self._build_network()
         self._build_data()
+        self._build_upgrade()
         self._build_logs()
         self._build_about()
         self._build_tray()
@@ -156,7 +158,7 @@ class MainWindow(QMainWindow):
         hero.box.addWidget(self.hero_details)
         self.overview_primary = button("启动 SeedLab", self.overview_action, True)
         self.overview_restart = button("重启 SeedLab", self.manager.restart)
-        self.error_logs = button("查看日志", lambda: self.select_page(4))
+        self.error_logs = button("查看日志", lambda: self.select_page(5))
         hero.box.addWidget(ActionRow((self.overview_primary, self.overview_restart, self.error_logs)))
         page.addWidget(hero)
         self.bootstrap = Card()
@@ -257,8 +259,14 @@ class MainWindow(QMainWindow):
         page.addWidget(label("诊断包：尚未配置", "muted"))
         page.addStretch()
 
+    def _build_upgrade(self):
+        page = self._page("系统升级", "选择本地升级包，先检查并准备新程序，再由升级助手安全切换版本。实验数据保持原位置。")
+        self.upgrade_panel = UpgradePanel(self)
+        page.addWidget(self.upgrade_panel)
+        page.addStretch()
+
     def _build_about(self):
-        page = self._page("设置与关于", "设置自动备份与保留份数；访问方式在网络访问页面设置。")
+        page = self._page("设置与关于", "设置自动备份与登录启动，或恢复已有管理员登录；访问方式在网络访问页面设置。")
         card = Card()
         self.settings_panel = SettingsPanel(self.manager)
         self.settings_panel.save_requested.connect(self.save_backup_settings)
@@ -266,15 +274,17 @@ class MainWindow(QMainWindow):
         self.startup_panel = StartupPanel(self.startup_manager)
         page.addWidget(self.startup_panel)
         card.box.addWidget(label("SeedLab", "cardTitle"))
-        card.box.addWidget(label(f"应用版本：v{VERSION}\n默认端口：8848\n数据库结构版本：c6d91f28a405", None, True))
+        card.box.addWidget(label(f"应用版本：v{VERSION}\n默认端口：8848", None, True))
         paths = self.manager.paths
         data_root = paths.data_root or (paths.database.parent if paths.database is not None else None)
         card.box.addWidget(label(f"数据目录：{data_root or '未使用本地数据目录'}\n运行目录：{paths.program_root}", "muted", True))
         if data_root is not None:
             card.box.addWidget(ActionRow((button("打开数据目录", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(data_root)))),)))
         card.box.addWidget(label("作者：Steven_Chen / SS_Zhong\n许可：MIT License", "muted", True))
-        card.box.addWidget(label("统计分析阶段（Stage 4）尚未开始。", "muted", True))
+        card.box.addWidget(label("统计分析尚未开放。", "muted", True))
         page.addWidget(card)
+        self.admin_recovery_panel = AdminRecoveryPanel(self.manager)
+        page.addWidget(self.admin_recovery_panel)
         page.addStretch()
 
     def _build_tray(self):
@@ -298,8 +308,10 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentIndex(index)
         for i, nav in enumerate(self.nav_buttons):
             nav.setChecked(i == index)
-        if index == 4:
+        if index == 5:
             self.refresh_logs()
+        if index == 6 and not self.admin_recovery_panel.busy:
+            self.admin_recovery_panel.load()
 
     def elapsed(self):
         if not self.manager.started_at:
@@ -390,7 +402,7 @@ class MainWindow(QMainWindow):
         self.events.insert(0, (datetime.now(), message))
         del self.events[3:]
         self.recent_events.setText("\n".join(format_event(when, text, overview=True) for when, text in self.events))
-        if self.pages.currentIndex() == 4:
+        if self.pages.currentIndex() == 5:
             self.refresh_logs()
 
     def overview_action(self):
@@ -467,6 +479,9 @@ class MainWindow(QMainWindow):
         return True
 
     def request_exit(self):
+        if self.admin_recovery_panel.busy:
+            QMessageBox.information(self, "正在恢复管理员登录", "请等待管理员维护完成后退出。")
+            return
         if self.network_panel.dirty or self.settings_panel.dirty:
             dialog = QMessageBox(self)
             dialog.setWindowTitle("未保存的设置")
@@ -533,3 +548,16 @@ class MainWindow(QMainWindow):
         self.manager.stop_checks()
         self.tray.hide()
         QApplication.instance().quit()
+
+    def begin_upgrade_exit(self):
+        if self.admin_recovery_panel.busy:
+            return False
+        self.operations.closing = True
+        self._exit_after_stop = True
+        self.manager.restart_pending = False
+        self.manager.pending_start = False
+        if self.manager.process is not None:
+            self.manager.stop()
+        else:
+            self.finish_exit()
+        return True

@@ -25,22 +25,25 @@ def parse_args(arguments=None):
     parser.add_argument("--access-mode", choices=("local", "lan", "remote"))
     parser.add_argument("--recover-from", type=Path, help="停止服务后，从选定备份恢复数据库，不启动服务")
     parser.add_argument("--confirm-stopped", action="store_true", help="明确确认 SeedLab 和数据库工具已停止")
+    parser.add_argument("--existing-data", action="store_true")
+    parser.add_argument("--candidate-id")
+    parser.add_argument("--candidate-stop", type=Path)
     args = parser.parse_args(arguments)
     if not 1 <= args.port <= 65535:
         parser.error("端口须为 1 至 65535。")
     return args
 
 
-async def watch_stop_file(server, stop_file, interval=0.25):
+async def watch_stop_file(server, stop_file, interval=0.25, additional=None):
     while not server.should_exit:
-        if stop_file.is_file():
+        if stop_file.is_file() or (additional is not None and additional.is_file()):
             server.should_exit = True
             return
         await asyncio.sleep(interval)
 
 
-async def serve_with_stop_file(server, stop_file):
-    watcher = asyncio.create_task(watch_stop_file(server, stop_file))
+async def serve_with_stop_file(server, stop_file, additional=None):
+    watcher = asyncio.create_task(watch_stop_file(server, stop_file, additional=additional))
     try:
         await server.serve()
     finally:
@@ -52,6 +55,13 @@ async def serve_with_stop_file(server, stop_file):
 
 def main(arguments=None):
     args = parse_args(arguments)
+    if args.candidate_id:
+        import re
+        if (not re.fullmatch(r"[0-9a-f]{32}", args.candidate_id) or args.candidate_stop is None
+                or not args.candidate_stop.is_absolute() or args.candidate_stop.parent.name != args.candidate_id
+                or args.candidate_stop.name != "stop.request"):
+            print("升级验证信息不完整，服务未启动。", flush=True)
+            return 1
     from app.core.config import ROOT, Settings, get_settings
     if args.recover_from is not None:
         if (args.data_root is None or args.database is None or
@@ -102,7 +112,7 @@ def main(arguments=None):
             lease = startup.enter_context(database_lease(database_url))
             upgrade_database(database_url, migration_root, lease=lease,
                 backup_root=data_root / "backups" if data_root else None,
-                allow_create=not (data_root and (data_root / "config/seedlab.json").exists()))
+                allow_create=not args.existing_data and not (data_root and (data_root / "config/seedlab.json").exists()))
         except UpgradeError as error:
             print(f"数据库启动未通过：{error}", flush=True)
             return 1
@@ -131,6 +141,8 @@ def run_prepared_server(args, data_root, stop):
     runtime = ({"instance_id": identity.instance_id, "data_root": str(identity.data_root),
                 "probe_token": identity.probe_token, "port": args.port,
                 "access_mode": mode, "bind_host": args.host, "pid": os.getpid()} if identity else None)
+    if runtime is not None and args.candidate_id:
+        runtime["candidate_id"] = args.candidate_id
     os.environ["SEEDLAB_RUNTIME_INFO"] = json.dumps(runtime)
     get_settings.cache_clear()
     import uvicorn
@@ -141,7 +153,7 @@ def run_prepared_server(args, data_root, stop):
     try:
         if stop:
             server = uvicorn.Server(uvicorn.Config(application, host=args.host, port=args.port, workers=1))
-            asyncio.run(serve_with_stop_file(server, stop))
+            asyncio.run(serve_with_stop_file(server, stop, additional=args.candidate_stop))
         else:
             uvicorn.run(application, host=args.host, port=args.port, reload=False, workers=1)
     except KeyboardInterrupt:

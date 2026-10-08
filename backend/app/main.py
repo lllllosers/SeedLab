@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import secrets
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api import auth, catalog, configuration, execution, experiments, material_import, measurement, setup, system, workbook_export
@@ -36,6 +37,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if development else None, lifespan=lifespan,
     )
     application.state.settings = settings
+    if settings.seedlab_runtime_info and settings.seedlab_runtime_info.get("candidate_id"):
+        @application.middleware("http")
+        async def candidate_maintenance(request, call_next):
+            if request.url.path != "/api/health":
+                return JSONResponse(status_code=503, content={"detail": "SeedLab 正在完成升级检查，请稍后再试。"})
+            return await call_next(request)
     application.state.experiment_types = build_experiment_registry()
     application.add_exception_handler(ApplicationError, application_error_handler)
     for router in (setup.router, auth.router, catalog.router, configuration.router,

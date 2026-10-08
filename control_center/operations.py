@@ -70,7 +70,7 @@ class Operations(QObject):
             self._pending_auto = False
         elif manager.state == State.RUNNING and manager.process is not self._seen_process:
             self._seen_process = manager.process
-            if manager.config.auto_backup_enabled:
+            if manager.config.auto_backup_enabled and not manager.paths.candidate_id:
                 self._pending_auto = True
                 self._try_auto()
 

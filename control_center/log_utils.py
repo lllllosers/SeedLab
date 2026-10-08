@@ -7,7 +7,7 @@ import re
 
 def redact(text: str) -> str:
     text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
-    text = re.sub(r'''(?i)((?:bootstrap[ _-]*token|session[ _-]*token|csrf[ _-]*token|password(?:_hash)?|authorization|cookie|sakurafrp[ _-]*token)["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;]+)''', r"\1[已隐藏]", text)
+    text = re.sub(r'''(?i)((?:bootstrap[ _-]*token|session[ _-]*token|probe[ _-]*token|csrf[ _-]*token|password(?:_hash)?|authorization|cookie|sakurafrp[ _-]*token)["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;]+)''', r"\1[已隐藏]", text)
     return text
 
 

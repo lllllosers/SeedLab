@@ -45,7 +45,7 @@ class StartupManager:
 
     @property
     def command(self):
-        executable = str(self.paths.control_executable)
+        executable = str(self.paths.deployment_root / "SeedLab Launcher.exe" if self.paths.deployment_root else self.paths.control_executable)
         if '"' in executable:
             raise ValueError("程序位置包含不支持的字符，请移动程序文件夹后重试。")
         return f'"{executable}" --startup'
@@ -65,7 +65,8 @@ class StartupManager:
         if not self.available:
             raise ValueError("便携版部署后可设置 Windows 登录启动。")
         if enabled:
-            if not self.paths.control_executable.is_file():
+            executable = self.paths.deployment_root / "SeedLab Launcher.exe" if self.paths.deployment_root else self.paths.control_executable
+            if not executable.is_file():
                 raise ValueError("程序文件缺失，请检查 SeedLab 文件夹后再设置登录启动。")
             self.registry.write(self.command)
         else:

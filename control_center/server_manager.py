@@ -53,6 +53,7 @@ class ServerProcessManager(QObject):
         self.message = "服务尚未启动，点击启动即可开始使用。"
         self.restart_pending = False
         self.pending_start = False
+        self.maintenance = False
         self._reply = None
         self._setup_reply = None
         self.initialized = None
@@ -188,7 +189,8 @@ class ServerProcessManager(QObject):
 
     @property
     def can_start(self):
-        return self.process is None and not self.pending_start and self.state in {State.STOPPED, State.ERROR}
+        return (not self.maintenance and self.process is None and not self.pending_start
+                and self.state in {State.STOPPED, State.ERROR})
 
     @property
     def can_stop(self):
@@ -407,7 +409,7 @@ class ServerProcessManager(QObject):
         self._event("已请求正常停止 SeedLab。")
 
     def restart(self):
-        if self.can_stop:
+        if self.can_stop and not self.maintenance:
             self.restart_pending = True
             self.stop()
 

@@ -24,6 +24,8 @@ class RuntimePaths:
     layout: str = "development"
     migration_root: Path | None = None
     resource_root: Path | None = None
+    deployment_root: Path | None = None
+    candidate_id: str | None = None
 
     def __post_init__(self):
         if self.layout not in ("development", "portable"):
@@ -31,6 +33,8 @@ class RuntimePaths:
         program = Path(self.program_root).resolve()
         object.__setattr__(self, "program_root", program)
         object.__setattr__(self, "resource_root", Path(self.resource_root or program).resolve())
+        if self.deployment_root is not None:
+            object.__setattr__(self, "deployment_root", Path(self.deployment_root).resolve())
         resource = program / ("app" if self.layout == "portable" else "backend")
         if self.web_root is None:
             object.__setattr__(self, "web_root", program / ("app/web" if self.layout == "portable" else "frontend/dist"))
@@ -108,6 +112,10 @@ class RuntimePaths:
         command = [str(self.server_executable)] if self.layout == "portable" else [str(self.python), "-u", str(self.program_root / "scripts/run_prod.py")]
         command += ["--host", settings.bind_host, "--port", str(settings.port), "--web-root", str(self.web_root),
                     "--migration-root", str(self.migration_root), "--cookie-secure", str(settings.cookie_secure).lower()]
+        if self.candidate_id:
+            command += ["--candidate-id", self.candidate_id, "--candidate-stop", str(self.deployment_root / "Updates" / self.candidate_id / "stop.request")]
+        if self.deployment_root:
+            command.append("--existing-data")
         if self.database is not None:
             command += ["--database", str(self.database)]
         if self.bootstrap_token is not None:
