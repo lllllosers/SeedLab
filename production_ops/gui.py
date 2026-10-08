@@ -172,6 +172,10 @@ class UpgradeWindow(QWidget):
         try:
             state = self.executor.store.load()
             pending = state["pending"]
+            self.root.setText(str(self.executor.store.root))
+            self.root.setReadOnly(True)
+            for control in self.input_controls:
+                control.setEnabled(not pending and not self.busy)
             text = f"当前版本：v{state['current']['version']}\n实验数据：{state['data_root']}\n数据目录保持不变。"
             if pending:
                 text += f"\n目标版本：v{pending['target']['version']}\n数据库无需调整。"

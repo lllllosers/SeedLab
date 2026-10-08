@@ -346,7 +346,7 @@ def test_schema_display_uses_actual_revision_and_graph(deployment):
     assert schema_information(data / "data/seedlab.db", MIGRATIONS) == {"current": HEAD, "target": HEAD}
 
 
-def test_managed_login_startup_points_to_stable_launcher(deployment):
+def test_managed_login_startup_points_to_stable_launcher(deployment, monkeypatch):
     from control_center.paths import RuntimePaths
     from control_center.startup import StartupManager
     from test_portable_package import Registry
@@ -355,6 +355,19 @@ def test_managed_login_startup_points_to_stable_launcher(deployment):
     manager = StartupManager(paths, Registry())
     manager.save(True)
     assert manager.command == f'"{store.root / LAUNCHER}" --startup'
+    # Shell entrypoint failures are recoverable after a successful deployment;
+    # neither locale-specific stderr nor timeout may become an uncaught GUI error.
+    from production_ops import windows
+    import subprocess
+    for timeout in (False, True):
+        def unavailable(*args, **kwargs):
+            assert kwargs["errors"] == "replace"
+            if timeout:
+                raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+            return subprocess.CompletedProcess(args[0], 1)
+        monkeypatch.setattr(windows.subprocess, "run", unavailable)
+        with pytest.raises(OperationsError, match="SeedLab Launcher"):
+            windows.create_shortcut(store.root, program)
 
 
 def test_candidate_rejects_business_requests_but_keeps_health(deployment):
@@ -448,7 +461,7 @@ def pump_until(app, condition):
     assert condition()
 
 
-def test_bootstrap_gui_picker_when_discovery_has_no_match(deployment, monkeypatch):
+def test_bootstrap_gui_picker_when_discovery_has_no_match(deployment, monkeypatch, tmp_path):
     from PySide6.QtWidgets import QApplication
     from production_ops import gui
     store, _, program = deployment
@@ -463,6 +476,13 @@ def test_bootstrap_gui_picker_when_discovery_has_no_match(deployment, monkeypatc
         pump_until(app, lambda: not window.busy)
         assert window.root.text() == str(store.root)
         assert "数据库检查正常" in window.details.text()
+        core, _ = executor(store)
+        core.stage(write_package(tmp_path / "prepared.zip"))
+        window.attach_executor(store.root)
+        window.refresh_state()
+        assert window.root.isReadOnly()
+        assert all(not control.isEnabled() for control in window.input_controls)
+        assert window.start_button.isEnabled()
     finally:
         window.close()
 

@@ -134,8 +134,12 @@ $shortcut.WorkingDirectory = $env:SEEDLAB_DEPLOYMENT_ROOT
 $shortcut.Description = 'SeedLab'
 $shortcut.Save()
 """
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "-"],
-        input=script, text=True, capture_output=True, env=environment, timeout=20,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    message = "程序已安装，桌面入口未能创建。请直接打开部署根目录中的 SeedLab Launcher。"
+    try:
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "-"],
+            input=script, text=True, errors="replace", capture_output=True, env=environment, timeout=20,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise OperationsError(message) from error
     if result.returncode:
-        raise OperationsError("程序已安装，桌面入口未能创建。请直接打开部署根目录中的 SeedLab Launcher。")
+        raise OperationsError(message)
