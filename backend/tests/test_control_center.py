@@ -220,13 +220,13 @@ def test_utf8_rotating_logs_redact_secrets_and_show_event_summary(paths):
             logger.removeHandler(handler)
 
 
-def test_window_six_pages_tray_close_and_bootstrap(manager, qt_app, monkeypatch, runtime_health):
+def test_window_seven_pages_tray_close_and_bootstrap(manager, qt_app, monkeypatch, runtime_health):
     monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable", lambda: True)
     manager.paths.bootstrap_token.write_text("isolated-token-secret", encoding="utf-8")
     window = MainWindow(manager)
     window.show()
     qt_app.processEvents()
-    assert window.pages.count() == 6 and window.pages.currentIndex() == 0
+    assert window.pages.count() == 7 and window.pages.currentIndex() == 0
     for index, nav in enumerate(window.nav_buttons):
         assert not nav.icon().isNull() and nav.iconSize().width() == 18
         nav.click()

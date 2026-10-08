@@ -16,14 +16,27 @@ from app.db.base import Base
 from app.models import ExperimentMaterial, SeedlingMeasurement, SeedlingSample, SeedLot
 from app.services.measurement_slots import MeasurementDatasetReader, build_measurement_dataset, build_measurement_slots
 from app.services.workbook_export import build
+from app.version import VERSION
 from test_planned_measurement_slots import design, obtained
 
 
 def workbook_digest(output):
     book = load_workbook(output, data_only=True)
     try:
-        content = [(sheet.title, [list(row) for row in sheet.values
-                    if not (sheet.title == '06_导出说明' and row[0] == '导出时间')]) for sheet in book]
+        content = []
+        for sheet in book:
+            rows = []
+            for row in sheet.values:
+                if sheet.title == '06_导出说明' and row[0] == '导出时间':
+                    continue
+                row = list(row)
+                if sheet.title == '06_导出说明' and row[0] == '软件版本':
+                    # Assert the live release identity, then normalize only this
+                    # metadata cell to the accepted AF-3/AF-4 baseline version.
+                    assert row[1] == VERSION
+                    row[1] = '0.5.1'
+                rows.append(row)
+            content.append((sheet.title, rows))
         return hashlib.sha256(json.dumps(content, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     finally:
         book.close()
@@ -46,7 +59,8 @@ def test_workbook_content_matches_af3_baseline(design, status, actual):
     db.commit()
     digest = workbook_digest(build(db, [experiment.id]))
     # Captured from accepted AF-3 before changing the export consumer; all six
-    # sheets/cells are included, with only the dynamic export timestamp omitted.
+    # research sheets/cells are included; time is omitted and release metadata
+    # is asserted separately before normalization. Original digests stay fixed.
     expected = ('04266618548f0484007b4bb17b2f30053bbb866445cdff1eeeef2e6f729e5f80'
                 if actual else '956917bd03918896dc7c138a2c03f37f82c175e9897912332a8a523b1b3d5a15')
     assert digest == expected
