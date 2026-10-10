@@ -6,60 +6,42 @@ import { UploadFilled, Download, Document } from '@element-plus/icons-vue'
 import { saveMaterialPrefill, type MaterialImportResult } from '../features/germination'
 import { api, errorMessage } from '../shared/api/client'
 
-type RowStatus = 'registered' | 'new' | 'updatable' | 'confirm' | 'error'
-interface PreviewRow {
-  line: number
-  status: RowStatus
-  name: string | null
-  scientific_name: string | null
-  source_code: string | null
-  candidate_lot_id: string | null
-  candidate_lots: {
-    id: string
-    code: string
-    is_active: boolean
-    source_code: string | null
-    source: string | null
-    collected_at: string | null
-  }[]
-  candidate_row: number | null
-  suggested_decision: string | null
-  fills: string[]
-  conflicts: string[]
-  errors: string[]
-}
+import {
+  identityLabels,
+  gerLabels,
+  reviewRowReady,
+  type PreviewRow,
+  type GerStatus,
+} from '../shared/materialImportReview'
+
 interface Preview {
   file_hash: string
   already_imported: boolean
   rows: PreviewRow[]
   stats: Record<string, number>
 }
+const historyLabel = (status: GerStatus) => gerLabels[status]
 const router = useRouter()
 const file = ref<File | null>(null)
 const input = ref<HTMLInputElement | null>(null)
 const preview = ref<Preview | null>(null)
-const decisions = ref<Record<string, string>>({})
+const materialDecisions = ref<Record<string, string>>({})
+const taxonDecisions = ref<Record<string, string>>({})
 const mode = ref<'complete' | 'new'>('complete')
 const busy = ref(false)
 const imported = ref<MaterialImportResult | null>(null)
-const labels: Record<RowStatus, string> = {
-  registered: '已登记',
-  new: '新增',
-  updatable: '可补全/更新',
-  confirm: '需要确认',
-  error: '错误',
-}
 const canConfirm = computed(
   () =>
     !!preview.value &&
+    !busy.value &&
     !preview.value.already_imported &&
     preview.value.stats.errors === 0 &&
-    preview.value.rows.every(
-      (row) => row.status !== 'confirm' || !!decisions.value[String(row.line)],
+    preview.value.rows.every((row) =>
+      reviewRowReady(row, materialDecisions.value[String(row.line)]),
     ),
 )
 const confirmationRows = computed(
-  () => preview.value?.rows.filter((row) => row.status === 'confirm') || [],
+  () => preview.value?.rows.filter((row) => row.material_status === 'confirm') || [],
 )
 const confirmationSelection = ref<number[]>([])
 function applyToSelected(choice: 'reuse' | 'new' | 'suggested') {
@@ -74,7 +56,7 @@ function applyToSelected(choice: 'reuse' | 'new' | 'suggested') {
         : null
     const value = choice === 'new' ? 'new' : choice === 'suggested' ? row.suggested_decision : reuse
     if (value) {
-      decisions.value[String(row.line)] = value
+      materialDecisions.value[String(row.line)] = value
       applied++
     }
   }
@@ -90,14 +72,16 @@ function changeMode(value: 'complete' | 'new') {
   mode.value = value
   imported.value = null
   preview.value = null
-  decisions.value = {}
+  materialDecisions.value = {}
+  taxonDecisions.value = {}
   confirmationSelection.value = []
 }
 function selectFile(event: Event) {
   file.value = (event.target as HTMLInputElement).files?.[0] || null
   preview.value = null
   imported.value = null
-  decisions.value = {}
+  materialDecisions.value = {}
+  taxonDecisions.value = {}
   confirmationSelection.value = []
 }
 async function downloadTemplate() {
@@ -123,8 +107,9 @@ async function preflight() {
     const form = new FormData()
     form.append('file', file.value)
     form.append('mode', mode.value)
+    form.append('taxon_decisions', JSON.stringify(taxonDecisions.value))
     preview.value = (await api.post<Preview>('/import/materials/preview', form)).data
-    decisions.value = {}
+    materialDecisions.value = {}
     confirmationSelection.value = []
     if (preview.value.already_imported) ElMessage.warning('这份文件已经成功导入过')
   } catch (error) {
@@ -140,7 +125,8 @@ async function confirm() {
     const form = new FormData()
     form.append('file', file.value)
     form.append('mode', mode.value)
-    form.append('decisions', JSON.stringify(decisions.value))
+    form.append('taxon_decisions', JSON.stringify(taxonDecisions.value))
+    form.append('decisions', JSON.stringify(materialDecisions.value))
     imported.value = (await api.post('/import/materials/confirm', form)).data
     ElMessage.success(`清单已导入，本次新建材料 ${imported.value?.created_material_count} 份`)
     preview.value = null
@@ -166,7 +152,9 @@ function createExperiment(scope: 'all' | 'created') {
       </div>
       <div>
         <h2>导入种子材料清单</h2>
-        <p>一张表同时整理物种信息和种子材料。系统会识别已有材料，只新增或补全需要变化的部分。</p>
+        <p>
+          先核对物种，再核对这份种子材料；萌发试验历史分别按物种和材料显示。已有记录的不同信息会提示核对，不会自动覆盖。
+        </p>
       </div>
     </div>
     <div class="integrated-import-actions">
@@ -206,31 +194,25 @@ function createExperiment(scope: 'all' | 'created') {
         :closable="false"
       />
       <div class="import-stats">
+        <span>清单 {{ preview.stats.total }} 行</span>
         <span
-          >总材料数 <b>{{ preview.stats.total }}</b></span
+          >物种识别：已有 {{ preview.stats.taxon_existing }} 行 · 新增
+          {{ preview.stats.taxon_new }} 行 · 需确认 {{ preview.stats.taxon_confirm }} 行</span
         >
         <span
-          >已登记 <b>{{ preview.stats.registered }}</b></span
+          >材料识别：已有 {{ preview.stats.material_existing }} · 新增
+          {{ preview.stats.material_new }} · 需确认 {{ preview.stats.material_confirm }} · 可补全
+          {{ preview.stats.material_updatable }}</span
         >
         <span
-          >新增材料 <b>{{ preview.stats.new }}</b></span
+          >物种萌发试验：有记录 {{ preview.stats.taxon_with_ger }} 行 · 无记录
+          {{ preview.stats.taxon_without_ger }} 行</span
         >
-        <span
-          >新增物种 <b>{{ preview.stats.new_taxa }}</b></span
-        >
-        <span
-          >复用已有物种 <b>{{ preview.stats.reused_taxa }}</b></span
-        >
-        <span
-          >可补全资料 <b>{{ preview.stats.updatable }}</b></span
-        >
-        <span
-          >需要确认 <b>{{ preview.stats.confirm }}</b></span
-        >
-        <span
-          >错误 <b>{{ preview.stats.errors }}</b></span
-        >
+        <span v-if="preview.stats.errors">需修正 {{ preview.stats.errors }} 行</span>
       </div>
+      <p>
+        物种与种子材料分别识别。同一物种可以有多份不同来源的材料；先确认物种，再核对材料。以上识别统计按清单行计算。
+      </p>
       <div v-if="confirmationRows.length" class="wizard-bulk-actions">
         <el-button @click="selectAllConfirmations"
           >全选需要确认（{{ confirmationRows.length }}）</el-button
@@ -245,7 +227,7 @@ function createExperiment(scope: 'all' | 'created') {
         <el-table-column label="勾选" width="70"
           ><template #default="{ row }"
             ><el-checkbox
-              v-if="row.status === 'confirm'"
+              v-if="row.material_status === 'confirm'"
               v-model="confirmationSelection"
               :value="row.line" /></template
         ></el-table-column>
@@ -254,29 +236,45 @@ function createExperiment(scope: 'all' | 'created') {
           <template #default="{ row }"
             ><b>{{ row.name || row.scientific_name }}</b>
             <small class="table-subtitle"
-              >{{ row.scientific_name }} · {{ row.source_code || '原始材料编号未填写' }}</small
+              >{{ row.scientific_name }} · {{ row.source_code || '原始材料编号未填写' }} ·
+              {{ row.source || '来源未填写' }}</small
             ></template
           >
         </el-table-column>
-        <el-table-column label="预检结果" width="145">
-          <template #default="{ row }"
-            ><el-tag
+        <el-table-column label="物种识别" width="115"
+          ><template #default="{ row }">
+            <el-tag
               :type="
-                row.status === 'error'
-                  ? 'danger'
-                  : row.status === 'confirm'
-                    ? 'warning'
-                    : row.status === 'new'
-                      ? 'success'
-                      : 'info'
+                row.taxon_status === 'confirm'
+                  ? 'warning'
+                  : row.taxon_status === 'error'
+                    ? 'danger'
+                    : 'info'
               "
-              >{{ labels[row.status as RowStatus] }}</el-tag
-            ></template
-          >
-        </el-table-column>
+              >{{ identityLabels[row.taxon_status as keyof typeof identityLabels] }}物种</el-tag
+            >
+          </template></el-table-column
+        >
+        <el-table-column label="材料识别" width="135"
+          ><template #default="{ row }">
+            {{ identityLabels[row.material_status as keyof typeof identityLabels]
+            }}{{ ['existing', 'new'].includes(row.material_status) ? '材料' : '' }}
+          </template></el-table-column
+        >
+        <el-table-column label="萌发试验历史（GER）" min-width="190"
+          ><template #default="{ row }">
+            <div>物种：{{ gerLabels[row.taxon_ger_status as keyof typeof gerLabels] }}</div>
+            <div>本材料：{{ gerLabels[row.material_ger_status as keyof typeof gerLabels] }}</div>
+          </template></el-table-column
+        >
         <el-table-column label="说明" min-width="280">
           <template #default="{ row }">
-            <div v-for="message in row.errors" :key="message">{{ message }}</div>
+            <div v-for="message in [...row.errors, ...row.warnings]" :key="message">
+              {{ message }}
+            </div>
+            <div v-if="row.taxon_status === 'confirm'">
+              新表学名：{{ row.scientific_name || '未填写' }}
+            </div>
             <div v-if="row.candidate_row">
               第 {{ row.candidate_row }} 行可能是同一材料，请确认。
             </div>
@@ -284,16 +282,32 @@ function createExperiment(scope: 'all' | 'created') {
             <div v-if="row.conflicts.length">
               信息不一致，本次不会自动覆盖：{{ row.conflicts.join('、') }}
             </div>
-            <div v-if="row.status === 'confirm' && row.candidate_lots.length">
+            <div v-if="row.material_status === 'confirm' && row.candidate_lots.length">
               找到 {{ row.candidate_lots.length }} 份疑似已有材料，请明确选择。
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="处理选择" width="230">
+        <el-table-column label="处理选择" min-width="300">
           <template #default="{ row }">
             <el-select
-              v-if="row.status === 'confirm'"
-              v-model="decisions[String(row.line)]"
+              v-if="row.taxon_status === 'confirm' || taxonDecisions[String(row.line)]"
+              v-model="taxonDecisions[String(row.line)]"
+              placeholder="请确认物种"
+              :disabled="busy"
+              @change="preflight"
+            >
+              <el-option
+                v-for="taxon in row.taxon_candidates"
+                :key="taxon.id"
+                :label="`复用已有物种 ${taxon.code} · ${taxon.common_name || ''} · ${taxon.scientific_name}`"
+                :value="`reuse:${taxon.id}`"
+              />
+              <el-option label="确认为新物种" value="new" />
+            </el-select>
+            <el-select
+              :disabled="busy"
+              v-if="row.material_status === 'confirm'"
+              v-model="materialDecisions[String(row.line)]"
               placeholder="请选择"
             >
               <el-option
@@ -304,7 +318,7 @@ function createExperiment(scope: 'all' | 'created') {
               <el-option
                 v-for="lot in row.candidate_lots"
                 :key="lot.id"
-                :label="`复用 ${lot.code} · ${lot.source_code || lot.source || '来源未填写'}${lot.is_active ? '' : '（已停用）'}`"
+                :label="`复用 ${lot.code} · ${lot.source_code || lot.source || '来源未填写'}${lot.collected_at ? ' · ' + lot.collected_at.slice(0, 10) : ''} · ${historyLabel(lot.ger_status)}${lot.is_active ? '' : '（已停用）'}`"
                 :value="`reuse:${lot.id}`"
               />
               <el-option label="作为另一份新材料" value="new" />
@@ -317,7 +331,9 @@ function createExperiment(scope: 'all' | 'created') {
           >确认导入</el-button
         >
         <span v-if="preview.stats.errors">请先修正文件中的错误，再重新预检。</span>
-        <span v-else-if="preview.stats.confirm && !canConfirm">请处理所有“需要确认”的材料。</span>
+        <span v-else-if="preview.stats.confirm && !canConfirm"
+          >请先确认物种，再处理所有需要确认的材料。</span
+        >
       </div>
     </template>
     <div v-if="imported" class="import-success">

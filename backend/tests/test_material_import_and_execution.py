@@ -34,18 +34,18 @@ def row(scientific, code, common=None, *, taxon_code=None, source=None, collecte
             collected, quantity, None, None)
 
 
-def preview(client, headers, content, mode="complete"):
+def preview(client, headers, content, mode="complete", taxon_decisions=None):
     response = client.post("/api/import/materials/preview", headers=headers,
-                           data={"mode": mode},
+                           data={"mode": mode, "taxon_decisions": json.dumps(taxon_decisions or {})},
                            files={"file": ("materials.xlsx", content,
                                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def confirm(client, headers, content, decisions=None, mode="complete"):
+def confirm(client, headers, content, decisions=None, mode="complete", taxon_decisions=None):
     return client.post("/api/import/materials/confirm", headers=headers,
-                       data={"decisions": json.dumps(decisions or {}), "mode": mode},
+                       data={"decisions": json.dumps(decisions or {}), "mode": mode, "taxon_decisions": json.dumps(taxon_decisions or {})},
                        files={"file": ("materials.xlsx", content,
                                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
 
@@ -126,8 +126,9 @@ def test_import_matching_fills_and_conflicts(auth_client):
     assert "不存在" in preview(client, headers, wrong)["rows"][0]["errors"][0]
     assert confirm(client, headers, wrong).status_code == 422
     same_chinese = material_file([row("Setaria faberi", "C001", "狗尾草")])
-    assert preview(client, headers, same_chinese)["stats"]["new_taxa"] == 1
-    assert confirm(client, headers, same_chinese).json()["new_taxa"] == 1
+    assert preview(client, headers, same_chinese)["rows"][0]["taxon_status"] == "confirm"
+    assert confirm(client, headers, same_chinese).status_code == 422
+    assert confirm(client, headers, same_chinese, taxon_decisions={"2": "new"}).json()["new_taxa"] == 1
 
 
 def test_import_ambiguous_and_duplicate_rows_need_decision(auth_client):
@@ -202,7 +203,7 @@ def test_import_modes_and_batch_decisions_without_source_codes(auth_client):
                              row("Species 1", None, source="采集地乙"),
                              row("Species 2", None, source="新来源")])
     report = preview(client, headers, content)
-    assert [item["status"] for item in report["rows"]] == ["registered", "confirm", "confirm"]
+    assert [item["status"] for item in report["rows"]] == ["registered", "confirm", "new"]
     assert report["rows"][0]["candidate_lot_id"] == first["id"]
     assert confirm(client, headers, content).status_code == 422
     decisions = {str(item["line"]): "new" for item in report["rows"] if item["status"] == "confirm"}

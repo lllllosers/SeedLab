@@ -1,6 +1,8 @@
 """Preview and atomically import a complete material inventory."""
 
+from collections import defaultdict
 from datetime import date, datetime, time
+import unicodedata
 from hashlib import sha256
 from io import BytesIO
 
@@ -9,7 +11,7 @@ from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ImportJob, SeedLot, Taxon
+from app.models import Experiment, ExperimentMaterial, ImportJob, SeedLot, Taxon
 from app.services.common import commit_or_conflict, flush_or_conflict, next_code, record
 
 
@@ -91,127 +93,194 @@ def parse_file(content: bytes) -> list[dict]:
         raise HTTPException(422, f"无法读取种子材料文件：{exc}") from exc
 
 
-def _same_name(value: str | None) -> str:
-    return (value or "").strip().casefold()
+def chinese_comparison_key(value: str | None) -> str:
+    """Comparison only: keep punctuation, parenthesized numbers and display values."""
+    return " ".join(unicodedata.normalize("NFKC", value or "").split())
+
+
+def scientific_comparison_key(value: str | None) -> str:
+    value = unicodedata.normalize("NFKC", value or "").replace("_", " ")
+    return " ".join(value.split()).casefold()
 
 
 def _lot_changes(row: dict, lot: SeedLot) -> tuple[list[str], list[str]]:
     fills, conflicts = [], []
     for label, field in LOT_FIELDS.items():
-        value = row[label]
-        current = getattr(lot, field)
-        if value is None:
-            continue
-        if current is None or current == "":
-            fills.append(label)
-        elif current != value:
-            conflicts.append(label)
+        value, current = row[label], getattr(lot, field)
+        if value is not None:
+            if current is None or current == "":
+                fills.append(label)
+            elif current != value:
+                conflicts.append(label)
     return fills, conflicts
 
 
-def preview(db: Session, content: bytes, mode: str = "complete") -> dict:
+def _ger_history(db):
+    """One ID-based join; a species includes every lot, even a different seed source."""
+    taxa, lots = defaultdict(set), defaultdict(set)
+    query = (select(SeedLot.taxon_id, SeedLot.id, Experiment.status)
+             .join(ExperimentMaterial, ExperimentMaterial.seed_lot_id == SeedLot.id)
+             .join(Experiment, Experiment.id == ExperimentMaterial.experiment_id)
+             .where(Experiment.experiment_type == "GER"))
+    for taxon_id, lot_id, state in db.execute(query):
+        taxa[taxon_id].add(state)
+        lots[lot_id].add(state)
+    return taxa, lots
+
+
+def _ger_status(states):
+    return ("completed" if "completed" in states else "active" if "active" in states
+            else "recorded" if states else "none")
+
+
+def _taxon_match(row, taxa, choice):
+    code, sci, common = row["系统物种编号"], scientific_comparison_key(row["学名"]), chinese_comparison_key(row["中文名"])
+    errors, warnings = [], []
+    if code:
+        found = next((t for t in taxa if t.code == code), None)
+        if not found:
+            return "error", None, [], [f"第 {row['line']} 行填写的物种编号 {code} 不存在，请核对"], warnings
+        if sci and sci != scientific_comparison_key(found.scientific_name):
+            errors.append(f"第 {row['line']} 行：物种编号与学名不对应，请核对")
+        candidates = [found]
+    else:
+        candidates = [t for t in taxa if sci and scientific_comparison_key(t.scientific_name) == sci]
+    exact = bool(candidates)
+    if not candidates:
+        candidates = [t for t in taxa if common and chinese_comparison_key(t.common_name) == common]
+    found = candidates[0] if exact and len(candidates) == 1 else None
+    status = "existing" if found else "confirm" if candidates else "new"
+    if status == "confirm" and choice is not None:
+        if choice == "new":
+            if exact:
+                errors.append("系统中已有学名格式一致的物种，请明确选择要复用的物种，不能重复新建。")
+            else:
+                status = "new"
+        elif isinstance(choice, str) and choice.startswith("reuse:"):
+            found = next((t for t in candidates if t.id == choice.removeprefix("reuse:")), None)
+            if found:
+                status = "existing"
+            else:
+                errors.append("所选物种不在候选范围内，请重新预检并选择。")
+        else:
+            errors.append("请明确选择复用已有物种或确认为新物种。")
+    elif choice is not None and ((choice != "new" and status == "new") or
+            (status == "existing" and choice != f"reuse:{found.id}")):
+        errors.append("物种识别结果已变化，请重新预检后选择。")
+    if status == "new" and not sci:
+        errors.append(f"第 {row['line']} 行：新物种必须填写学名；已有物种请选择复用。")
+    if found:
+        if common and common != chinese_comparison_key(found.common_name):
+            warnings.append(f"中文名与系统记录不同，将保留系统中文名“{found.common_name or '未填写'}”。")
+        if row["学名"] and sci != scientific_comparison_key(found.scientific_name):
+            warnings.append(f"按您的选择复用系统物种；保留已有学名 {found.scientific_name}。")
+    elif status == "confirm":
+        warnings.append("系统中有同名或学名格式一致的物种，请核对系统学名与表中学名后明确选择；不会自动判断学名同义关系。")
+    return "error" if errors else status, found, candidates, errors, warnings
+
+
+def _material_match(row, lots, mode):
+    """Resolve lot identity only after species identity; never merge on species alone."""
+    code = row["原始材料编号"]
+    exact = [lot for lot in lots if code and lot.source_code == code]
+    if code:
+        return ("existing", exact[0], exact) if len(exact) == 1 else ("confirm", None, exact) if exact else ("new", None, [])
+    if not lots:
+        return "new", None, []
+    exact = [lot for lot in lots if row["来源"] and row["采集/获得日期"]
+             and lot.source == row["来源"] and lot.collected_at == row["采集/获得日期"]]
+    if len(exact) == 1:
+        return ("existing" if mode == "complete" else "confirm"), exact[0], exact
+    if len(exact) > 1:
+        return "confirm", None, exact
+    fields = (("来源", "source"), ("采集/获得日期", "collected_at"))
+    compatible = [lot for lot in lots if not any(row[label] is not None and getattr(lot, field) is not None
+                  and row[label] != getattr(lot, field) for label, field in fields)]
+    if not compatible:
+        return "new", None, []
+    active = [lot for lot in lots if lot.is_active]
+    if (mode == "complete" and any(row[label] is not None for label, _ in fields)
+            and len(active) == 1 and active[0] in compatible):
+        return "existing", active[0], compatible
+    return "confirm", None, compatible
+
+
+def preview(db: Session, content: bytes, mode: str = "complete", taxon_decisions: dict | None = None) -> dict:
     if mode not in {"complete", "new"}:
         raise HTTPException(422, "请选择完整清单或本次新增材料，再重新预检")
+    taxon_decisions = taxon_decisions or {}
     file_hash = sha256(content).hexdigest()
-    already = db.scalar(select(ImportJob.id).where(ImportJob.file_hash == file_hash,
-                ImportJob.status == "completed")) is not None
-    rows = parse_file(content)
-    taxa = list(db.scalars(select(Taxon)))
-    lots = list(db.scalars(select(SeedLot)))
-    by_code = {item.code: item for item in taxa}
-    by_name = {_same_name(item.scientific_name): item for item in taxa}
-    results = []
-    seen_identity = {}
-    for row in rows:
+    already = db.scalar(select(ImportJob.id).where(ImportJob.file_hash == file_hash, ImportJob.status == "completed")) is not None
+    taxa = list(db.scalars(select(Taxon).order_by(Taxon.code)))
+    lots = list(db.scalars(select(SeedLot).order_by(SeedLot.code)))
+    taxa_history, lot_history = _ger_history(db)
+    results, seen_identity = [], {}
+    for row in parse_file(content):
         line = row["line"]
-        errors, fills, conflicts = list(row["_errors"]), [], []
-        code, sci = row["系统物种编号"], row["学名"]
-        taxon = by_code.get(code) if code else by_name.get(_same_name(sci))
-        if code and taxon is None:
-            errors.append(f"第 {line} 行填写的物种编号 {code} 不存在，请核对")
-        if not code and not sci:
-            errors.append(f"第 {line} 行：新物种必须填写学名")
-        if taxon and sci and _same_name(sci) != _same_name(taxon.scientific_name):
-            errors.append(f"第 {line} 行：物种编号与学名不对应，请核对")
-        taxon_key = taxon.id if taxon else f"new:{_same_name(sci)}"
+        taxon_status, taxon, candidates, errors, warnings = _taxon_match(row, taxa, taxon_decisions.get(str(line)))
+        errors = list(row["_errors"]) + errors
+        fills, conflicts = [], []
         if taxon:
             for label, field in TAXON_FIELDS.items():
-                value = row[label]
-                current = getattr(taxon, field)
-                if value is None:
-                    continue
-                if current is None or current == "":
-                    fills.append(label)
-                elif current != value:
-                    conflicts.append(label)
-        matching_lots = [lot for lot in lots if taxon and lot.taxon_id == taxon.id]
-        source_code = row["原始材料编号"]
-        exact = [lot for lot in matching_lots if source_code and lot.source_code == source_code]
-        candidate = exact[0] if len(exact) == 1 else None
-        possible = exact
+                value, current = row[label], getattr(taxon, field)
+                if value is not None:
+                    if current is None or current == "":
+                        fills.append(label)
+                    elif current != value:
+                        conflicts.append(label)
+        material_status, candidate, possible = ("pending", None, []) if taxon_status in {"confirm", "error"} else _material_match(
+            row, [lot for lot in lots if taxon and lot.taxon_id == taxon.id], mode)
         candidate_row = None
-        identity_conflict = False
-        status = "new"
-        if len(exact) > 1:
-            errors.append(f"第 {line} 行：同一物种与原始材料编号对应多个已有批次，请先整理已有数据")
+        if material_status != "pending":
+            taxon_key = taxon.id if taxon else "new:" + scientific_comparison_key(row["学名"])
+            identity = ((taxon_key, row["原始材料编号"]) if row["原始材料编号"] else
+                        (taxon_key, row["来源"], row["采集/获得日期"]))
+            if identity in seen_identity:
+                candidate_row = seen_identity[identity]
+                material_status = "confirm"
+            else:
+                seen_identity[identity] = line
         if candidate:
             lot_fills, lot_conflicts = _lot_changes(row, candidate)
             fills.extend(lot_fills)
             conflicts.extend(lot_conflicts)
-            status = "updatable" if fills or conflicts else "registered"
-        elif not source_code and matching_lots:
-            possible = matching_lots
-            active_lots = [lot for lot in matching_lots if lot.is_active]
-            candidate = (active_lots[0] if mode == "complete" and len(active_lots) == 1 else
-                         matching_lots[0] if mode == "new" and len(matching_lots) == 1 else None)
-            identity_conflict = bool(candidate and any(
-                row[label] is not None and getattr(candidate, field) is not None
-                and row[label] != getattr(candidate, field)
-                for label, field in (("来源", "source"), ("采集/获得日期", "collected_at"))))
-            exact_identity = bool(row["来源"] and row["采集/获得日期"] and any(
-                lot.source == row["来源"] and lot.collected_at == row["采集/获得日期"]
-                for lot in matching_lots))
-            if mode == "complete" and candidate and not identity_conflict:
-                lot_fills, lot_conflicts = _lot_changes(row, candidate)
-                fills.extend(lot_fills)
-                conflicts.extend(lot_conflicts)
-                status = "updatable" if fills or conflicts else "registered"
-            elif mode == "new" and not exact_identity:
-                candidate = None
-                status = "new"
-            else:
-                status = "confirm"
-        identity = (taxon_key, source_code) if source_code else (
-            taxon_key, row["来源"], row["采集/获得日期"])
-        if identity in seen_identity:
-            candidate_row = seen_identity[identity]
-            status = "confirm"
-        else:
-            seen_identity[identity] = line
+            if material_status == "existing" and (fills or conflicts):
+                material_status = "updatable"
+        overall = "error" if errors else "confirm" if taxon_status == "confirm" or material_status == "confirm" else material_status
         if errors:
-            status = "error"
-        suggested = (f"reuse-row:{candidate_row}" if candidate_row is not None else
-                     f"reuse:{candidate.id}" if status == "confirm" and candidate and not identity_conflict else None)
-        results.append({"line": line, "status": status, "taxon_id": taxon.id if taxon else None,
-                        "new_taxon": taxon is None, "candidate_lot_id": candidate.id if candidate else None,
-                        "candidate_lots": [{"id": lot.id, "code": lot.code, "is_active": lot.is_active,
-                                            "source_code": lot.source_code,
-                                            "source": lot.source, "collected_at": lot.collected_at.isoformat()
-                                            if lot.collected_at else None} for lot in possible],
-                        "candidate_row": candidate_row, "name": row["中文名"] or sci,
-                        "scientific_name": sci or (taxon.scientific_name if taxon else None),
-                        "source_code": source_code, "fills": fills, "conflicts": conflicts,
-                        "suggested_decision": suggested,
-                        "errors": errors})
-    return {"file_hash": file_hash, "already_imported": already, "mode": mode,
-            "rows": results,
-            "stats": {"total": len(results), "registered": sum(r["status"] == "registered" for r in results),
-                      "new": sum(r["status"] == "new" for r in results),
-                      "new_taxa": len({ _same_name(r["scientific_name"]) for r in results if r["new_taxon"] and r["status"] != "error"}),
-                      "reused_taxa": sum(not r["new_taxon"] for r in results),
-                      "updatable": sum(r["status"] == "updatable" for r in results),
-                      "confirm": sum(r["status"] == "confirm" for r in results),
-                      "errors": sum(r["status"] == "error" for r in results)}}
+            material_status = "error"
+        taxon_states = taxa_history.get(taxon.id, set()) if taxon else set()
+        material_states = lot_history.get(candidate.id, set()) if candidate else set()
+        results.append({"line": line, "status": "registered" if overall == "existing" else overall,
+            "taxon_status": taxon_status, "material_status": material_status,
+            "overall_action_required": overall in {"error", "confirm", "pending"},
+            "taxon_id": taxon.id if taxon else None, "new_taxon": taxon_status == "new",
+            "taxon_candidates": [{"id": t.id, "code": t.code, "common_name": t.common_name,
+                "scientific_name": t.scientific_name, "ger_status": _ger_status(taxa_history.get(t.id, set()))} for t in candidates],
+            "taxon_ger_status": "pending" if taxon_status == "confirm" else _ger_status(taxon_states),
+            "taxon_ger_states": sorted(taxon_states),
+            "material_ger_status": "pending" if material_status in {"confirm", "pending"} else _ger_status(material_states),
+            "material_ger_states": sorted(material_states),
+            "candidate_lot_id": candidate.id if candidate else None,
+            "candidate_lots": [{"id": lot.id, "code": lot.code, "is_active": lot.is_active, "source_code": lot.source_code,
+                "source": lot.source, "collected_at": lot.collected_at.isoformat() if lot.collected_at else None,
+                "ger_status": _ger_status(lot_history.get(lot.id, set()))} for lot in possible],
+            "candidate_row": candidate_row, "name": row["中文名"] or row["学名"], "source": row["来源"],
+            "scientific_name": row["学名"] or (taxon.scientific_name if taxon else None),
+            "source_code": row["原始材料编号"], "fills": fills, "conflicts": conflicts, "warnings": warnings,
+            "suggested_decision": f"reuse-row:{candidate_row}" if candidate_row else f"reuse:{candidate.id}" if candidate else None,
+            "errors": errors})
+    stats = {"total": len(results), **{state: sum(r["status"] == state for r in results)
+             for state in ("registered", "new", "updatable", "confirm", "error")}}
+    stats["errors"] = stats.pop("error")
+    stats["new_taxa"] = len({scientific_comparison_key(r["scientific_name"]) for r in results if r["taxon_status"] == "new" and not r["errors"]})
+    stats["reused_taxa"] = sum(r["taxon_status"] == "existing" for r in results)
+    for prefix, field, states in (("taxon", "taxon_status", ("existing", "new", "confirm")),
+                                  ("material", "material_status", ("existing", "new", "confirm", "updatable", "pending"))):
+        stats.update({f"{prefix}_{state}": sum(r[field] == state for r in results) for state in states})
+    stats["taxon_with_ger"] = sum(r["taxon_ger_status"] in {"completed", "active", "recorded"} for r in results)
+    stats["taxon_without_ger"] = sum(r["taxon_ger_status"] == "none" for r in results)
+    return {"file_hash": file_hash, "already_imported": already, "mode": mode, "rows": results, "stats": stats}
 
 
 def _valid_decision(row: dict, choice: str | None) -> bool:
@@ -221,36 +290,42 @@ def _valid_decision(row: dict, choice: str | None) -> bool:
         return True
     if choice == "reuse":
         return row["candidate_row"] is not None or row["candidate_lot_id"] is not None
-    if choice and choice.startswith("reuse-row:"):
+    if choice.startswith("reuse-row:"):
         return row["candidate_row"] is not None and choice == f"reuse-row:{row['candidate_row']}"
-    if choice and choice.startswith("reuse:"):
+    if choice.startswith("reuse:"):
         return choice.removeprefix("reuse:") in {lot["id"] for lot in row["candidate_lots"]}
     return False
 
 
 def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str], user_id: str,
-            mode: str = "complete") -> dict:
-    report = preview(db, content, mode)
+            mode: str = "complete", taxon_decisions: dict | None = None) -> dict:
+    report = preview(db, content, mode, taxon_decisions)
     if report["already_imported"]:
         raise HTTPException(409, "这份文件已经成功导入过；请使用更新后的完整清单")
     if report["stats"]["errors"]:
         raise HTTPException(422, "文件仍有错误，请先按预检提示修正后重新上传")
-    if any(row["status"] == "confirm" and not _valid_decision(row, decisions.get(str(row["line"])))
-           for row in report["rows"]):
+    if any(r["taxon_status"] == "confirm" for r in report["rows"]):
+        raise HTTPException(422, "请先为所有需要确认的物种选择复用或新增，并重新预检材料。")
+    if any(r["material_status"] == "confirm" and not _valid_decision(r, decisions.get(str(r["line"]))) for r in report["rows"]):
         raise HTTPException(422, "请先为所有需要确认的材料选择复用或新增")
-    rows = parse_file(content)
-    by_code = {item.code: item for item in db.scalars(select(Taxon))}
-    by_name = {_same_name(item.scientific_name): item for item in by_code.values()}
-    created_by_line = {}
-    all_ids, created_ids, updated_ids = set(), set(), set()
+    by_name = defaultdict(list)
+    for taxon in db.scalars(select(Taxon)):
+        by_name[scientific_comparison_key(taxon.scientific_name)].append(taxon)
+    created_by_line, all_ids, created_ids, updated_ids = {}, set(), set(), set()
     new_taxa = new_lots = 0
     taxon_next = int(next_code(db, Taxon, "SP-").removeprefix("SP-"))
     lot_prefix = f"LOT-{datetime.now().year}-"
     lot_next = int(next_code(db, SeedLot, lot_prefix, 3).rsplit("-", 1)[1])
     try:
-        for row, result in zip(rows, report["rows"]):
+        for row, result in zip(parse_file(content), report["rows"]):
             line = row["line"]
-            taxon = by_code.get(row["系统物种编号"]) if row["系统物种编号"] else by_name.get(_same_name(row["学名"]))
+            taxon = db.get(Taxon, result["taxon_id"]) if result["taxon_id"] else None
+            key = scientific_comparison_key(row["学名"])
+            if taxon is None and by_name[key]:
+                # Earlier rows in this same transaction may have created the species.
+                if len(by_name[key]) != 1:
+                    raise HTTPException(422, "同一学名对应多个物种，请重新预检并明确选择。")
+                taxon = by_name[key][0]
             taxon_updated = False
             if taxon is None:
                 taxon = Taxon(code=f"SP-{taxon_next:04d}", scientific_name=row["学名"],
@@ -258,8 +333,7 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                 taxon_next += 1
                 db.add(taxon)
                 flush_or_conflict(db)
-                by_code[taxon.code] = taxon
-                by_name[_same_name(taxon.scientific_name)] = taxon
+                by_name[key].append(taxon)
                 new_taxa += 1
                 record(db, user_id, "import", "Taxon", taxon.id, None, {"code": taxon.code, "line": line})
             else:
@@ -275,16 +349,15 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                     record(db, user_id, "update", "Taxon", taxon.id, before, after)
             decision = decisions.get(str(line))
             lot = db.get(SeedLot, result["candidate_lot_id"]) if result["candidate_lot_id"] else None
-            if result["status"] == "confirm":
-                if decision and decision.startswith("reuse:"):
+            if result["material_status"] == "confirm":
+                if decision.startswith("reuse:"):
                     lot = db.get(SeedLot, decision.removeprefix("reuse:"))
-                elif decision and decision.startswith("reuse-row:"):
+                elif decision.startswith("reuse-row:"):
                     lot = created_by_line.get(int(decision.removeprefix("reuse-row:")))
-                elif result["candidate_row"] is not None:
+                elif decision == "reuse" and result["candidate_row"] is not None:
                     lot = created_by_line.get(result["candidate_row"])
-            if result["status"] == "new" or (result["status"] == "confirm" and decision == "new"):
-                lot = SeedLot(code=f"{lot_prefix}{lot_next:03d}", taxon_id=taxon.id,
-                              source_code=row["原始材料编号"],
+            if result["material_status"] == "new" or (result["material_status"] == "confirm" and decision == "new"):
+                lot = SeedLot(code=f"{lot_prefix}{lot_next:03d}", taxon_id=taxon.id, source_code=row["原始材料编号"],
                               **{field: row[label] for label, field in LOT_FIELDS.items()})
                 lot_next += 1
                 db.add(lot)
@@ -292,12 +365,12 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                 new_lots += 1
                 created_ids.add(lot.id)
                 record(db, user_id, "import", "SeedLot", lot.id, None, {"code": lot.code, "line": line})
-            elif lot is not None:
+            elif lot is not None and lot.taxon_id == taxon.id:
                 before, after = {}, {}
                 for label, field in LOT_FIELDS.items():
                     value = row[label]
-                    if value is not None and getattr(lot, field) is None:
-                        before[field] = None
+                    if value is not None and getattr(lot, field) in (None, ""):
+                        before[field] = getattr(lot, field)
                         setattr(lot, field, value)
                         after[field] = value.isoformat() if isinstance(value, datetime) else value
                 if after or taxon_updated:
@@ -305,21 +378,20 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                 if after:
                     record(db, user_id, "update", "SeedLot", lot.id, before, after)
             else:
-                raise HTTPException(422, f"第 {line} 行找不到可复用材料，请改选新增")
+                raise HTTPException(422, f"第 {line} 行找不到该物种下可复用的材料，请重新预检")
             all_ids.add(lot.id)
             created_by_line[line] = lot
         job = ImportJob(user_id=user_id, filename=filename[:255], status="completed",
-                        total_rows=len(rows), successful_rows=len(rows), file_hash=report["file_hash"])
+                        total_rows=len(report["rows"]), successful_rows=len(report["rows"]), file_hash=report["file_hash"])
         db.add(job)
         flush_or_conflict(db)
         record(db, user_id, "import", "ImportJob", job.id, None,
-               {"filename": job.filename, "total_rows": len(rows), "new_taxa": new_taxa, "new_lots": new_lots})
+               {"filename": job.filename, "total_rows": job.total_rows, "new_taxa": new_taxa, "new_lots": new_lots})
         commit_or_conflict(db)
     except Exception:
         db.rollback()
         raise
-    return {"job_id": job.id, "total": len(rows), "new_taxa": new_taxa,
-            "new_lots": new_lots,
+    return {"job_id": job.id, "total": job.total_rows, "new_taxa": new_taxa, "new_lots": new_lots,
             "all_seed_lot_ids": sorted(all_ids), "created_seed_lot_ids": sorted(created_ids),
             "total_material_count": len(all_ids), "existing_material_count": len(all_ids - created_ids),
             "created_material_count": len(created_ids), "updated_material_count": len(updated_ids - created_ids)}

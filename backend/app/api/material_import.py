@@ -41,18 +41,24 @@ async def _content(file: UploadFile) -> bytes:
 
 
 @router.post("/import/materials/preview")
-async def preview(file: UploadFile = File(...), mode: str = Form("complete"), db: Session = Depends(get_db),
+async def preview(file: UploadFile = File(...), mode: str = Form("complete"), taxon_decisions: str = Form("{}"), db: Session = Depends(get_db),
                   _user: User = Depends(current_user)):
-    return material_import.preview(db, await _content(file), mode)
+    return material_import.preview(db, await _content(file), mode, _decisions(taxon_decisions))
+
+
+def _decisions(value: str) -> dict:
+    try:
+        parsed = json.loads(value)
+        if not isinstance(parsed, dict):
+            raise ValueError
+        return parsed
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, "确认选项无效，请重新预检") from exc
 
 
 @router.post("/import/materials/confirm")
 async def confirm(file: UploadFile = File(...), decisions: str = Form("{}"), mode: str = Form("complete"),
+                  taxon_decisions: str = Form("{}"),
                   db: Session = Depends(get_db), user: User = Depends(current_user)):
-    try:
-        parsed = json.loads(decisions)
-        if not isinstance(parsed, dict):
-            raise ValueError
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(422, "材料确认选项无效，请重新预检") from exc
-    return material_import.confirm(db, await _content(file), file.filename or "materials.xlsx", parsed, user.id, mode)
+    return material_import.confirm(db, await _content(file), file.filename or "materials.xlsx",
+                                   _decisions(decisions), user.id, mode, _decisions(taxon_decisions))
