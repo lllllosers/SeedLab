@@ -504,7 +504,7 @@ def test_admin_gui_normally_stops_and_restarts_without_logging_password(accounts
         assert not manager.can_start
     monkeypatch.setattr(manager, "stop", stop)
     monkeypatch.setattr(manager, "start", lambda: events.append("restart"))
-    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr("control_center.widgets.production_panels.confirm_action", lambda *args: True)
     panel = AdminRecoveryPanel(manager)
     panel.loaded((schema_information(database, MIGRATIONS), administrators(database)))
     panel.admin.setCurrentIndex(panel.admin.findData(ids[0]))

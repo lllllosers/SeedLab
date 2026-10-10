@@ -32,13 +32,14 @@ def parse_args(arguments=None):
 
 class ApplicationController(QObject):
     def __init__(self, paths, installation, *, skip_first_run=False, explicit_data=False, startup=False,
-                 claim_data_root=None, start_server=False):
+                 claim_data_root=None, start_server=False, open_after_upgrade=False):
         super().__init__()
         self.paths, self.installation = paths, installation
         self.window = None
         self.wizard = None
         self.startup = startup
         self.start_server = start_server
+        self.open_after_upgrade = open_after_upgrade
         self.claim_data_root = claim_data_root or (lambda paths: True)
         self.activation_redirected = False
         if explicit_data:
@@ -66,6 +67,8 @@ class ApplicationController(QObject):
         manager = ServerProcessManager(paths)
         self.window = MainWindow(manager)
         manager.setParent(self.window)
+        if self.open_after_upgrade and paths.deployment_root and not paths.candidate_id:
+            manager.changed.connect(self.open_upgraded_page)
         manager.control_log.info("[事件] 控制中心已打开。")
         if paths.candidate_id:
             self.window.setEnabled(False)
@@ -82,6 +85,12 @@ class ApplicationController(QObject):
             self.window.show()
         if auto_start or self.start_server or paths.candidate_id or manager.config.auto_start_server:
             QTimer.singleShot(0, lambda: manager.start() if manager.can_start else None)
+
+    def open_upgraded_page(self):
+        if self.open_after_upgrade and self.window.manager.can_open:
+            from app.version import VERSION
+            self.open_after_upgrade = False
+            self.window.open_browser(f"/?seedlab-version={VERSION}")
 
     def activate(self):
         if self.paths.candidate_id:
@@ -170,7 +179,8 @@ def main(arguments=None):
             validate_location(args.data_root, paths, allow_temporary=True)
         controller = ApplicationController(paths, installation, skip_first_run=args.skip_first_run,
                                            explicit_data=args.data_root is not None, startup=args.startup,
-                                           claim_data_root=claim_data_root, start_server=args.start_server)
+                                           claim_data_root=claim_data_root, start_server=args.start_server,
+                                           open_after_upgrade=args.start_server and not args.isolated)
         if controller.activation_redirected:
             close_instances()
             return 0

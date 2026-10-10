@@ -1,11 +1,12 @@
 """Production upgrade handoff and local administrator recovery, without business UI changes."""
+from control_center.dialogs import confirm_action
 from pathlib import Path
 import subprocess
 from uuid import uuid4
 
 from PySide6.QtCore import QThreadPool, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QLineEdit, QMessageBox, QPushButton)
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QLineEdit, QPushButton)
 
 from app.core.auth import password_error
 from app.services.admin_recovery import administrators, reset_administrator, schema_information
@@ -207,7 +208,7 @@ class AdminRecoveryPanel(Card):
         if self.manager.state in {State.EXTERNAL, State.OTHER, State.STARTING, State.STOPPING}:
             self.message.setText("请先从原控制中心停止服务，并等待启停操作结束。")
             return
-        if QMessageBox.question(self, "恢复管理员登录", "将重置所选管理员密码并使其已有登录失效。服务运行时会先正常停止，完成后重新启动。实验记录保持不变。") != QMessageBox.StandardButton.Yes:
+        if not confirm_action(self, "恢复管理员登录", "将重置所选管理员密码并使其已有登录失效。服务运行时会先正常停止，完成后重新启动。实验记录保持不变。", "重置管理员密码"):
             return
         self.pending = (self.admin.currentData(), password, confirmation)
         self.password.clear()

@@ -38,7 +38,10 @@ class ProductionWeb(StaticFiles):
         if not inside_root:
             raise HTTPException(status_code=404)
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
+            if response.headers.get("content-type", "").startswith("text/html"):
+                response.headers["Cache-Control"] = "no-store"
+            return response
         except HTTPException as exc:
             navigation = (url_path != "assets" and not url_path.startswith("assets/")
                           and not Path(url_path).suffix
@@ -46,5 +49,7 @@ class ProductionWeb(StaticFiles):
             if exc.status_code == 404 and scope["method"] in {"GET", "HEAD"} and navigation:
                 # Also resolve the SPA entry through StaticFiles so an index
                 # symlink cannot bypass its root boundary checks.
-                return await super().get_response("index.html", scope)
+                response = await super().get_response("index.html", scope)
+                response.headers["Cache-Control"] = "no-store"
+                return response
             raise

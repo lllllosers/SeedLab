@@ -37,9 +37,11 @@ def test_production_pages_and_api(production_settings):
             response = production.get(path)
             assert response.status_code == 200, path
             assert response.text == "<html>SeedLab production test</html>"
+            assert response.headers["cache-control"] == "no-store"
             head = production.head(path)
             assert head.status_code == 200
             assert head.content == b""
+            assert head.headers["cache-control"] == "no-store"
         health = production.get("/api/health")
         assert health.json() == {"status": "ok", "version": VERSION}
         assert health.headers["content-type"].startswith("application/json")
@@ -52,6 +54,8 @@ def test_production_pages_and_api(production_settings):
         assert production.get("/api/nonexistent").headers["content-type"].startswith("application/json")
         asset = production.get("/assets/test.js")
         assert asset.status_code == 200
+        assert asset.headers.get("cache-control") != "no-store"
+        assert production.get("/index.html").headers["cache-control"] == "no-store"
         assert asset.text == "console.log('static test');"
 
 

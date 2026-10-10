@@ -6,9 +6,12 @@ import sys
 from PySide6.QtCore import QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QFileDialog, QMessageBox, QFormLayout)
+    QLineEdit, QFileDialog, QFormLayout, QSizePolicy)
 
 from app.services.database_upgrade import UpgradeError
+from app.version import VERSION
+from control_center.dialogs import confirm_action
+from control_center.path_display import PathDisplay
 from control_center.brand import product_icon
 from control_center.operations import Job
 from control_center.theme import QSS
@@ -45,8 +48,7 @@ class UpgradeWindow(QWidget):
         layout.addWidget(instruction)
         form = QFormLayout()
         self.input_controls = []
-        self.legacy = QLineEdit()
-        self.legacy.setReadOnly(True)
+        self.legacy = PathDisplay()
         if bootstrap:
             row = QHBoxLayout()
             row.addWidget(self.legacy)
@@ -57,10 +59,13 @@ class UpgradeWindow(QWidget):
             form.addRow("原程序", row)
         self.root = QLineEdit(str(root or ""))
         self.root.setReadOnly(not bootstrap)
+        self.root.setMinimumWidth(0)
+        self.root.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.root.setToolTip(self.root.text())
+        self.root.textChanged.connect(self.root.setToolTip)
         self.input_controls.append(self.root)
         form.addRow("程序保存位置", self.root)
-        self.package = QLineEdit(str(package or ""))
-        self.package.setReadOnly(True)
+        self.package = PathDisplay(str(package or ""))
         row = QHBoxLayout()
         row.addWidget(self.package)
         choose_package = QPushButton("选择升级包")
@@ -70,6 +75,8 @@ class UpgradeWindow(QWidget):
         form.addRow("升级包", row)
         self.details = QLabel("选择程序及升级包后，可开始检查。")
         self.details.setWordWrap(True)
+        self.details.setMinimumWidth(0)
+        self.details.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout.addLayout(form)
         layout.addWidget(self.details)
         self.status = QLabel("")
@@ -182,6 +189,7 @@ class UpgradeWindow(QWidget):
                 self.status.setText("升级包已准备好。" if pending["phase"] == "staged" else
                                     "检测到上一次升级未完成。原程序和实验数据仍然保留，请先恢复原版本入口。")
             self.details.setText(text)
+            self.details.setToolTip(text)
             self.prepare_button.setEnabled(not pending and not self.busy)
             self.start_button.setEnabled(bool(pending and pending["phase"] == "staged") and not self.busy)
             from .database import inspect
@@ -201,24 +209,25 @@ class UpgradeWindow(QWidget):
         message = "升级将短暂停止 SeedLab，数据目录保持不变。请确认当前实验录入已经保存。"
         if self.bootstrap:
             message += "\n请先在原控制中心选择“停止 SeedLab 并退出”。关闭窗口只会隐藏到托盘。"
-        if QMessageBox.question(self, "开始升级", message) != QMessageBox.StandardButton.Yes:
+        if not confirm_action(self, "开始升级", message, "开始升级"):
             return
         self.run_job(lambda: self.executor.activate(handoff=self.handoff), self.completed)
 
     def completed(self, state):
         self.refresh_state()
         message = f"SeedLab v{state['current']['version']} 升级完成。实验数据目录保持不变。"
+        message += "\n请使用新打开的 SeedLab 页面；原页面可以关闭。若未打开，请在控制中心点击“打开 SeedLab”。"
         if self.bootstrap and not self.isolated:
-            try:
-                connect_startup(self.executor.store.root, state["previous"]["program_root"])
-                create_shortcut(self.executor.store.root, state["previous"]["program_root"])
-            except (OSError, OperationsError) as error:
-                self.executor.log.exception("启动入口接续未完成")
-                message += "\n" + (str(error) if isinstance(error, OperationsError) else "启动入口未能接续，请直接打开程序根目录中的 SeedLab Launcher。")
+            for operation in (connect_startup, create_shortcut):
+                try:
+                    operation(self.executor.store.root, state["previous"]["program_root"])
+                except (OSError, OperationsError):
+                    self.executor.log.exception("启动入口接续未完成：%s", operation.__name__)
+                    message += f"\n启动入口未能接续，请直接打开：{self.executor.store.root / 'SeedLab Launcher.exe'}"
         self.status.setText(message)
 
     def restore(self):
-        if QMessageBox.question(self, "恢复上一版本", "请先停止 SeedLab 并退出控制中心。本次仅恢复程序入口，保留当前实验数据，不恢复旧数据库备份。") != QMessageBox.StandardButton.Yes:
+        if not confirm_action(self, "恢复上一版本", "请先停止 SeedLab 并退出控制中心。本次仅恢复程序入口，保留当前实验数据，不恢复旧数据库备份。", "恢复上一版本"):
             return
         self.run_job(self.executor.rollback, lambda state: (self.refresh_state(), self.status.setText("原版本入口已恢复，实验数据保持原样。")))
 
@@ -241,9 +250,9 @@ def main(arguments=None, *, bootstrap=False):
     parser.add_argument("--handoff", type=Path)
     parser.add_argument("--isolated", action="store_true")
     args = parser.parse_args(arguments)
-    resources = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1] / "dist/operations-v060"))
+    resources = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1] / ("dist/operations-v" + VERSION.replace(".", ""))))
     root = args.root or (None if bootstrap else Path(sys.executable).parent)
-    package = args.package or (resources / "SeedLab-v0.6.0-upgrade.zip" if bootstrap else None)
+    package = args.package or (resources / f"SeedLab-v{VERSION}-upgrade.zip" if bootstrap else None)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setFont(QFont("Microsoft YaHei UI", 10))
     window = UpgradeWindow(root=root, package=package, bootstrap=bootstrap, resources=resources,

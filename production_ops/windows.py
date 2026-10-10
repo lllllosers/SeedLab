@@ -1,5 +1,6 @@
 """Small Windows boundaries: executable identity, owned processes and shell entrypoints."""
 from contextlib import contextmanager
+import base64
 import ctypes
 from ctypes import wintypes
 import os
@@ -118,13 +119,16 @@ def connect_startup(root, old_program):
         registry.write(current)
 
 
-def create_shortcut(root, old_program):
-    # Windows supplies WScript.Shell. Use stdin and environment variables, never interpolate paths as code.
+def create_shortcut(root, old_program, *, desktop=None):
+    # EncodedCommand runs the complete script; stdin -Command - can silently
+    # leave a multiline compound statement waiting for its terminating blank line.
     environment = dict(os.environ, SEEDLAB_LAUNCHER_PATH=str(Path(root) / LAUNCHER),
-                       SEEDLAB_OLD_CENTER=str(Path(old_program) / CENTER), SEEDLAB_DEPLOYMENT_ROOT=str(root))
+                       SEEDLAB_OLD_CENTER=str(Path(old_program) / CENTER), SEEDLAB_DEPLOYMENT_ROOT=str(root),
+                       SEEDLAB_SHORTCUT_DESKTOP=str(desktop or ""))
     script = """$ErrorActionPreference = 'Stop'
 $shell = New-Object -ComObject WScript.Shell
-$desktop = [Environment]::GetFolderPath('Desktop')
+$desktop = $env:SEEDLAB_SHORTCUT_DESKTOP
+if (-not $desktop) { $desktop = [Environment]::GetFolderPath('Desktop') }
 $path = Join-Path $desktop 'SeedLab.lnk'
 $shortcut = $shell.CreateShortcut($path)
 if ((Test-Path -LiteralPath $path) -and $shortcut.TargetPath -and
@@ -133,13 +137,19 @@ $shortcut.TargetPath = $env:SEEDLAB_LAUNCHER_PATH
 $shortcut.WorkingDirectory = $env:SEEDLAB_DEPLOYMENT_ROOT
 $shortcut.Description = 'SeedLab'
 $shortcut.Save()
+if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Shortcut missing after Save' }
+$verified = $shell.CreateShortcut($path)
+if ($verified.TargetPath -ne $env:SEEDLAB_LAUNCHER_PATH -or
+    $verified.WorkingDirectory -ne $env:SEEDLAB_DEPLOYMENT_ROOT) { throw 'Shortcut target mismatch' }
+Write-Output 'SEEDLAB_SHORTCUT_VERIFIED'
 """
-    message = "程序已安装，桌面入口未能创建。请直接打开部署根目录中的 SeedLab Launcher。"
+    message = f"程序已安装，桌面入口未能创建或核验。请直接打开：{Path(root) / LAUNCHER}"
     try:
-        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "-"],
-            input=script, text=True, errors="replace", capture_output=True, env=environment, timeout=20,
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                                base64.b64encode(script.encode("utf-16-le")).decode("ascii")],
+            text=True, errors="replace", capture_output=True, env=environment, timeout=20,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired) as error:
         raise OperationsError(message) from error
-    if result.returncode:
+    if result.returncode or "SEEDLAB_SHORTCUT_VERIFIED" not in result.stdout:
         raise OperationsError(message)
