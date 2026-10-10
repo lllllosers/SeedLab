@@ -51,6 +51,8 @@ def test_bootstrap_entrypoint_failure_is_visible_and_nonfatal(tmp_path, monkeypa
     assert shortcut.call_count == 1
     assert "升级完成" in window.status.text() and str(tmp_path / "SeedLab Launcher.exe") in window.status.text()
     assert "原页面可以关闭" in window.status.text()
+    assert "桌面快捷方式未能自动创建" in window.status.text()
+    assert "Windows 登录启动未能接续" in window.status.text()
     assert window.executor.log.exception.call_count == 2
     window.close()
 

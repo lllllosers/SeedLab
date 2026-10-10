@@ -218,12 +218,13 @@ class UpgradeWindow(QWidget):
         message = f"SeedLab v{state['current']['version']} 升级完成。实验数据目录保持不变。"
         message += "\n请使用新打开的 SeedLab 页面；原页面可以关闭。若未打开，请在控制中心点击“打开 SeedLab”。"
         if self.bootstrap and not self.isolated:
-            for operation in (connect_startup, create_shortcut):
+            for operation, failure in ((connect_startup, "Windows 登录启动未能接续"),
+                                       (create_shortcut, "桌面快捷方式未能自动创建")):
                 try:
                     operation(self.executor.store.root, state["previous"]["program_root"])
                 except (OSError, OperationsError):
                     self.executor.log.exception("启动入口接续未完成：%s", operation.__name__)
-                    message += f"\n启动入口未能接续，请直接打开：{self.executor.store.root / 'SeedLab Launcher.exe'}"
+                    message += f"\n{failure}，可从 {self.executor.store.root / 'SeedLab Launcher.exe'} 启动。"
         self.status.setText(message)
 
     def restore(self):
