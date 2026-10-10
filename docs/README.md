@@ -1,6 +1,6 @@
 # SeedLab 文档导航
 
-当前稳定生产版本为 **v0.5.1**；**Architecture Foundation 1.0 已人工验收并合入 main `d99e9365`**。当前开发阶段为 **Production Operations v0.6.0**，源码版本为 0.6.0，尚未正式发布。升级器、程序槽位和管理员恢复规则见[生产运维](10_生产部署与控制中心设计.md#managed-deploymentv060)，阶段范围见[路线图](03_开发路线图.md)。真实 Production Mirror 已由用户装入生产数据库安全备份；开发和自动测试不得修改它。既有业务 API、schema 与科研语义保持，没有新实验类型或统计实现。精确冻结产物身份见[发布说明](releases/v0.5.1.md)。Foundation 当时的替代退出条件及来源边界继续作为历史验收契约保留。
+当前正式稳定版本为 **v0.6.0**，已完成 Mirror 人工验收并发布，冻结基线 `f5bdbf5`；**Architecture Foundation 1.0 已完成**。当前为独立分支 **v0.6.1 Production Feedback Fix**，源码 VERSION 0.6.1，未 tag、未发布。物种/材料审查规则见[实验配置](05_实验配置业务规则.md#材料清单身份审查)，升级体验与两条兼容路径见[生产运维](10_生产部署与控制中心设计.md#v061-反馈修复与兼容边界)，阶段范围见[路线图](03_开发路线图.md)。本轮不访问 Production Mirror 或正式生产环境；候选包的镜像人工验收须另行授权。科研语义、schema 和 10 个迁移保持。
 
 本页是 docs 的唯一入口。每个主题以以下指定文档为权威来源，其他页面只做摘要或引用；业务与实现不一致时先核对代码、回归测试及已确认事实，不能通过重构改变事实。
 
@@ -34,6 +34,7 @@
 
 ## 发布历史
 
+- [v0.6.0 正式 Release](https://github.com/lllllosers/SeedLab/releases/tag/v0.6.0)：当前稳定回退点。
 - [v0.5.1 正式投产基线](releases/v0.5.1.md)：当前正式主程序、独立 importer 和历史验收追溯。
 - [v0.4.1 发布说明](releases/v0.4.1.md)：当时的生产试运行交付及环境边界。
 - 更早版本见[CHANGELOG](../CHANGELOG.md)、Git tag 和 GitHub Release。

@@ -1,12 +1,12 @@
 # SeedLab · 种子试验管理系统
 
-SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前稳定生产版本为 **v0.5.1**，已支持材料台账、一体导入、GER 种子萌发试验、分日置床、发芽巡检、前 N 株幼苗选样、根苗长测定、科研工作簿、账号及审计。幼苗测定采用 DAG（发芽后测定时间），保留实测 0、无法测量和尚无数据的区别。
+SeedLab 是供课题组长期使用的种子试验管理 Web 系统。当前正式稳定版本为 **v0.6.0**，已支持材料台账、一体导入、GER 种子萌发试验、分日置床、发芽巡检、前 N 株幼苗选样、根苗长测定、科研工作簿、账号及审计。幼苗测定采用 DAG（发芽后测定时间），保留实测 0、无法测量和尚无数据的区别。
 
-**SeedLab Architecture Foundation 1.0 已人工验收并合入 main `d99e9365`**。当前开发阶段为 **Production Operations v0.6.0**：独立 Launcher / Updater、程序版本槽位、v0.5.1 首次升级助手、离线升级包及管理员密码恢复。业务 schema 和科研语义保持，源码 VERSION 为 0.6.0，尚未 tag 或正式发布。阶段范围从[文档唯一入口](docs/README.md)进入。
+**当前正式稳定版本为 v0.6.0**，main / origin/main 基线为 `f5bdbf5f396fc0661c593bef3cc4ef7b40f362ac`，已完成 Production Mirror 人工验收和正式 Release。当前独立开发分支为 **v0.6.1 Production Feedback Fix**：修复材料身份审查与四项升级体验，源码 VERSION 0.6.1，未 tag、未发布；候选产物须另行人工验收。阶段范围从[文档唯一入口](docs/README.md)进入。
 
 ## 使用与开发
 
-正式生产电脑仍运行冻结 v0.5.1，正式数据库与约 200 份历史材料仍在生产电脑。当前 Production Mirror 由该冻结程序和用户提供的真实生产数据库安全备份组成，与源码隔离。开发及自动测试只使用系统临时目录；镜像升级须另行人工授权，不能用 fixture 冒充生产副本。v0.6.0 首次升级双击 Upgrade Assistant，成功后日常入口为 SeedLab Launcher；已纳管部署从控制中心“系统升级”选择本地 ZIP。日常运行无需 Python、Node 或 Git。精确冻结产物身份见[v0.5.1 发布说明](docs/releases/v0.5.1.md)。
+正式生产电脑与真实数据库由项目方管理；本轮不连接、修改或推断其现场状态。Production Mirror 与源码隔离，用于真实生产数据库安全备份的独立升级演练，本轮不核对其现场状态。开发及自动测试只使用系统临时目录；镜像升级须另行人工授权，不能用 fixture 冒充生产副本。v0.6.1 候选支持 v0.5.1 首次升级双击 Upgrade Assistant，以及 v0.6.0 已纳管升级，成功后日常入口为 SeedLab Launcher；已纳管部署从控制中心“系统升级”选择本地 ZIP。日常运行无需 Python、Node 或 Git。精确冻结产物身份见[v0.5.1 发布说明](docs/releases/v0.5.1.md)。
 
 - 实验室部署与操作：[使用说明](packaging/使用说明.txt)。
 - Windows 开发依赖、首次账号、启动与测试：[开发与运行说明](docs/04_开发与运行说明.md)。

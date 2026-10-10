@@ -1,6 +1,18 @@
 # Changelog
 
-SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2`、`v0.4.0`、`v0.4.1`、`v0.5.0` 和 `v0.5.1`。
+SeedLab 使用 [Semantic Versioning](https://semver.org/)；版本号唯一来源是 `backend/app/version.py`。0.x 为开发阶段，已发布 `v0.1.0`、`v0.2.0`、`v0.3.0`、`v0.3.1`、`v0.3.2`、`v0.4.0`、`v0.4.1`、`v0.5.0` 、`v0.5.1` 和 `v0.6.0`。
+
+## 0.6.1 — Production Feedback Fix（candidate，未发布）
+
+- 材料审查分离物种/种子批次身份，科学名比较处理 Unicode 空白及下划线；同中文名不同学名需明确确认，不推断同义关系，不重写已有学名。
+- 物种及材料 GER 历史按数据库关联显示完成、进行中、有记录或无历史；新增材料不再被误读为新增物种。
+- 修复桌面快捷方式静默失效，升级后打开新页面，统一中文确认动作，长路径可核对和复制。复用同 schema 升级及回退，兼容 v0.5.1 / v0.6.0 来源。
+- 无 schema / migration / 依赖变更；v0.6.0 正式 tag、Release 和产物保持冻结。v061 候选等待单独 Production Mirror 人工验收。
+
+## 0.6.0 — Production Operations（已发布）
+
+- 独立 Launcher / Updater、App 版本槽位、v0.5.1 Bootstrap、离线 ZIP 升级及管理员密码恢复。
+- 真实 Production Mirror 升级、回退及再次升级人工验收完成，ff-only 合入 main `f5bdbf5` 并正式 Release；Alembic head 和科研事实保持。
 
 ## 0.5.1 — Ended Experiment Task Semantics（2026-10-03）
 
