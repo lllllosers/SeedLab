@@ -29,6 +29,8 @@ from production_ops.executor import UpgradeExecutor
 from production_ops.launcher import launch_command
 from production_ops.runtime import CandidateRuntime
 from production_ops.windows import require_stopped
+from production_ops.windows import executable_version
+from production_ops.tool_refresh import finish_refresh, pending_refresh, updater_command, digest
 from test_production_operations import populate_business, business_rows
 
 
@@ -101,6 +103,16 @@ def main():
         store = DeploymentStore(root)
         runtime = CandidateRuntime(store, isolated=True, timeout=60)
         core = UpgradeExecutor(root, runtime=runtime, progress=lambda text: print(text, flush=True))
+        frozen_executor = False
+        if source_version == '0.6.0':
+            # Execute the actual executor code object shipped in the frozen EXE,
+            # not a rewritten approximation of the old upgrade algorithm.
+            from PyInstaller.archive.readers import CArchiveReader
+            code = CArchiveReader(str(root / UPDATER)).open_embedded_archive('PYZ.pyz').extract('production_ops.executor')
+            namespace = {'__name__':'production_ops.frozen_executor', '__package__':'production_ops'}
+            exec(code, namespace)
+            core = namespace['UpgradeExecutor'](root, runtime=runtime, progress=lambda text: print(text, flush=True))
+            frozen_executor = True
         old_output = (temporary / "old-server.log").open("ab")
         command = [str(old / SERVER), "--host", "127.0.0.1", "--port", str(port),
                    "--data-root", str(data), "--database", str(database),
@@ -116,6 +128,41 @@ def main():
         state = core.activate()  # Real candidate Control Center and its owned Server.
         assert state["current"]["version"] == VERSION and state["previous"]["version"] == source_version
         assert state["pending"] is None and state["data_root"] == str(data)
+        tool_report = {'frozen_060_executor_from_exe': frozen_executor}
+        if source_version == '0.6.0':
+            assert pending_refresh(root) is not None  # Target candidate staged the compatibility bridge.
+            assert executable_version(root / UPDATER) == '0.6.0'
+            # A real frozen Root Updater process owns its mapped executable.
+            # --help exits normally; no forced termination or Windows entrypoint changes.
+            owner = subprocess.Popen([str(root / UPDATER), '--help'], cwd=root, creationflags=subprocess.CREATE_NO_WINDOW)
+            try:
+                assert owner.poll() is None
+                assert not finish_refresh(root, timeout=0)
+                assert pending_refresh(root) is not None
+                assert executable_version(root / UPDATER) == '0.6.0'
+            finally:
+                owner.wait(timeout=90)
+            carried_launcher = Path(state['current']['program_root']) / 'app/upgrade-tools' / LAUNCHER
+            subprocess.run([str(carried_launcher), '--root', str(root), '--refresh-tools-only'],
+                           cwd=root, check=True, timeout=90, creationflags=subprocess.CREATE_NO_WINDOW)
+            assert pending_refresh(root) is None
+            tool_report['real_old_updater_process_exited_normally'] = True
+        for name in (LAUNCHER, UPDATER):
+            assert executable_version(root / name) == VERSION
+            assert digest(root / name) == digest(artifacts / 'tools' / name)
+        check_report = temporary / 'next-updater-check.json'
+        check_command = updater_command(root) + ['--package', str(artifacts / f'SeedLab-v{VERSION}-upgrade.zip'),
+                                          '--isolated', '--check-report', str(check_report)]
+        subprocess.run(check_command,cwd=root,check=True,timeout=90,creationflags=subprocess.CREATE_NO_WINDOW)
+        checked = json.loads(check_report.read_text(encoding='utf-8'))
+        assert checked['version'] == VERSION
+        assert checked['identity']['build_identity'] == state['current']['build_identity']
+        assert checked['compatible'] is False  # Same-version package is correctly rejected, not a fictitious 0.6.2.
+        tool_report.update(root_launcher_version=VERSION, root_updater_version=VERSION,
+                           tool_refresh_pending=None, next_check_executable=check_command[0],
+                           app_version=state['current']['version'], current=state['current']['version'],
+                           previous=state['previous']['version'], pending=state['pending'],
+                           next_check_build=checked['identity']['build_identity'])
         assert len(list((data / "backups/before-upgrade").glob("*.db"))) == 1
         assert business_rows(database) == before
         with closing(sqlite3.connect(database)) as connection:
@@ -141,6 +188,7 @@ def main():
                   "staging_while_old_server_running": True, "before_upgrade_snapshots": 1,
                   "research_facts_and_accounts_unchanged": True, "integrity": "ok", "foreign_keys": "ok",
                   "production_mirror_accessed": False, "windows_entrypoints_modified": False}
+        report['tool_refresh'] = tool_report
         (artifacts / f"smoke-report-{source_version}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
         successful = True

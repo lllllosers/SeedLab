@@ -1,5 +1,6 @@
 """Read-only operations artifact gate, including independence of bundled runtimes."""
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -22,6 +23,10 @@ def main():
         file = directory / "tools" / name
         assert executable_version(file) == VERSION
         names = set(CArchiveReader(str(file)).toc)
+        archive = CArchiveReader(str(file))
+        identity = json.loads(archive.extract('tool-identity\\build-info.json'))
+        assert identity['build_identity'] == manifest['build_identity']
+        assert identity['application_version'] == VERSION
         assert any("python312.dll" in item.lower() for item in names)
         qt = any("pyside6" in item.lower() for item in names)
         assert qt == ("Updater" in name), "Launcher must remain independent of Qt; Updater must carry its own runtime"

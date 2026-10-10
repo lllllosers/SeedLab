@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from PySide6.QtCore import QThreadPool, QUrl, Signal
+from PySide6.QtCore import QThreadPool, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QFileDialog, QFormLayout, QSizePolicy)
@@ -226,6 +226,10 @@ class UpgradeWindow(QWidget):
                     self.executor.log.exception("启动入口接续未完成：%s", operation.__name__)
                     message += f"\n{failure}，可从 {self.executor.store.root / 'SeedLab Launcher.exe'} 启动。"
         self.status.setText(message)
+        from .tool_refresh import pending_refresh
+        if pending_refresh(self.executor.store.root):
+            self.status.setText(message + '\n正在交接升级工具，助手即将关闭。')
+            QTimer.singleShot(1000, self.close)
 
     def restore(self):
         if not confirm_action(self, "恢复上一版本", "请先停止 SeedLab 并退出控制中心。本次仅恢复程序入口，保留当前实验数据，不恢复旧数据库备份。", "恢复上一版本"):
@@ -250,10 +254,26 @@ def main(arguments=None, *, bootstrap=False):
     parser.add_argument("--package", type=Path)
     parser.add_argument("--handoff", type=Path)
     parser.add_argument("--isolated", action="store_true")
+    parser.add_argument('--check-report', type=Path)
     args = parser.parse_args(arguments)
     resources = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1] / ("dist/operations-v" + VERSION.replace(".", ""))))
     root = args.root or (None if bootstrap else Path(sys.executable).parent)
     package = args.package or (resources / f"SeedLab-v{VERSION}-upgrade.zip" if bootstrap else None)
+    if args.check_report is not None:
+        # Isolated invocation smoke: inspect a package without creating a GUI,
+        # starting/stopping services, staging files or accessing the database.
+        if not args.isolated or root is None or package is None:
+            parser.error('Package-check report requires --isolated, --root and --package')
+        from .deployment import atomic_json, read_json
+        from .package import inspect_package
+        report = {'version': VERSION, 'identity': read_json(resources / 'tool-identity/build-info.json')}
+        try:
+            report['manifest'] = inspect_package(package, DeploymentStore(root).load()['current']['version'])
+            report['compatible'] = True
+        except OperationsError as error:
+            report.update(compatible=False, message=str(error))
+        atomic_json(args.check_report, report)
+        return 0
     app = QApplication.instance() or QApplication(sys.argv)
     app.setFont(QFont("Microsoft YaHei UI", 10))
     window = UpgradeWindow(root=root, package=package, bootstrap=bootstrap, resources=resources,

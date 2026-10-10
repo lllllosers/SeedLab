@@ -128,8 +128,10 @@ class DeploymentStore:
         return ordinary(self.root / "Updates" / pending["id"])
 
     @contextmanager
-    def lock(self):
-        path = ordinary(self.root / "state/operations.lock")
+    def lock(self, name='operations.lock'):
+        if name not in {'operations.lock', 'tool-refresh.lock'}:
+            raise ValueError('Unsupported deployment lock')
+        path = ordinary(self.root / "state" / name)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a+b") as handle:
             if handle.seek(0, os.SEEK_END) == 0:

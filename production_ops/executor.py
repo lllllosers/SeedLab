@@ -109,6 +109,12 @@ class UpgradeExecutor:
                     self.store.save(state)  # The only current switch, after candidate and DB checks.
                     self.event("新版本检查完成，当前版本已切换。")
                 self.prune_obsolete(obsolete, state)
+                if (Path(state['current']['program_root']) / 'app/upgrade-tools/tools.json').is_file():
+                    from .tool_refresh import stage_refresh
+                    try:
+                        stage_refresh(self.store.root, state['current'])
+                    except (OSError, OperationsError):
+                        self.log.exception('程序已升级，工具刷新尚未完成；原工具和刷新记录保留。')
                 self.runtime.launch_current()
                 return state
             except Exception as error:

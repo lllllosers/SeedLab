@@ -56,7 +56,9 @@ dist/operations-v061/
 
 upgrade ZIP 采用 manifest.json + payload/SeedLab，manifest 支持来源为 [0.5.1, 0.6.0]，保存目标版本、revision、build identity、format/updater protocol 和简洁 migration 信息。CRC、安全解包、必需文件及基本版本一致性作为完整性门，**无逐文件 SHA manifest、无签名、无在线下载**。报告记录整个 upgrade ZIP 单一 SHA256 和产物尺寸，普通用户无需处理 SHA。
 
-`check_operations.py` 只读检查 ZIP、PE 版本和 CArchive 内独立 runtime，确认 Bootstrap 内嵌交付完整。`smoke_operations.py` 只在 OS TEMP 创建合成实验/账号，复制冻结 v0.5.1 或 v0.6.0 作为隔离旧程序（--source-version），测试真实 EXE 依赖、旧 Server 运行时 staging、v061 candidate Control Center/Server、一次备份、commit 和原数据库 same-schema 回退；成功清理临时目录，失败保留诊断路径。不登记桌面/HKCU 启动入口，**不访问 Production Mirror**，合成库不能称为 production clone。镜像上的真实 GUI 升级及最终生产发布须另行授权。
+构建先生成两项独立工具，再放入目标 App 的 app/upgrade-tools，并生成与 App 同身份的 tools.json（仅两项工具 SHA），最后生成 portable ZIP、upgrade ZIP 和 Bootstrap。工具内嵌 tool-identity/build-info.json；不改变冻结 protocol-1 envelope，不生成整个 App 的逐文件 SHA manifest。
+
+`check_operations.py` 只读检查 ZIP、PE 版本、工具 build identity 和 CArchive 内独立 runtime，确认 Bootstrap 内嵌交付完整。`smoke_operations.py` 只在 OS TEMP 创建合成实验/账号，复制冻结 v0.5.1 或 v0.6.0 作为隔离旧程序（--source-version），测试真实 EXE 依赖、旧 Server 运行时 staging、v061 candidate Control Center/Server、一次备份、commit 和原数据库 same-schema 回退。Managed 路径执行冻结 v0.6.0 EXE 内实际 executor 字节码，验证旧 Root Updater 进程正常退出后两项根工具 promotion，调用控制中心共用工厂进行真实新 Updater package check；不是旧 GUI 点击测试。成功清理临时目录，失败保留诊断路径。不登记桌面/HKCU 启动入口，**不访问 Production Mirror**，合成库不能称为 production clone。镜像上的真实 GUI 升级及最终生产发布须另行授权。
 
 正常运行无需Python、Node、Git或源码。程序目录只保存安装定位文件，正式数据库、配置、日志和备份位于独立Data Root。详见[用户说明](使用说明.txt)、[生产部署设计](../docs/10_生产部署与控制中心设计.md)。
 

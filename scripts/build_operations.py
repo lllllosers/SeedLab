@@ -69,16 +69,40 @@ def main():
     owned_directory(work)
     sources = args.source_version or ["0.5.1", "0.6.0"]
     package = output / f"SeedLab-v{VERSION}-upgrade.zip"
-    manifest = create_package(portable, package, sources)
     tools = output / "tools"
     tools.mkdir()
     environment = dict(os.environ, PYTHONUTF8="1", PYTHONDONTWRITEBYTECODE="1", SEEDLAB_OPERATIONS_RESOURCES=str(output))
+    environment['SEEDLAB_OPERATIONS_BUILD_INFO'] = str(portable / 'app/build-info.json')
     python = ROOT / ".venv/Scripts/python.exe"
-    for kind in ("launcher", "updater", "bootstrap"):
+    for kind in ("launcher", "updater"):
         environment["SEEDLAB_OPERATIONS_KIND"] = kind
         subprocess.run([str(python), "-B", "-m", "PyInstaller", "--noconfirm", "--workpath", str(work / kind),
                         "--distpath", str(output if kind == "bootstrap" else tools), str(ROOT / "packaging/operations.spec")],
                        env=environment, cwd=ROOT, check=True)
+    # Keep the protocol-1 ZIP envelope compatible with frozen 0.6.0. Tools are
+    # normal payload resources carried by the target App, not new manifest keys.
+    build = json.loads((portable / 'app/build-info.json').read_text(encoding='utf-8'))
+    carried = portable / 'app/upgrade-tools'
+    carried.mkdir(exist_ok=True)
+    hashes = {}
+    for file in tools.glob('*.exe'):
+        shutil.copyfile(file, carried / file.name)
+        hashes[file.name] = hashlib.sha256(file.read_bytes()).hexdigest()
+    (carried / 'tools.json').write_text(json.dumps({'version': VERSION, 'build_identity': build['build_identity'],
+                                                  'tools': hashes}, indent=2), encoding='utf-8')
+    manifest = create_package(portable, package, sources)
+    # The portable and upgrade payload must describe the same final tree.
+    portable_zip = portable.parent / f'SeedLab-v{VERSION}-portable.zip'
+    with zipfile.ZipFile(portable_zip, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        for file in sorted(portable.rglob('*')):
+            ordinary(file)
+            if file.is_file():
+                archive.write(file, 'SeedLab/' + file.relative_to(portable).as_posix())
+    subprocess.run([str(python), '-B', str(ROOT / 'scripts/check_portable.py'), '--directory', str(portable),
+                    '--zip', str(portable_zip), '--report', str(portable.parent / 'artifact-report.json')], check=True)
+    environment['SEEDLAB_OPERATIONS_KIND'] = 'bootstrap'
+    subprocess.run([str(python), '-B', '-m', 'PyInstaller', '--noconfirm', '--workpath', str(work / 'bootstrap'),
+                    '--distpath', str(output), str(ROOT / 'packaging/operations.spec')], env=environment, cwd=ROOT, check=True)
     with package.open("rb") as source:
         digest = hashlib.file_digest(source, "sha256").hexdigest()
     report = {"application_version": VERSION, "manifest": manifest, "upgrade_zip_sha256": digest,

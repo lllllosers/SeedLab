@@ -32,7 +32,7 @@ def executable_version(path):
     return f"{fields[2] >> 16}.{fields[2] & 65535}.{fields[3] >> 16}"
 
 
-def process_programs():
+def process_programs(names=None):
     """Only enumerate the two SeedLab binaries; inaccessible matching processes block maintenance."""
     if os.name != "nt":
         return []
@@ -54,12 +54,13 @@ def process_programs():
     if snapshot == ctypes.c_void_p(-1).value:
         raise OperationsError("无法检查运行中的 SeedLab，请关闭相关程序后重试。")
     found = []
+    names = {name.casefold() for name in (names or (CENTER, SERVER))}
     try:
         entry = Entry()
         entry.size = ctypes.sizeof(entry)
         more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
         while more:
-            if entry.name.casefold() in {CENTER.casefold(), SERVER.casefold()}:
+            if entry.name.casefold() in names:
                 handle = kernel.OpenProcess(0x1000, False, entry.pid)
                 if not handle:
                     raise OperationsError("发现无法确认归属的 SeedLab 进程，请在原入口退出后重试。")

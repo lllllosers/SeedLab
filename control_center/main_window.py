@@ -83,6 +83,9 @@ class MainWindow(QMainWindow):
         self.header_state.setMaximumHeight(30)
         top.addWidget(self.header_state, alignment=Qt.AlignmentFlag.AlignVCenter)
         outer.addWidget(header)
+        self.tool_notice = label('', 'muted', True)
+        outer.addWidget(self.tool_notice)
+        self.tool_notice.hide()
         body = QHBoxLayout()
         body.setSpacing(0)
         sidebar = QWidget()
@@ -320,6 +323,9 @@ class MainWindow(QMainWindow):
         return f"{seconds // 3600:02}:{seconds // 60 % 60:02}:{seconds % 60:02}"
 
     def refresh(self):
+        self.upgrade_panel.refresh_tools()
+        self.tool_notice.setText(self.upgrade_panel.tool_status.text())
+        self.tool_notice.setVisible(bool(self.tool_notice.text()) and not self.manager.paths.candidate_id)
         manager = self.manager
         tone = "good" if manager.can_open else "error" if manager.state == State.ERROR else "neutral" if manager.state == State.STOPPED else "progress"
         for item in (self.header_state, self.hero_state, self.management_state):

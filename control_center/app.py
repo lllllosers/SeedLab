@@ -146,7 +146,7 @@ def main(arguments=None):
                 managed_root = possible
         if managed_root is not None:
             from production_ops import OperationsError
-            from production_ops.deployment import DeploymentStore
+            from production_ops.deployment import DeploymentStore, version
             from production_ops.database import existing_data
             from app.version import VERSION
             state = DeploymentStore(managed_root).load()
@@ -167,6 +167,24 @@ def main(arguments=None):
             paths = replace(paths, data_root=Path(state["data_root"]), deployment_root=managed_root,
                             candidate_id=args.candidate_id)
             args.data_root = paths.data_root
+            # Also bridges frozen 0.6.0 executors, which cannot understand new
+            # manifest/deployment fields and launch us via their old Launcher.
+            if version(selected['version']) >= (0, 6, 1):
+                from production_ops.tool_refresh import MESSAGE, stage_refresh, start_refresh, pending_refresh
+                try:
+                    refresh = stage_refresh(managed_root, selected)
+                    if refresh and not args.candidate_id:
+                        start_refresh(managed_root)
+                except (OperationsError, OSError):
+                    # App acceptance and DB safety do not depend on replacing
+                    # infrastructure. UpgradePanel exposes the retained intent.
+                    if not args.candidate_id:
+                        try:
+                            retained = pending_refresh(managed_root)
+                        except (OperationsError, OSError):
+                            retained = None
+                        if retained is None:
+                            QMessageBox.warning(None, '升级工具更新未完成', MESSAGE)
         elif args.candidate_id:
             raise ValueError("升级验证必须通过独立升级助手启动。")
         instance = SingleInstance(instance_name(paths), parent=app)

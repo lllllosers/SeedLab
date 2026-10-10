@@ -46,8 +46,20 @@ def main(arguments=None):
     parser.add_argument("--root", type=Path, default=Path(sys.executable).parent)
     parser.add_argument("--startup", action="store_true")
     parser.add_argument("--start-server", action="store_true")
+    parser.add_argument("--refresh-tools-only", action="store_true")
     args = parser.parse_args(arguments)
     try:
+        from .tool_refresh import finish_refresh, pending_refresh, start_refresh, log_event
+        if args.refresh_tools_only:
+            return 0 if finish_refresh(args.root) else 1
+        try:
+            if pending_refresh(args.root):
+                # Run from the target App resource, so this root Launcher can exit
+                # and itself be replaced without touching its mapped image.
+                start_refresh(args.root)
+        except (OperationsError, OSError) as error:
+            # The current App still opens and displays the incomplete refresh.
+            log_event(args.root, 'Tool refresh launch incomplete: ' + repr(error))
         command = launch_command(args.root, startup=args.startup, start_server=args.start_server)
         subprocess.Popen(command, cwd=args.root, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return 0

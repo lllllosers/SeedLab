@@ -171,7 +171,7 @@ def _taxon_match(row, taxa, choice):
         errors.append(f"第 {row['line']} 行：新物种必须填写学名；已有物种请选择复用。")
     if found:
         if common and common != chinese_comparison_key(found.common_name):
-            warnings.append(f"中文名与系统记录不同，将保留系统中文名“{found.common_name or '未填写'}”。")
+            warnings.append("中文名与系统记录不同，请选择沿用系统名称或更新名称。")
         if row["学名"] and sci != scientific_comparison_key(found.scientific_name):
             warnings.append(f"按您的选择复用系统物种；保留已有学名 {found.scientific_name}。")
     elif status == "confirm":
@@ -205,7 +205,59 @@ def _material_match(row, lots, mode):
     return "confirm", None, compatible
 
 
-def preview(db: Session, content: bytes, mode: str = "complete", taxon_decisions: dict | None = None) -> dict:
+def experiment_selection_summary(rows, decisions=None):
+    """Project experimental populations; import identity decisions remain explicit."""
+    decisions = decisions or {}
+    species, batches, pending_taxa, pending_materials = {}, {}, set(), set()
+    for row in rows:
+        row['selection_species_group'] = None
+        row['selection_batch_group'] = None
+        if row['errors']:
+            continue
+        if row['taxon_status'] == 'confirm':
+            pending_taxa.add(row['line'])
+            continue
+        species_key = row['taxon_id'] or 'new:' + scientific_comparison_key(row['scientific_name'])
+        if row['taxon_ger_status'] == 'none':
+            species.setdefault(species_key, []).append(row['line'])
+            row['selection_species_group'] = species_key
+        choice = decisions.get(str(row['line'])) if row['material_status'] == 'confirm' else None
+        status = row['material_status']
+        if status == 'confirm' and not _valid_decision(row, choice):
+            pending_materials.add(row['line'])
+        if choice and choice.startswith('reuse:'):
+            chosen = next((lot for lot in row['candidate_lots'] if choice == 'reuse:' + lot['id']), None)
+            needs = bool(chosen and chosen['ger_status'] == 'none')
+            batch_key = 'lot:' + chosen['id'] if chosen else None
+        elif status in {'existing', 'updatable'}:
+            needs = row['material_ger_status'] == 'none'
+            batch_key = 'lot:' + str(row['candidate_lot_id'])
+        else:
+            same_history = bool(not row['source_code'] and row['source'] and row['source'] in row['historical_sources'])
+            needs = choice == 'new' or not same_history
+            batch_key = json_batch_key(species_key, row)
+            if choice == 'new' and row['candidate_row']:
+                batch_key += ':separate:' + str(row['line'])
+            if choice and choice.startswith('reuse-row:'):
+                previous = next((r for r in rows if str(r['line']) == choice.removeprefix('reuse-row:')), None)
+                batch_key = previous.get('selection_batch_group') if previous else None
+                needs = batch_key is not None
+        if needs and batch_key:
+            batches.setdefault(batch_key, []).append(row['line'])
+            row['selection_batch_group'] = batch_key
+    return {'new_species_unique_count': len(species), 'new_batch_unique_count': len(batches),
+            'pending_taxon_count': len(pending_taxa), 'pending_material_count': len(pending_materials),
+            'species_groups': list(species.values()), 'batch_groups': list(batches.values())}
+
+
+def json_batch_key(species_key, row):
+    from json import dumps
+    identity = [species_key, row['source_code']] if row['source_code'] else [species_key, row['source'], row.get('collected_at')]
+    return dumps(identity, ensure_ascii=False)
+
+
+def preview(db: Session, content: bytes, mode: str = "complete", taxon_decisions: dict | None = None,
+            decisions: dict | None = None) -> dict:
     if mode not in {"complete", "new"}:
         raise HTTPException(422, "请选择完整清单或本次新增材料，再重新预检")
     taxon_decisions = taxon_decisions or {}
@@ -266,6 +318,11 @@ def preview(db: Session, content: bytes, mode: str = "complete", taxon_decisions
                 "source": lot.source, "collected_at": lot.collected_at.isoformat() if lot.collected_at else None,
                 "ger_status": _ger_status(lot_history.get(lot.id, set()))} for lot in possible],
             "candidate_row": candidate_row, "name": row["中文名"] or row["学名"], "source": row["来源"],
+            "collected_at": row["采集/获得日期"].isoformat() if row["采集/获得日期"] else None,
+            "system_common_name": taxon.common_name if taxon else None,
+            "name_difference": bool(taxon and row["中文名"] and chinese_comparison_key(row["中文名"]) != chinese_comparison_key(taxon.common_name)),
+            "can_update_common_name": bool(taxon and scientific_comparison_key(row["学名"]) == scientific_comparison_key(taxon.scientific_name)),
+            "historical_sources": [lot.source for lot in lots if taxon and lot.taxon_id == taxon.id and lot_history.get(lot.id)],
             "scientific_name": row["学名"] or (taxon.scientific_name if taxon else None),
             "source_code": row["原始材料编号"], "fills": fills, "conflicts": conflicts, "warnings": warnings,
             "suggested_decision": f"reuse-row:{candidate_row}" if candidate_row else f"reuse:{candidate.id}" if candidate else None,
@@ -280,7 +337,9 @@ def preview(db: Session, content: bytes, mode: str = "complete", taxon_decisions
         stats.update({f"{prefix}_{state}": sum(r[field] == state for r in results) for state in states})
     stats["taxon_with_ger"] = sum(r["taxon_ger_status"] in {"completed", "active", "recorded"} for r in results)
     stats["taxon_without_ger"] = sum(r["taxon_ger_status"] == "none" for r in results)
-    return {"file_hash": file_hash, "already_imported": already, "mode": mode, "rows": results, "stats": stats}
+    selection = experiment_selection_summary(results, decisions)
+    return {"file_hash": file_hash, "already_imported": already, "mode": mode, "rows": results, "stats": stats,
+            "experiment_selection_summary": selection}
 
 
 def _valid_decision(row: dict, choice: str | None) -> bool:
@@ -298,7 +357,7 @@ def _valid_decision(row: dict, choice: str | None) -> bool:
 
 
 def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str], user_id: str,
-            mode: str = "complete", taxon_decisions: dict | None = None) -> dict:
+            mode: str = "complete", taxon_decisions: dict | None = None, name_decisions: dict | None = None) -> dict:
     report = preview(db, content, mode, taxon_decisions)
     if report["already_imported"]:
         raise HTTPException(409, "这份文件已经成功导入过；请使用更新后的完整清单")
@@ -317,6 +376,23 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
     lot_prefix = f"LOT-{datetime.now().year}-"
     lot_next = int(next_code(db, SeedLot, lot_prefix, 3).rsplit("-", 1)[1])
     try:
+        renames = {}
+        for result in report['rows']:
+            choice = (name_decisions or {}).get(str(result['line']), 'keep')
+            if not isinstance(choice, str) or choice not in {'keep', 'update'}:
+                raise HTTPException(422, '名称处理选项无效，请重新预检。')
+            if choice == 'update':
+                if not result['name_difference'] or not result['can_update_common_name']:
+                    raise HTTPException(422, '仅可为已确认学名相同的已有物种更新中文名，请重新预检。')
+                taxon_id, name = result['taxon_id'], result['name']
+                if taxon_id in renames and renames[taxon_id] != name:
+                    raise HTTPException(422, '同一物种选择了不同的新中文名，请统一选择后再导入。')
+                renames[taxon_id] = name
+        for taxon_id, name in renames.items():
+            taxon = db.get(Taxon, taxon_id)
+            before = {'common_name': taxon.common_name}
+            taxon.common_name = name
+            record(db, user_id, 'update', 'Taxon', taxon.id, before, {'common_name': name})
         for row, result in zip(parse_file(content), report["rows"]):
             line = row["line"]
             taxon = db.get(Taxon, result["taxon_id"]) if result["taxon_id"] else None
@@ -326,7 +402,7 @@ def confirm(db: Session, content: bytes, filename: str, decisions: dict[str, str
                 if len(by_name[key]) != 1:
                     raise HTTPException(422, "同一学名对应多个物种，请重新预检并明确选择。")
                 taxon = by_name[key][0]
-            taxon_updated = False
+            taxon_updated = taxon is not None and taxon.id in renames
             if taxon is None:
                 taxon = Taxon(code=f"SP-{taxon_next:04d}", scientific_name=row["学名"],
                               **{field: row[label] for label, field in TAXON_FIELDS.items()})

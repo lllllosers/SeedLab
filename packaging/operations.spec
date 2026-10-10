@@ -10,12 +10,13 @@ kind = os.environ["SEEDLAB_OPERATIONS_KIND"]
 names = {"launcher": "SeedLab Launcher", "updater": "SeedLab Updater", "bootstrap": f"SeedLab-v{VERSION}-Upgrade"}
 name = names[kind]
 datas, hidden = [], []
+datas.append((os.environ['SEEDLAB_OPERATIONS_BUILD_INFO'], 'tool-identity'))
 exclude = ["pytest", "_pytest", "numpy", "pandas", "matplotlib", "tkinter", "IPython", "PyQt5", "PyQt6", "PySide2"]
 if kind == "launcher":
     exclude += ["PySide6", "sqlalchemy", "alembic", "fastapi", "uvicorn", "openpyxl", "app", "control_center"]
 else:
     hidden = collect_submodules("app.models") + ["sqlalchemy.dialects.sqlite", "_cffi_backend", "PySide6.QtSvg"]
-    datas = collect_data_files("tzdata") + collect_data_files("pypinyin")
+    datas += collect_data_files("tzdata") + collect_data_files("pypinyin")
     datas += [(str(file), "control_center/assets") for file in (root / "control_center/assets").iterdir()
               if file.suffix in {".svg", ".ico", ".png"}]
 if kind == "bootstrap":

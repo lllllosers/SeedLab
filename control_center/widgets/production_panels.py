@@ -52,6 +52,42 @@ class UpgradePanel(Card):
         self.handoff_timer.setInterval(200)
         self.handoff_timer.timeout.connect(self.check_handoff)
         self.handoff_path = None
+        self.tool_status = label('', 'muted', True)
+        self.box.addWidget(self.tool_status)
+        self.tool_retry = QPushButton('重试升级工具更新')
+        self.tool_retry.clicked.connect(self.retry_tools)
+        self.box.addWidget(self.tool_retry)
+        self.refresh_tools()
+
+    def refresh_tools(self):
+        root = self.manager.paths.deployment_root
+        if root is None:
+            self.tool_retry.hide()
+            return
+        from production_ops.tool_refresh import pending_refresh, MESSAGE
+        try:
+            pending = pending_refresh(root)
+            self.tool_status.setText(MESSAGE if pending else '')
+            self.tool_retry.setVisible(bool(pending))
+            self.start.setEnabled(self.package is not None and not pending)
+            self.recovery.setEnabled(not pending)
+        except (OperationsError, OSError):
+            self.tool_status.setText('升级工具状态无法读取，请打开运行日志检查。')
+            self.tool_retry.show()
+            self.start.setEnabled(False)
+            self.recovery.setEnabled(False)
+
+    def retry_tools(self):
+        from production_ops.tool_refresh import stage_refresh, start_refresh
+        from production_ops.deployment import DeploymentStore
+        root = self.manager.paths.deployment_root
+        try:
+            stage_refresh(root, DeploymentStore(root).load()['current'])
+            start_refresh(root)
+            self.tool_status.setText('正在重试升级工具更新。请关闭原升级助手，稍后查看结果。')
+        except (OperationsError, OSError):
+            self.manager.control_log.exception('升级工具更新未完成')
+        self.refresh_tools()
 
     def refresh_status(self):
         self.health_label.setText(f"服务状态：{STATE_LABELS[self.manager.state]}\n"
@@ -61,6 +97,7 @@ class UpgradePanel(Card):
         filename, _ = QFileDialog.getOpenFileName(self, "选择 SeedLab 升级包", "", "SeedLab 升级包 (*.zip)")
         if not filename:
             return
+        self.package = None
         self.start.setEnabled(False)
         self.choose.setEnabled(False)
         self.details.setText("正在检查升级包，当前版本可继续使用…")
@@ -83,7 +120,7 @@ class UpgradePanel(Card):
         self.package = Path(filename)
         self.details.setText(f"当前版本：v{VERSION}\n目标版本：v{manifest['target_application_version']}\n"
                              "数据库无需调整。升级包检查通过，助手将继续检查数据库并准备新程序。\n实验数据目录保持不变。")
-        self.start.setEnabled(True)
+        self.refresh_tools()
 
     def start_upgrade(self):
         self.open_updater(self.package)
@@ -92,11 +129,16 @@ class UpgradePanel(Card):
         root = self.manager.paths.deployment_root
         if root is None:
             return
+        from production_ops.tool_refresh import pending_refresh, MESSAGE
+        if pending_refresh(root):
+            self.tool_status.setText(MESSAGE)
+            return
         executable = root / UPDATER
         if not executable.is_file():
             self.details.setText("独立升级助手缺失，请联系维护人员补齐程序；当前版本保持运行。")
             return
-        command = [str(executable), "--root", str(root)]
+        from production_ops.tool_refresh import updater_command
+        command = updater_command(root)
         if package is not None:
             self.handoff_path = root / "Updates" / ("handoff-" + uuid4().hex + ".request")
             self.handoff_path.parent.mkdir(parents=True, exist_ok=True)
