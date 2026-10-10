@@ -54,20 +54,20 @@ def create_package(program, target, sources):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--portable", type=Path, default=ROOT / "dist/portable-v060/SeedLab")
-    parser.add_argument("--output-name", default="operations-v060")
+    parser.add_argument("--portable", type=Path, default=ROOT / ("dist/portable-v" + VERSION.replace(".", "")) / "SeedLab")
+    parser.add_argument("--output-name", default="operations-v" + VERSION.replace(".", ""))
     parser.add_argument("--source-version", action="append")
     args = parser.parse_args()
-    if not re.fullmatch(r"operations-[a-z0-9-]+", args.output_name):
+    if not re.fullmatch(r"operations-[a-z0-9-]+", args.output_name) or args.output_name == "operations-v060":
         parser.error("Use a new operations-* output name")
     portable = ordinary(args.portable).resolve()
-    if not portable.is_relative_to(ROOT / "dist") or portable.is_relative_to(ROOT / "dist/portable-v051"):
-        parser.error("Use a new v0.6.0 portable, never the frozen v0.5.1 directory")
+    if not portable.is_relative_to(ROOT / "dist") or any(portable.is_relative_to(ROOT / "dist" / name) for name in ("portable-v051", "portable-v060")):
+        parser.error("Use a new portable, never a frozen version directory")
     output = ROOT / "dist" / args.output_name
     work = ROOT / "build" / args.output_name
     owned_directory(output)
     owned_directory(work)
-    sources = args.source_version or ["0.5.1"]
+    sources = args.source_version or ["0.5.1", "0.6.0"]
     package = output / f"SeedLab-v{VERSION}-upgrade.zip"
     manifest = create_package(portable, package, sources)
     tools = output / "tools"

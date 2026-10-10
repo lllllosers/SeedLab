@@ -15,6 +15,7 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "backend/tests")]
+from app.version import VERSION
 from sqlalchemy.orm import Session
 from app.core.auth import hash_password
 from app.db.session import make_engine
@@ -49,20 +50,22 @@ def wait_health(port, process, version):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--artifacts", type=Path, default=ROOT / "dist/operations-v060")
+    parser.add_argument("--artifacts", type=Path, default=ROOT / ("dist/operations-v" + VERSION.replace(".", "")))
+    parser.add_argument("--source-version", choices=("0.5.1", "0.6.0"), default="0.5.1")
     args = parser.parse_args()
+    source_version = args.source_version
     artifacts = ordinary(args.artifacts).resolve()
     if not artifacts.is_relative_to(ROOT / "dist") or not (artifacts / ".seedlab-operations-owned").is_file():
         parser.error("Use this repository's new owned operations build output")
     temporary = ordinary(Path(tempfile.mkdtemp(prefix="seedlab-ops-smoke-"))).resolve()
     root, data = temporary / "Managed Root", temporary / "External Research Data"
-    old = root / "App/v0.5.1/SeedLab"
+    old = root / f"App/v{source_version}/SeedLab"
     stop = temporary / "old-server.stop"
     old_process, old_output, runtime = None, None, None
     successful = False
     print(f"Isolated smoke directory: {temporary}", flush=True)
     try:
-        shutil.copytree(ROOT / "dist/portable-v051/SeedLab", old)
+        shutil.copytree(ROOT / ("dist/portable-v" + source_version.replace(".", "")) / "SeedLab", old)
         database = data / "data/seedlab.db"
         database.parent.mkdir(parents=True)
         upgrade_database("sqlite:///" + database.as_posix(), ROOT / "backend/alembic")
@@ -82,10 +85,19 @@ def main():
         with closing(sqlite3.connect(database)) as connection:
             accounts = connection.execute("SELECT * FROM users ORDER BY id").fetchall()
         for file in (artifacts / "tools" / LAUNCHER, artifacts / "tools" / UPDATER,
-                     artifacts / "SeedLab-v0.6.0-Upgrade.exe"):
+                     artifacts / f"SeedLab-v{VERSION}-Upgrade.exe"):
             subprocess.run([str(file), "--help"], cwd=temporary, check=True, timeout=90,
                            creationflags=subprocess.CREATE_NO_WINDOW)
-        adopt(old / CENTER, root, artifacts / "tools")
+        if source_version == "0.5.1":
+            adopt(old / CENTER, root, artifacts / "tools")
+        else:
+            # Exercise an existing managed v0.6.0 deployment with its frozen root tools.
+            build = json.loads((old / "app/build-info.json").read_text(encoding="utf-8"))
+            slot = {"version": source_version, "revision": build["alembic_revision"],
+                    "build_identity": build["build_identity"], "program_root": str(old)}
+            for name in (LAUNCHER, UPDATER):
+                shutil.copy2(ROOT / "dist/operations-v060/tools" / name, root / name)
+            DeploymentStore(root).create(slot, data)
         store = DeploymentStore(root)
         runtime = CandidateRuntime(store, isolated=True, timeout=60)
         core = UpgradeExecutor(root, runtime=runtime, progress=lambda text: print(text, flush=True))
@@ -96,13 +108,13 @@ def main():
                    "--migration-root", str(old / "app/migrations"), "--access-mode", "local", "--stop-file", str(stop)]
         old_process = subprocess.Popen(command, cwd=old, stdout=old_output, stderr=subprocess.STDOUT,
                                        creationflags=subprocess.CREATE_NO_WINDOW)
-        wait_health(port, old_process, "0.5.1")
-        core.stage(artifacts / "SeedLab-v0.6.0-upgrade.zip")
-        wait_health(port, old_process, "0.5.1")  # Staging really leaves the old service running.
+        wait_health(port, old_process, source_version)
+        core.stage(artifacts / f"SeedLab-v{VERSION}-upgrade.zip")
+        wait_health(port, old_process, source_version)  # Staging really leaves the old service running.
         stop.touch()
         old_process.wait(timeout=30)
-        state = core.activate()  # Real frozen v0.6.0 Control Center and its owned Server.
-        assert state["current"]["version"] == "0.6.0" and state["previous"]["version"] == "0.5.1"
+        state = core.activate()  # Real candidate Control Center and its owned Server.
+        assert state["current"]["version"] == VERSION and state["previous"]["version"] == source_version
         assert state["pending"] is None and state["data_root"] == str(data)
         assert len(list((data / "backups/before-upgrade").glob("*.db"))) == 1
         assert business_rows(database) == before
@@ -111,25 +123,25 @@ def main():
             assert connection.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
             assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         current_command = launch_command(root, start_server=True)
-        assert current_command[0] == str(root / "App/v0.6.0/SeedLab" / CENTER)
-        require_stopped(old, root / "App/v0.6.0/SeedLab")
+        assert current_command[0] == str(root / f"App/v{VERSION}/SeedLab" / CENTER)
+        require_stopped(old, root / f"App/v{VERSION}/SeedLab")
         state = core.rollback()
-        assert state["current"]["version"] == "0.5.1" and business_rows(database) == before
+        assert state["current"]["version"] == source_version and business_rows(database) == before
         assert launch_command(root)[0] == str(old / CENTER)
         # The old Server can read the unchanged database after rollback.
         stop.unlink(missing_ok=True)
         old_process = subprocess.Popen(command, cwd=old, stdout=old_output, stderr=subprocess.STDOUT,
                                        creationflags=subprocess.CREATE_NO_WINDOW)
-        wait_health(port, old_process, "0.5.1")
+        wait_health(port, old_process, source_version)
         stop.touch()
         old_process.wait(timeout=30)
         assert business_rows(database) == before
         report = {"result": "PASS", "database_source": "synthetic isolated fixture, not a production clone",
-                  "versions": "0.5.1 -> 0.6.0 -> 0.5.1", "real_candidate_control_center_and_server": True,
+                  "versions": f"{source_version} -> {VERSION} -> {source_version}", "real_candidate_control_center_and_server": True,
                   "staging_while_old_server_running": True, "before_upgrade_snapshots": 1,
                   "research_facts_and_accounts_unchanged": True, "integrity": "ok", "foreign_keys": "ok",
                   "production_mirror_accessed": False, "windows_entrypoints_modified": False}
-        (artifacts / "smoke-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        (artifacts / f"smoke-report-{source_version}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
         successful = True
     finally:

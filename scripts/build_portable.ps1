@@ -6,7 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-if ($OutputName -eq 'portable-v051') { throw 'Frozen v0.5.1 artifacts must never be rebuilt or overwritten.' }
+if ($OutputName -in @('portable-v051','portable-v060')) { throw 'Frozen v0.5.1 / v0.6.0 artifacts must never be rebuilt or overwritten.' }
 $taskPython = Join-Path $taskRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $taskPython -PathType Leaf)) { throw 'Missing .venv. Install backend[test,control,packaging] first.' }
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'npm is needed for building only.' }
