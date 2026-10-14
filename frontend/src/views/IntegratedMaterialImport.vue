@@ -7,6 +7,7 @@ import { saveMaterialPrefill, type MaterialImportResult } from '../features/germ
 import { api, errorMessage } from '../shared/api/client'
 
 import {
+  displayCollectedDate,
   filterReviewRows,
   isNewMaterial,
   type ReviewFilter,
@@ -512,7 +513,7 @@ function createExperiment(scope: 'all' | 'created') {
               <b>可能相同的历史材料：{{ reviewRow.system_common_name || reviewRow.name }}</b>
               <p>来源：{{ lot.source || '未填写' }}</p>
               <p>原始材料编号：{{ lot.source_code || '未填写' }}</p>
-              <p v-if="lot.collected_at">采集 / 获得日期：{{ lot.collected_at.slice(0, 10) }}</p>
+              <p>采集 / 获得日期：{{ displayCollectedDate(lot.collected_at) }}</p>
               <p>
                 历史试验：{{ historyLabel(lot.ger_status)
                 }}{{ lot.is_active ? '' : '（材料已停用）' }}

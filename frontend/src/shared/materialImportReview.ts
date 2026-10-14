@@ -56,6 +56,9 @@ export const gerLabels: Record<GerStatus, string> = {
   none: '没做过',
   pending: '待确认后核对',
 }
+export function displayCollectedDate(value: string | null | undefined): string {
+  return value?.slice(0, 10) || '未记录'
+}
 export type ReviewFilter =
   | 'all'
   | 'pending'
@@ -89,9 +92,13 @@ export function filterReviewRows(
     if (
       !keep ||
       (query &&
-        ![row.name, row.scientific_name, row.source, row.source_code].some((value) =>
-          value?.toLocaleLowerCase().includes(query),
-        ))
+        ![
+          row.name,
+          row.scientific_name,
+          row.source,
+          row.source_code,
+          ...row.candidate_lots.map((lot) => lot.source_code),
+        ].some((value) => value?.toLocaleLowerCase().includes(query)))
     )
       return false
     if (filter === 'species-plan' || filter === 'batch-plan') {

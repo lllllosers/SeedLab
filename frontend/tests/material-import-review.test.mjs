@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  displayCollectedDate,
   reviewRowReady,
   identityLabels,
   gerLabels,
@@ -91,7 +92,14 @@ test('search and independent population filters retain one representative per gr
     [5],
   )
   assert.equal(filterReviewRows(rows, 'pending').length, 1)
+  assert.deepEqual(filterReviewRows(rows, 'all', '甲别名').map((row) => row.line), [3])
+  assert.deepEqual(filterReviewRows(rows, 'all', '山地').map((row) => row.line), [2, 3])
   assert.equal(filterReviewRows(rows, 'all', 'CODE-C').length, 1)
+})
+test('historical material date shows recorded day or explicitly reports absence', () => {
+  assert.equal(displayCollectedDate('2022-08-16T09:30:00'), '2022-08-16')
+  assert.equal(displayCollectedDate(null), '未记录')
+  assert.equal(displayCollectedDate(undefined), '未记录')
 })
 test('material confirmation requires a current candidate or explicit new material', () => {
   const row = { ...base, material_status: 'confirm', candidate_lots: [{ id: 'lot-a' }] }
@@ -100,6 +108,25 @@ test('material confirmation requires a current candidate or explicit new materia
   assert.equal(reviewRowReady(row, 'reuse'), false)
   assert.equal(reviewRowReady({ ...row, candidate_row: 2 }, 'reuse-row:2'), true)
   assert.equal(reviewRowReady({ ...row, candidate_row: 2 }, 'reuse-row:3'), false)
+})
+test('historical original material numbers locate pending rows without a checklist number', () => {
+  const rows = [
+    {
+      ...base,
+      line: 80,
+      name: '鹤虱',
+      source_code: null,
+      material_status: 'confirm',
+      candidate_lots: [{ id: 'historical-lot', source_code: '2021HXW2347' }],
+    },
+    { ...base, line: 81, source_code: null, candidate_lots: [{ source_code: null }] },
+  ]
+  assert.deepEqual(
+    filterReviewRows(rows, 'pending', ' 2021hxw2347 ').map((row) => row.line),
+    [80],
+  )
+  assert.equal(filterReviewRows(rows, 'new-material', '2021HXW2347').length, 0)
+  assert.equal(filterReviewRows(rows, 'all', 'historical-lot').length, 0)
 })
 test('history labels distinguish completed, running, other records and no history', () => {
   assert.equal(new Set(Object.values(gerLabels)).size, 5)
